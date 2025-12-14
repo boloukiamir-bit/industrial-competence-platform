@@ -15,7 +15,11 @@ Enterprise-grade competency management platform for industrial organizations. Bu
 ├── app/                    # Next.js App Router
 │   ├── layout.tsx          # Root layout
 │   ├── page.tsx            # Home page (landing)
-│   └── globals.css         # Global styles
+│   ├── globals.css         # Global styles
+│   └── app/                # Internal application area
+│       └── dashboard/      # Dashboard route (/app/dashboard)
+│           ├── layout.tsx  # App layout with sidebar
+│           └── page.tsx    # Dashboard page
 ├── components/
 │   ├── ui/                 # UI primitives (Button, Card, Badge, Input)
 │   ├── layout/             # Header, Footer
@@ -23,7 +27,9 @@ Enterprise-grade competency management platform for industrial organizations. Bu
 ├── lib/
 │   ├── utils.ts            # Utility functions (cn)
 │   └── supabase.ts         # Supabase client
-├── types/                  # TypeScript types
+├── types/
+│   ├── index.ts            # Type exports
+│   └── domain.ts           # Domain types (Employee, Skill, CompetenceLevel, EmployeeSkill)
 ├── services/               # API service layer
 ├── public/                 # Static assets
 └── design_guidelines.md    # UI/UX design guidelines
@@ -53,3 +59,5 @@ npm run start  # Start production server
 - Removed Wouter, using native Next.js routing
 - Supabase client adapted for Next.js architecture
 - Clean folder structure following Next.js conventions
+- Added domain types (Employee, Skill, CompetenceLevel, EmployeeSkill)
+- Created internal app area at /app/dashboard with sidebar navigation
