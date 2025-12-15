@@ -309,3 +309,18 @@ export function getCriticalGaps(gaps: RawGap[]) {
       missingCount: g.missing,
     }));
 }
+
+interface SkillStats {
+  level_0: number;
+  level_1: number;
+}
+
+export function getTrainingPriorities(skillsStats: Record<string, SkillStats>) {
+  return Object.entries(skillsStats)
+    .map(([skill, stats]) => ({
+      skill,
+      countLevel0or1: stats.level_0 + stats.level_1,
+    }))
+    .filter(i => i.countLevel0or1 > 0)
+    .sort((a, b) => b.countLevel0or1 - a.countLevel0or1);
+}
