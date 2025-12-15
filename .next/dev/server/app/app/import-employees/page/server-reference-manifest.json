@@ -1,0 +1,20 @@
+{
+  "node": {
+    "40a0729c7c8e695e4c9246f89b2366ffb07a5969bb": {
+      "workers": {
+        "app/app/import-employees/page": {
+          "moduleId": "[project]/.next-internal/server/app/app/import-employees/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/app/import-employees/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "importEmployeesFromCsv",
+          "filename": "app/app/import-employees/actions.ts"
+        }
+      },
+      "layer": {
+        "app/app/import-employees/page": "action-browser"
+      },
+      "exportedName": "importEmployeesFromCsv",
+      "filename": "app/app/import-employees/actions.ts"
+    }
+  },
+  "edge": {}
+}
