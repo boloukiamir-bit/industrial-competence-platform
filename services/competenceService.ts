@@ -2,10 +2,10 @@ import { supabase } from "@/lib/supabaseClient";
 import type { Employee, Skill, EmployeeSkill, CompetenceLevel } from "@/types/domain";
 
 const demoEmployees: Omit<Employee, "id">[] = [
-  { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Pressline 1", team: "Day", isActive: true },
-  { name: "Erik Johansson", employeeNumber: "E1002", role: "Operator", line: "Pressline 1", team: "Night", isActive: true },
-  { name: "Maria Svensson", employeeNumber: "E1003", role: "Team Leader", line: "Assembly", team: "Day", isActive: true },
-  { name: "Karl Andersson", employeeNumber: "E1004", role: "Operator", line: "Assembly", team: "Night", isActive: true },
+  { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Pressline 1", team: "Day", employmentType: "permanent", isActive: true },
+  { name: "Erik Johansson", employeeNumber: "E1002", role: "Operator", line: "Pressline 1", team: "Night", employmentType: "permanent", isActive: true },
+  { name: "Maria Svensson", employeeNumber: "E1003", role: "Team Leader", line: "Assembly", team: "Day", employmentType: "permanent", isActive: true },
+  { name: "Karl Andersson", employeeNumber: "E1004", role: "Operator", line: "Assembly", team: "Night", employmentType: "temporary", isActive: true },
 ];
 
 const demoSkills: Omit<Skill, "id">[] = [
@@ -171,6 +171,7 @@ export async function getEmployeesWithSkills(filters?: {
     role: row.role,
     line: row.line,
     team: row.team,
+    employmentType: row.employment_type || "permanent",
     isActive: row.is_active,
   }));
 
