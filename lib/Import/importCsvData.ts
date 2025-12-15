@@ -1,12 +1,12 @@
-import { fuzzyMatch } from "./fuzzyMatch";
-import { normalizeSkillLevel } from "./normalizeSkillLevel";
+import { fuzzyMatch } from "@/lib/Import/fuzzyMatch";
+import { normalizeSkillLevel } from "@/lib/Import/normalizeSkillLevel";
 
 export async function importCsvData(rows: any[], supabase: any) {
   const { data: existingSkills } = await supabase
     .from("skills")
     .select("id, name");
 
-  const skillNames = existingSkills?.map((s) => s.name) || [];
+  const skillNames = existingSkills?.map((s: { id: string; name: string }) => s.name) || [];
 
   for (const row of rows) {
     const employeeName = row["Name"] || row["Employee"] || row["Namn"];
@@ -35,7 +35,7 @@ export async function importCsvData(rows: any[], supabase: any) {
       const normalizedSkill = fuzzyMatch(rawSkill, skillNames);
 
       let skillId =
-        existingSkills?.find((s) => s.name === normalizedSkill)?.id ?? null;
+        existingSkills?.find((s: { id: string; name: string }) => s.name === normalizedSkill)?.id ?? null;
 
       if (!skillId) {
         const { data: newSkill } = await supabase
