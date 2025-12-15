@@ -62,7 +62,6 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
         code: skill.code,
         name: skill.name,
         category: skill.category,
-        description: skill.description,
       }))
     )
     .select();

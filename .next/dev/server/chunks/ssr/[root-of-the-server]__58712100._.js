@@ -46,97 +46,92 @@ const demoEmployees = [
         name: "Anna Lindberg",
         employeeNumber: "E1001",
         role: "Operator",
-        line: "Line A",
-        team: "Team Alpha",
+        line: "Pressline 1",
+        team: "Day",
         isActive: true
     },
     {
         name: "Erik Johansson",
         employeeNumber: "E1002",
-        role: "Technician",
-        line: "Line A",
-        team: "Team Alpha",
+        role: "Operator",
+        line: "Pressline 1",
+        team: "Night",
         isActive: true
     },
     {
         name: "Maria Svensson",
         employeeNumber: "E1003",
-        role: "Operator",
-        line: "Line B",
-        team: "Team Beta",
+        role: "Team Leader",
+        line: "Assembly",
+        team: "Day",
         isActive: true
     },
     {
         name: "Karl Andersson",
         employeeNumber: "E1004",
-        role: "Supervisor",
-        line: "Line B",
-        team: "Team Beta",
+        role: "Operator",
+        line: "Assembly",
+        team: "Night",
         isActive: true
     }
 ];
 const demoSkills = [
     {
-        code: "WLD-01",
-        name: "MIG Welding",
-        category: "Welding",
-        description: "Metal Inert Gas welding technique"
+        code: "PRESS_A",
+        name: "Pressline A",
+        category: "Production"
     },
     {
-        code: "WLD-02",
-        name: "TIG Welding",
-        category: "Welding",
-        description: "Tungsten Inert Gas welding technique"
+        code: "PRESS_B",
+        name: "Pressline B",
+        category: "Production"
     },
     {
-        code: "CNC-01",
-        name: "CNC Operation",
-        category: "Machining",
-        description: "Computer Numerical Control machine operation"
+        code: "5S",
+        name: "5S Basics",
+        category: "Lean"
     },
     {
-        code: "QC-01",
-        name: "Quality Inspection",
-        category: "Quality",
-        description: "Quality control and inspection procedures"
+        code: "SAFETY_BASIC",
+        name: "Safety Basic",
+        category: "Safety"
     },
     {
-        code: "SAF-01",
-        name: "Safety Protocols",
-        category: "Safety",
-        description: "Workplace safety and emergency procedures"
+        code: "TRUCK_A1",
+        name: "Truck A1 License",
+        category: "Logistics"
     }
 ];
-const demoSkillLevels = [
-    [
-        3,
-        2,
-        1,
-        2,
-        4
-    ],
-    [
-        4,
-        4,
-        3,
-        2,
-        3
-    ],
-    [
-        2,
-        0,
-        4,
-        3,
-        3
-    ],
-    [
-        2,
-        1,
-        2,
-        4,
-        4
-    ]
-];
+const demoSkillLevels = {
+    "E1001": {
+        "PRESS_A": 3,
+        "PRESS_B": 2,
+        "5S": 4,
+        "SAFETY_BASIC": 3,
+        "TRUCK_A1": 1
+    },
+    "E1002": {
+        "PRESS_A": 2,
+        "PRESS_B": 1,
+        "5S": 3,
+        "SAFETY_BASIC": 2,
+        "TRUCK_A1": 0
+    },
+    "E1003": {
+        "PRESS_A": 4,
+        "PRESS_B": 3,
+        "5S": 4,
+        "SAFETY_BASIC": 4,
+        "TRUCK_A1": 2
+    },
+    "E1004": {
+        "PRESS_A": 1,
+        "PRESS_B": 0,
+        "5S": 2,
+        "SAFETY_BASIC": 1,
+        "TRUCK_A1": 0
+    }
+};
 async function seedDemoDataIfEmpty() {
     const { data: existingEmployees, error: checkError } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id").limit(1);
     if (checkError) {
@@ -159,8 +154,7 @@ async function seedDemoDataIfEmpty() {
     const { data: insertedSkills, error: skillsError } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["supabase"].from("skills").insert(demoSkills.map((skill)=>({
             code: skill.code,
             name: skill.name,
-            category: skill.category,
-            description: skill.description
+            category: skill.category
         }))).select();
     if (skillsError) {
         throw new Error(`Failed to insert skills: ${skillsError.message}`);
@@ -168,13 +162,25 @@ async function seedDemoDataIfEmpty() {
     if (!insertedEmployees || !insertedSkills) {
         throw new Error("Failed to get inserted employee or skill IDs");
     }
+    const employeeByNumber = new Map();
+    for (const emp of insertedEmployees){
+        employeeByNumber.set(emp.employee_number, emp.id);
+    }
+    const skillByCode = new Map();
+    for (const skill of insertedSkills){
+        skillByCode.set(skill.code, skill.id);
+    }
     const employeeSkillsToInsert = [];
-    for(let empIndex = 0; empIndex < insertedEmployees.length; empIndex++){
-        for(let skillIndex = 0; skillIndex < insertedSkills.length; skillIndex++){
+    for (const [empNumber, skills] of Object.entries(demoSkillLevels)){
+        const employeeId = employeeByNumber.get(empNumber);
+        if (!employeeId) continue;
+        for (const [skillCode, level] of Object.entries(skills)){
+            const skillId = skillByCode.get(skillCode);
+            if (!skillId) continue;
             employeeSkillsToInsert.push({
-                employee_id: insertedEmployees[empIndex].id,
-                skill_id: insertedSkills[skillIndex].id,
-                level: demoSkillLevels[empIndex][skillIndex]
+                employee_id: employeeId,
+                skill_id: skillId,
+                level
             });
         }
     }
