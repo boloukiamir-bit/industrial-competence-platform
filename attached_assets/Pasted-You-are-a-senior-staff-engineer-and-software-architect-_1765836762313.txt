@@ -1,0 +1,158 @@
+You are a senior staff engineer and software architect.
+
+You are working inside an existing **Next.js + TypeScript + Supabase** app called **Industrial Competence Platform** running on Replit.
+The repo already has:
+
+- `app/` – routing (Next 13+ app router)
+- `components/` – UI components with Tailwind
+- `lib/` – utilities
+- `services/` – data access helpers
+- A working **Competence Matrix** page showing employees, lines, teams and skills 0–4
+- A **Tomorrow’s Gaps** page with a gap list and a `<WhatToFixSummary />` component (currently using mock data)
+- A basic employee CSV import that requires columns: `employee_number, name, role, line, team`
+- Supabase tables for: `employees`, `skills`, `employee_skills` (or similar)
+
+Your task is to do a **full-system upgrade in one shot**:
+
+> DELIVER COMPLETE, PRODUCTION-READY CODE ONLY.  
+> NO step-by-step, NO explanations, NO TODOs, NO placeholders.  
+> MODIFY EXISTING FILES AND ADD NEW ONES SO THE APP BUILDS AND RUNS.
+
+You are building a focused **industrial HR & People Risk platform** that MUST go deeper than generic HR tools like “Huma HR”.  
+Do not clone Huma. Instead, specialize on:
+- industrial operations,
+- competence & certification risk,
+- compliance around safety, contracts, medical checks and equipment,
+- manager-facing dashboards for “what to fix before tomorrow”.
+
+---------------------------------------------------
+### 1. DATA MODEL – SUPABASE SCHEMA (SQL OR TYPES)
+---------------------------------------------------
+
+Extend / create Supabase tables for:
+
+1) `employees`
+- id (uuid, PK)
+- employee_number (text, unique)
+- name (text)
+- role (text)
+- line (text)          -- production line / department
+- team (text)
+- employment_type (text)   -- "permanent" | "temporary"
+- start_date (date)
+- contract_end_date (date, nullable)
+- manager_id (uuid, nullable) -- FK to employees or managers table
+
+2) `skills`
+- id (uuid, PK)
+- name (text, unique)
+- description (text, nullable)
+- category (text, nullable)      -- e.g. "safety", "quality", "machine"
+
+3) `employee_skills`
+- id (uuid, PK)
+- employee_id (uuid, FK employees)
+- skill_id (uuid, FK skills)
+- level (int2)    -- 0..4
+
+Create indexes so queries on line, team and skill are fast.
+
+4) `person_events`  (core People Risk / compliance engine)
+- id (uuid, PK)
+- employee_id (uuid, FK employees)
+- category (text)  -- "contract" | "medical_check" | "training" | "onboarding" | "offboarding" | "work_env_delegation" | "equipment"
+- title (text)
+- description (text, nullable)
+- due_date (date)
+- completed_date (date, nullable)
+- recurrence (text, nullable)   -- e.g. "12m", "24m", "36m"
+- owner_manager_id (uuid, nullable)
+- status (text)   -- "upcoming" | "due_soon" | "overdue" | "completed"
+- notes (text, nullable)
+Add indexes on (employee_id), (owner_manager_id), (due_date), (status).
+
+5) `equipment`
+- id (uuid, PK)
+- name (text)
+- serial_number (text, unique)
+- category (text)
+- required_for_role (text, nullable)
+
+6) `employee_equipment`
+- id (uuid, PK)
+- employee_id (uuid)
+- equipment_id (uuid)
+- assigned_date (date)
+- return_date (date, nullable)
+- status (text) -- "assigned" | "returned" | "lost"
+
+7) `documents`
+- id (uuid, PK)
+- employee_id (uuid, nullable)  -- null = general HR doc / handbook
+- title (text)
+- type (text)      -- "contract" | "handbook" | "policy" | ...
+- url (text)       -- storage link
+- created_at (timestamptz)
+- valid_to (date, nullable)
+
+8) `news_posts`
+- id (uuid, PK)
+- title (text)
+- body (text)
+- created_at (timestamptz)
+- created_by (uuid, nullable)
+- is_pinned (boolean)
+
+9) `whistleblower_reports` (simple, internal, no fancy flows)
+- id (uuid, PK)
+- created_at (timestamptz)
+- reporter_id (uuid, nullable)
+- channel (text)     -- "web"
+- title (text)
+- description (text)
+- status (text)      -- "new" | "in_review" | "closed"
+
+Write the SQL (or Supabase migration-compatible code) needed for these in a single place (e.g. `supabase_schema.sql` in root or as comments next to types), so the schema is fully specified.
+
+---------------------------------------------------
+### 2. IMPORT ENGINE – REAL CSV → REAL SKILLS
+---------------------------------------------------
+
+Refactor the employee import so that:
+
+- It still requires `employee_number, name, role, line, team`.
+- Any **extra columns** in the CSV are interpreted as skills:
+  - Column name = skill name
+  - Cell value = level (0–4) or text (“Beginner”, “Expert”, “None” etc.)
+
+Implement:
+
+- A normalization utility: map raw values to 0–4.
+- A fuzzy skill matcher so `Pressline`, `Presslinje`, `PRESS_A` can merge.
+- For each row:
+  - upsert employee using `employee_number`
+  - auto-create skills that do not exist
+  - upsert employee_skills for all skill columns
+- On success, redirect to competence matrix.
+
+Place utilities under `lib/import/` and wire them into the existing `/app/import-employees` (or equivalent) page.  
+No mock code. Use real Supabase JS client via existing singleton.
+
+---------------------------------------------------
+### 3. GAP ENGINE – TOMORROW’S GAPS (BACKEND LOGIC)
+---------------------------------------------------
+
+Create a service in `services/gaps.ts` that exposes:
+
+```ts
+export type GapItem = {
+  line: string;
+  team: string | null;
+  role: string;
+  skill_name: string;
+  required_level: number;
+  current_avg_level: number;
+  missing_count: number;  // how many employees are below required
+};
+
+export async function calculateTomorrowsGaps(date: Date): Promise<GapItem[]>;

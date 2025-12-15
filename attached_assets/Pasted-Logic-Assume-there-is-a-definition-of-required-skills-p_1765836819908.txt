@@ -1,0 +1,269 @@
+Logic:
+
+Assume there is a definition of required skills per role/line somewhere (role_skill_requirements table or hard-coded config). If not present, create that table with:
+
+id, role, line, skill_id, required_level, required_headcount
+
+For each line + role, compare:
+
+required_level vs actual employee_skills levels for that skill
+
+count how many employees are below required_level
+
+Only return gaps where missing_count > 0.
+
+Use this service in Tomorrow’s Gaps page instead of any mock.
+
+4. WHAT-TO-FIX SUMMARY – REAL DATA
+
+You already have components/WhatToFixSummary.tsx.
+
+Update Tomorrow’s Gaps page:
+
+After fetching gaps and computing GapItem[], call helper functions (to be created in services/gaps.ts):
+
+export function getCriticalGaps(gaps: GapItem[]): {
+  line: string;
+  role: string;
+  skill: string;
+  missingCount: number;
+}[];
+
+export function getTrainingPriorities(skillStats: {
+  [skill: string]: { level0_1: number; level2: number; level3_4: number };
+}): {
+  skill: string;
+  countLevel0or1: number;
+}[];
+
+export function getOverstaffedSkills(skillStats: {
+  [skill: string]: { level0_1: number; level2: number; level3_4: number };
+}): {
+  skill: string;
+  countLevel3or4: number;
+}[];
+
+
+Derive skillStats from employee_skills for the whole plant (or filtered line/team).
+
+Pass real arrays into <WhatToFixSummary />.
+
+Remove all mock data.
+
+5. PEOPLE RISK ENGINE – person_events LOGIC
+
+Implement central logic in services/events.ts:
+
+export type PersonEventCategory =
+  | "contract"
+  | "medical_check"
+  | "training"
+  | "onboarding"
+  | "offboarding"
+  | "work_env_delegation"
+  | "equipment";
+
+export async function getEventsForManager(managerId: string): Promise<PersonEvent[]>;
+
+export async function updateEventStatus(
+  eventId: string,
+  updates: { status?: string; due_date?: string; completed_date?: string; notes?: string }
+): Promise<void>;
+
+export async function autoGenerateContractEvents(): Promise<void>;
+
+export async function autoGenerateRecurringEvents(): Promise<void>;
+
+
+Logic:
+
+autoGenerateContractEvents:
+
+For each employee with employment_type = "temporary" and contract_end_date set,
+
+Ensure a person_events row exists with:
+
+category = "contract"
+
+title = "Tidsbegränsad anställning löper ut"
+
+due_date = contract_end_date
+
+owner_manager_id = employee.manager_id
+
+autoGenerateRecurringEvents:
+
+For all completed events with a recurrence string "12m", "24m", etc,
+
+Create a new event with due_date = completed_date + recurrence.
+
+Status calculation:
+
+If completed_date is set → status = "completed"
+
+Else if due_date < today → "overdue"
+
+Else if due_date <= today + 60 days → "due_soon"
+
+Else → "upcoming"
+
+Create small helpers to parse recurrence strings and to recalc status before returning events.
+
+6. MANAGER DASHBOARD – /app/manager/risks
+
+Create page: app/manager/risks/page.tsx.
+
+Assume we already know the manager’s ID (hard-code for now or use a placeholder hook like useCurrentManager() that returns a fixed UUID).
+
+The page must:
+
+Fetch person_events for the current manager via getEventsForManager.
+
+Group them into:
+
+Overdue
+
+Due soon (next 60 days)
+
+Upcoming ( > 60 days out)
+
+Within each group, group again by category and display counts.
+
+Create components:
+
+components/ManagerRiskCard.tsx
+
+Props: single event: employee name, title, due_date, status, category, notes
+
+Buttons:
+
+“Mark as completed today”
+
+“Move due date +30 days”
+
+Use Tailwind; clean, readable.
+
+components/RiskListSection.tsx
+
+Props: section title ("Overdue", "Due soon", "Upcoming") and list of events
+
+Uses ManagerRiskCard for each event.
+
+Manager Risks page layout:
+
+H1: “People Risks – My Team”
+
+Three columns or stacked sections:
+
+Overdue
+
+Due soon
+
+Upcoming
+
+All data must be real from Supabase.
+
+7. EQUIPMENT & ON/OFFBOARDING INTEGRATION
+
+Extend logic so that:
+
+On onboarding (new employee created or start_date set):
+
+Create person_events of category "onboarding" for:
+
+“Onboarding – introduktion”
+
+“Arbetsmiljögenomgång”
+
+“Skapa AD-konto” (title only; AD is not actually integrated)
+
+On offboarding (contract_end_date set or employee marked as leaving):
+
+Create events:
+
+“Offboarding – återlämna utrustning”
+
+“Stäng AD-konto”
+
+“Exit-samtal”
+
+For equipment:
+
+Provide minimal UI page app/equipment/page.tsx where admin can:
+
+See list of equipment
+
+Assign equipment to employee (creates employee_equipment and also a person_events row of category "equipment" with due_date = planned return_date)
+
+Mark equipment as returned.
+
+8. SIMPLE NEWS & DOCUMENTS (LIGHTWEIGHT, NOT HUMA CLONE)
+
+Create:
+
+app/news/page.tsx – list of news_posts, newest first, simple cards.
+
+app/documents/page.tsx – list of general documents (where employee_id is null) with link to URL.
+
+No complex editors. Simple create forms using Supabase insert: title + body (for news), title + type + url (for documents).
+
+9. PRICING CONFIG (BUSINESS VS ENTERPRISE – BEAT HUMA)
+
+Create a small config file lib/pricing.ts:
+
+export type PlanId = "business" | "enterprise";
+
+export const pricingConfig = {
+  business: {
+    baseYearlySEK: 15000,         // lower than Huma’s 19.500
+    perEmployeeMonthlySEK: 49,    // lower than Huma’s 65
+    maxIncludedEmployees: 25,
+  },
+  enterprise: {
+    baseYearlySEK: 30000,         // lower than Huma’s 35.700
+    perEmployeeMonthlySEK: 89,    // lower than Huma’s 119
+    maxIncludedEmployees: 25,
+  },
+};
+
+
+Create a marketing/info page app/pricing/page.tsx that reads from this config and shows:
+
+clear comparison Business vs Enterprise
+
+highlights:
+
+unlimited onboarding/offboarding
+
+competence & risk engine per line/team
+
+equipment tracking
+
+manager risk dashboard
+
+industrial focus
+
+No payment integration; this is just static pricing UI.
+
+10. IMPLEMENTATION RULES
+
+Use existing Tailwind setup and styling conventions from current components.
+
+Do not remove or break current working pages:
+
+Competence Matrix
+
+Tomorrow’s Gaps
+
+Import Employees
+
+Where existing code partially overlaps, refactor rather than duplicate.
+
+Ensure TypeScript passes and Next.js builds successfully.
+
+Keep imports consistent with current project (use @/components/..., @/services/..., etc).
+
+AGAIN:
+Return complete, ready-to-paste code for all new/modified files.
+Do not just describe. Do not leave TODOs. Do not answer with prose.
+Act as if you are committing directly to the main branch of a production repo.
