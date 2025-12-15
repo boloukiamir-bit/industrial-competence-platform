@@ -205,11 +205,11 @@ export interface CompetenceGap {
 export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + 1);
-  const targetDateStr = targetDate.toISOString().split("T")[0];
+  const targetDateStr = targetDate.toISOString().slice(0, 10);
 
   const { data: requirements, error: reqError } = await supabase
     .from("competence_requirements")
-    .select("*")
+    .select("id, line, team, skill_id, min_level, min_headcount, effective_date")
     .lte("effective_date", targetDateStr);
 
   if (reqError) {
@@ -220,61 +220,60 @@ export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
     return [];
   }
 
-  const [employeesResult, skillsResult, employeeSkillsResult] = await Promise.all([
-    supabase.from("employees").select("*").eq("is_active", true),
-    supabase.from("skills").select("*"),
-    supabase.from("employee_skills").select("*"),
-  ]);
+  const skillIds = [...new Set(requirements.map((r) => r.skill_id))];
+  const { data: skills, error: skillsError } = await supabase
+    .from("skills")
+    .select("id, code, name")
+    .in("id", skillIds);
 
-  if (employeesResult.error) {
-    throw new Error(`Failed to fetch employees: ${employeesResult.error.message}`);
+  if (skillsError) {
+    throw new Error(`Failed to fetch skills: ${skillsError.message}`);
   }
-  if (skillsResult.error) {
-    throw new Error(`Failed to fetch skills: ${skillsResult.error.message}`);
-  }
-  if (employeeSkillsResult.error) {
-    throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
-  }
-
-  const employees = employeesResult.data || [];
-  const skills = skillsResult.data || [];
-  const employeeSkills = employeeSkillsResult.data || [];
 
   const skillMap = new Map<string, { code: string; name: string }>();
-  for (const skill of skills) {
+  for (const skill of skills || []) {
     skillMap.set(skill.id, { code: skill.code, name: skill.name });
-  }
-
-  const employeeSkillMap = new Map<string, Map<string, number>>();
-  for (const es of employeeSkills) {
-    if (!employeeSkillMap.has(es.employee_id)) {
-      employeeSkillMap.set(es.employee_id, new Map());
-    }
-    employeeSkillMap.get(es.employee_id)!.set(es.skill_id, es.level);
   }
 
   const gaps: CompetenceGap[] = [];
 
   for (const req of requirements) {
-    const { line, team, skill_id, min_level, required_headcount } = req;
+    const { line, team, skill_id, min_level, min_headcount } = req;
 
     const skillInfo = skillMap.get(skill_id);
     if (!skillInfo) continue;
 
-    const matchingEmployees = employees.filter(
-      (emp) => emp.line === line && emp.team === team
-    );
+    const { data: matchingEmployees, error: empError } = await supabase
+      .from("employees")
+      .select("id")
+      .eq("line", line)
+      .eq("team", team);
 
-    let actualHeadcount = 0;
-    for (const emp of matchingEmployees) {
-      const empSkills = employeeSkillMap.get(emp.id);
-      const level = empSkills?.get(skill_id) ?? 0;
-      if (level >= min_level) {
-        actualHeadcount++;
-      }
+    if (empError) {
+      throw new Error(`Failed to fetch employees for ${line}/${team}: ${empError.message}`);
     }
 
-    const missingHeadcount = Math.max(0, required_headcount - actualHeadcount);
+    const employeeIds = (matchingEmployees || []).map((e) => e.id);
+
+    let actualHeadcount = 0;
+
+    if (employeeIds.length > 0) {
+      const { data: qualifiedSkills, error: esError } = await supabase
+        .from("employee_skills")
+        .select("employee_id")
+        .eq("skill_id", skill_id)
+        .gte("level", min_level)
+        .in("employee_id", employeeIds);
+
+      if (esError) {
+        throw new Error(`Failed to fetch employee_skills: ${esError.message}`);
+      }
+
+      actualHeadcount = qualifiedSkills?.length || 0;
+    }
+
+    const requiredHeadcount = min_headcount;
+    const missingHeadcount = Math.max(0, requiredHeadcount - actualHeadcount);
 
     if (missingHeadcount > 0) {
       gaps.push({
@@ -283,7 +282,7 @@ export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
         skillCode: skillInfo.code,
         skillName: skillInfo.name,
         requiredLevel: min_level,
-        requiredHeadcount: required_headcount,
+        requiredHeadcount,
         actualHeadcount,
         missingHeadcount,
       });
