@@ -190,3 +190,105 @@ export async function getEmployeesWithSkills(filters?: {
 
   return { employees, skills, employeeSkills };
 }
+
+export interface CompetenceGap {
+  line: string;
+  team: string;
+  skillName: string;
+  skillCode: string;
+  requiredLevel: number;
+  requiredHeadcount: number;
+  actualHeadcount: number;
+  missingHeadcount: number;
+}
+
+export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + 1);
+  const targetDateStr = targetDate.toISOString().split("T")[0];
+
+  const { data: requirements, error: reqError } = await supabase
+    .from("competence_requirements")
+    .select("*")
+    .lte("effective_date", targetDateStr);
+
+  if (reqError) {
+    throw new Error(`Failed to fetch competence_requirements: ${reqError.message}`);
+  }
+
+  if (!requirements || requirements.length === 0) {
+    return [];
+  }
+
+  const [employeesResult, skillsResult, employeeSkillsResult] = await Promise.all([
+    supabase.from("employees").select("*").eq("is_active", true),
+    supabase.from("skills").select("*"),
+    supabase.from("employee_skills").select("*"),
+  ]);
+
+  if (employeesResult.error) {
+    throw new Error(`Failed to fetch employees: ${employeesResult.error.message}`);
+  }
+  if (skillsResult.error) {
+    throw new Error(`Failed to fetch skills: ${skillsResult.error.message}`);
+  }
+  if (employeeSkillsResult.error) {
+    throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
+  }
+
+  const employees = employeesResult.data || [];
+  const skills = skillsResult.data || [];
+  const employeeSkills = employeeSkillsResult.data || [];
+
+  const skillMap = new Map<string, { code: string; name: string }>();
+  for (const skill of skills) {
+    skillMap.set(skill.id, { code: skill.code, name: skill.name });
+  }
+
+  const employeeSkillMap = new Map<string, Map<string, number>>();
+  for (const es of employeeSkills) {
+    if (!employeeSkillMap.has(es.employee_id)) {
+      employeeSkillMap.set(es.employee_id, new Map());
+    }
+    employeeSkillMap.get(es.employee_id)!.set(es.skill_id, es.level);
+  }
+
+  const gaps: CompetenceGap[] = [];
+
+  for (const req of requirements) {
+    const { line, team, skill_id, min_level, required_headcount } = req;
+
+    const skillInfo = skillMap.get(skill_id);
+    if (!skillInfo) continue;
+
+    const matchingEmployees = employees.filter(
+      (emp) => emp.line === line && emp.team === team
+    );
+
+    let actualHeadcount = 0;
+    for (const emp of matchingEmployees) {
+      const empSkills = employeeSkillMap.get(emp.id);
+      const level = empSkills?.get(skill_id) ?? 0;
+      if (level >= min_level) {
+        actualHeadcount++;
+      }
+    }
+
+    const missingHeadcount = Math.max(0, required_headcount - actualHeadcount);
+
+    if (missingHeadcount > 0) {
+      gaps.push({
+        line,
+        team,
+        skillCode: skillInfo.code,
+        skillName: skillInfo.name,
+        requiredLevel: min_level,
+        requiredHeadcount: required_headcount,
+        actualHeadcount,
+        missingHeadcount,
+      });
+    }
+  }
+
+  return gaps;
+}
