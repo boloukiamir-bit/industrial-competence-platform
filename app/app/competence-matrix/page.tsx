@@ -1,6 +1,8 @@
 import type { CompetenceLevel } from "@/types/domain";
 import { seedDemoDataIfEmpty, getEmployeesWithSkills } from "@/services/competenceService";
 
+export const dynamic = "force-dynamic";
+
 const competenceLevels: CompetenceLevel[] = [
   { value: 0, label: "None", description: "No experience or training" },
   { value: 1, label: "Basic", description: "Theoretical knowledge, needs supervision" },
