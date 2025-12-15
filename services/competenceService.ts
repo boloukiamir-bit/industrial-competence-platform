@@ -324,3 +324,20 @@ export function getTrainingPriorities(skillsStats: Record<string, SkillStats>) {
     .filter(i => i.countLevel0or1 > 0)
     .sort((a, b) => b.countLevel0or1 - a.countLevel0or1);
 }
+
+interface FullSkillStats {
+  level_0: number;
+  level_1: number;
+  level_3: number;
+  level_4: number;
+}
+
+export function getOverstaffedSkills(skillsStats: Record<string, FullSkillStats>) {
+  return Object.entries(skillsStats)
+    .map(([skill, stats]) => ({
+      skill,
+      countLevel3or4: stats.level_3 + stats.level_4,
+    }))
+    .filter(i => i.countLevel3or4 >= 3)
+    .sort((a, b) => b.countLevel3or4 - a.countLevel3or4);
+}
