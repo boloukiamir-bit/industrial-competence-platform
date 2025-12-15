@@ -2,26 +2,26 @@ import { supabase } from "@/lib/supabaseClient";
 import type { Employee, Skill, EmployeeSkill, CompetenceLevel } from "@/types/domain";
 
 const demoEmployees: Omit<Employee, "id">[] = [
-  { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Line A", team: "Team Alpha", isActive: true },
-  { name: "Erik Johansson", employeeNumber: "E1002", role: "Technician", line: "Line A", team: "Team Alpha", isActive: true },
-  { name: "Maria Svensson", employeeNumber: "E1003", role: "Operator", line: "Line B", team: "Team Beta", isActive: true },
-  { name: "Karl Andersson", employeeNumber: "E1004", role: "Supervisor", line: "Line B", team: "Team Beta", isActive: true },
+  { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Pressline 1", team: "Day", isActive: true },
+  { name: "Erik Johansson", employeeNumber: "E1002", role: "Operator", line: "Pressline 1", team: "Night", isActive: true },
+  { name: "Maria Svensson", employeeNumber: "E1003", role: "Team Leader", line: "Assembly", team: "Day", isActive: true },
+  { name: "Karl Andersson", employeeNumber: "E1004", role: "Operator", line: "Assembly", team: "Night", isActive: true },
 ];
 
 const demoSkills: Omit<Skill, "id">[] = [
-  { code: "WLD-01", name: "MIG Welding", category: "Welding", description: "Metal Inert Gas welding technique" },
-  { code: "WLD-02", name: "TIG Welding", category: "Welding", description: "Tungsten Inert Gas welding technique" },
-  { code: "CNC-01", name: "CNC Operation", category: "Machining", description: "Computer Numerical Control machine operation" },
-  { code: "QC-01", name: "Quality Inspection", category: "Quality", description: "Quality control and inspection procedures" },
-  { code: "SAF-01", name: "Safety Protocols", category: "Safety", description: "Workplace safety and emergency procedures" },
+  { code: "PRESS_A", name: "Pressline A", category: "Production" },
+  { code: "PRESS_B", name: "Pressline B", category: "Production" },
+  { code: "5S", name: "5S Basics", category: "Lean" },
+  { code: "SAFETY_BASIC", name: "Safety Basic", category: "Safety" },
+  { code: "TRUCK_A1", name: "Truck A1 License", category: "Logistics" },
 ];
 
-const demoSkillLevels: CompetenceLevel["value"][][] = [
-  [3, 2, 1, 2, 4],
-  [4, 4, 3, 2, 3],
-  [2, 0, 4, 3, 3],
-  [2, 1, 2, 4, 4],
-];
+const demoSkillLevels: Record<string, Record<string, CompetenceLevel["value"]>> = {
+  "E1001": { "PRESS_A": 3, "PRESS_B": 2, "5S": 4, "SAFETY_BASIC": 3, "TRUCK_A1": 1 },
+  "E1002": { "PRESS_A": 2, "PRESS_B": 1, "5S": 3, "SAFETY_BASIC": 2, "TRUCK_A1": 0 },
+  "E1003": { "PRESS_A": 4, "PRESS_B": 3, "5S": 4, "SAFETY_BASIC": 4, "TRUCK_A1": 2 },
+  "E1004": { "PRESS_A": 1, "PRESS_B": 0, "5S": 2, "SAFETY_BASIC": 1, "TRUCK_A1": 0 },
+};
 
 export async function seedDemoDataIfEmpty(): Promise<void> {
   const { data: existingEmployees, error: checkError } = await supabase
@@ -75,14 +75,30 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
     throw new Error("Failed to get inserted employee or skill IDs");
   }
 
+  const employeeByNumber = new Map<string, string>();
+  for (const emp of insertedEmployees) {
+    employeeByNumber.set(emp.employee_number, emp.id);
+  }
+
+  const skillByCode = new Map<string, string>();
+  for (const skill of insertedSkills) {
+    skillByCode.set(skill.code, skill.id);
+  }
+
   const employeeSkillsToInsert: { employee_id: string; skill_id: string; level: number }[] = [];
 
-  for (let empIndex = 0; empIndex < insertedEmployees.length; empIndex++) {
-    for (let skillIndex = 0; skillIndex < insertedSkills.length; skillIndex++) {
+  for (const [empNumber, skills] of Object.entries(demoSkillLevels)) {
+    const employeeId = employeeByNumber.get(empNumber);
+    if (!employeeId) continue;
+
+    for (const [skillCode, level] of Object.entries(skills)) {
+      const skillId = skillByCode.get(skillCode);
+      if (!skillId) continue;
+
       employeeSkillsToInsert.push({
-        employee_id: insertedEmployees[empIndex].id,
-        skill_id: insertedSkills[skillIndex].id,
-        level: demoSkillLevels[empIndex][skillIndex],
+        employee_id: employeeId,
+        skill_id: skillId,
+        level,
       });
     }
   }
