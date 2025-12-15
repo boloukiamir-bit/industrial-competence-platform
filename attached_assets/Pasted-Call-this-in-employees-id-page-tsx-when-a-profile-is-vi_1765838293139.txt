@@ -1,0 +1,115 @@
+Call this in:
+
+/employees/[id]/page.tsx when a profile is viewed
+
+Any export endpoint you create
+
+6.2 Data export (subject access request)
+
+Create an API route: app/api/gdpr/export-employee-data/route.ts:
+
+Input: employee_id
+
+Output: JSON containing:
+
+employee core data
+
+skills and levels
+
+person_events
+
+salary_records
+
+salary_revisions
+
+documents metadata (NOT file contents)
+
+reviews (employee_reviews)
+
+Use Supabase queries; structure JSON in a clean way.
+
+6.3 Soft anonymization / deletion helper
+
+In services/gdpr.ts create:
+
+export async function anonymizeEmployee(employeeId: string): Promise<void>;
+
+
+Implementation:
+
+Set personal identifiers on employees to neutral values:
+
+name = "Anonymiserad"
+
+email, phone, address, postal_code, city = null
+
+Keep role/line/team and skill data so aggregated stats still work.
+
+Ensure person_events and salary data remain but are linked to anonymized employee.
+
+You do NOT have to expose this via UI right now; just implement the helper.
+
+====================================================
+7. TO-DO / TASKS FOR HR & EMPLOYEES (REUSE person_events)
+
+We avoid duplicating features Huma has; instead we align with existing person_events.
+
+Treat person_events as core task & compliance engine:
+
+onboarding tasks
+
+offboarding tasks
+
+training due
+
+medical checks
+
+equipment return
+
+work environment delegation renewals
+
+Extend Manager Risks page:
+
+Allow filtering by employee and category.
+
+Add a compact list of “My tasks” for the manager (events where owner_manager_id = manager).
+
+On /employees/[id]/page.tsx, show “Att göra för denna person” based on their active person_events.
+
+====================================================
+8. NAVIGATION & UX
+
+Update navigation (wherever the main menu is defined) to expose:
+
+Employees
+
+Manager Risks
+
+Safety / Certificates
+
+Handbooks
+
+News
+
+Pricing
+
+Ensure:
+
+/employees/[id] acts as a hub for HR core, performance, salary, documents, equipment, and compliance.
+
+====================================================
+9. IMPLEMENTATION RULES
+
+DO NOT remove or break existing working pages and services.
+
+Refactor cleanly if needed to avoid duplication.
+
+Use existing Supabase client pattern and Tailwind setup.
+
+TypeScript must compile, Next.js must build.
+
+All new pages and services must be fully wired (no mock data left).
+
+Return ONLY code and file contents / diffs needed to implement everything above.
+No explanations, no commentary.
+Behave as if you are editing the repo directly with full context.

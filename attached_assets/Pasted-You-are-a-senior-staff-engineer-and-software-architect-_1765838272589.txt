@@ -1,0 +1,293 @@
+You are a senior staff engineer and software architect.
+
+You are working inside an existing **Next.js + TypeScript + Supabase** app called **Industrial Competence Platform** on Replit.
+
+The repo ALREADY contains (from previous iteration):
+
+- Competence Matrix (employees × skills, with 0–4 levels)
+- Tomorrow’s Gaps page with real gap engine logic
+- WhatToFixSummary component wired to real data
+- People Risk / person_events table and logic for:
+  - contract
+  - medical_check
+  - training
+  - onboarding
+  - offboarding
+  - work_env_delegation
+  - equipment
+- Manager risk dashboard under `/manager/risks`
+- Equipment tracking basics
+- News and Documents pages
+- Pricing page and config
+
+You MUST NOT remove or break any of that.
+You are now asked to **add a full HR CORE + PERSON VIEW + SALARY + PERFORMANCE + GDPR SUPPORT**, optimized for Swedish / EU industrial companies.
+
+Deliver COMPLETE, PRODUCTION-READY CODE ONLY.  
+No prose, no TODOs, no placeholders.  
+Assume you are committing to main in a live system.
+
+====================================================
+1. HR CORE – EMPLOYEE MASTER DATA & PERSON PAGE
+====================================================
+
+Goal: HR and managers must have a **single “Person” view** with all HR core information.
+
+### 1.1 Extend employees table (Supabase)
+
+Ensure `employees` has at least:
+
+- id (uuid, PK)
+- employee_number (text, unique)
+- name (text)
+- first_name (text, nullable)
+- last_name (text, nullable)
+- email (text)
+- phone (text, nullable)
+- date_of_birth (date, nullable)
+- role (text)
+- line (text)
+- team (text)
+- employment_type (text)   -- "permanent" | "temporary" | "consultant"
+- start_date (date)
+- contract_end_date (date, nullable)
+- manager_id (uuid, nullable)   -- FK to employees or managers table
+- address (text, nullable)
+- city (text, nullable)
+- postal_code (text, nullable)
+- country (text, default "Sweden")
+- is_active (boolean, default true)
+- created_at, updated_at (timestamptz)
+
+Update schema migration / SQL accordingly.
+
+### 1.2 Employee list + person detail page
+
+Create:
+
+- `app/employees/page.tsx`  
+  - List of employees in a table: name, employee_number, line, team, role, manager
+  - Each row links to `/employees/[id]`
+
+- `app/employees/[id]/page.tsx`  
+  This is the **HR Person Hub** with sections:
+
+  1) Personal info  
+     - name, employee_number, email, phone, date_of_birth, address
+  2) Employment info  
+     - employment_type, start_date, contract_end_date, line, team, manager
+  3) Competence summary  
+     - skills 0–4 pulled from `employee_skills`
+  4) People Risk / person_events timeline  
+     - relevant events for the employee (contract, medical, training, onboarding, offboarding, work_env_delegation, equipment)
+  5) Documents attached to the person (contracts, reviews, etc.)
+  6) Equipment assigned to the person
+
+Use Tailwind and existing design language.  
+Use Supabase client to fetch all related data in one server component.
+
+====================================================
+2. PERFORMANCE & MEDEARBETARSAMTAL
+====================================================
+
+We need structured **performance reviews / medarbetarsamtal** with templates and history.
+
+### 2.1 Tables
+
+Create tables:
+
+`review_templates`:
+- id (uuid, PK)
+- name (text)
+- description (text, nullable)
+- audience (text)  -- "employee", "manager", "both"
+- is_active (boolean, default true)
+- created_at (timestamptz)
+
+`employee_reviews`:
+- id (uuid, PK)
+- employee_id (uuid, FK employees)
+- manager_id (uuid, FK employees or managers)
+- template_id (uuid, FK review_templates)
+- review_date (date)
+- period_start (date, nullable)
+- period_end (date, nullable)
+- overall_rating (int2, nullable)     -- e.g. 1–5
+- summary (text, nullable)
+- goals (jsonb, nullable)             -- list of goals
+- notes (text, nullable)
+- created_at, updated_at (timestamptz)
+
+### 2.2 UI
+
+- Add a section on `/employees/[id]/page.tsx`:
+  - “Medarbetarsamtal & utvecklingssamtal”
+  - List past `employee_reviews` with date, manager, rating.
+  - Button: “Skapa nytt samtal”.
+
+- Create page or modal for new review, e.g. `app/employees/[id]/reviews/new/page.tsx` or a component triggered from person page.
+
+- For simplicity, create 1–2 default templates in code (insert if not exists on startup):
+  - “Årligt medarbetarsamtal”
+  - “Lönesamtal”
+
+Form fields:
+- Choose template
+- Date
+- Period (from–to)
+- Numeric rating (1–5)
+- Summary (textarea)
+- Goals (simple array: goal text + status)
+
+Save to Supabase via server actions or API routes.
+
+====================================================
+3. SALARY & SALARY REVISION (LÖN & LÖNEREVISIONER)
+====================================================
+
+We need structured logging of salary and revisions per person.
+
+### 3.1 Tables
+
+Create:
+
+`salary_records`:
+- id (uuid, PK)
+- employee_id (uuid, FK employees)
+- effective_from (date)
+- salary_amount_sek (numeric)
+- salary_type (text) -- "monthly", "hourly"
+- position_title (text, nullable)
+- notes (text, nullable)
+- created_at (timestamptz)
+- created_by (uuid, nullable)
+
+`salary_revisions`:
+- id (uuid, PK)
+- employee_id (uuid, FK employees)
+- revision_date (date)
+- previous_salary_sek (numeric)
+- new_salary_sek (numeric)
+- salary_type (text)
+- reason (text, nullable)
+- decided_by_manager_id (uuid, nullable)
+- document_id (uuid, nullable)  -- link to signed protocol in `documents`
+- created_at (timestamptz)
+
+### 3.2 UI
+
+On `/employees/[id]/page.tsx`:
+
+- Section “Lön & lönerevisioner”
+- Show:
+  - Current salary (from latest `salary_records` by effective_from)
+  - Table of `salary_revisions`: date, previous → new, reason, manager.
+
+Provide button “Registrera lönerevision”:
+
+- Simple form:
+  - revision_date
+  - previous_salary (pre-filled from last record)
+  - new_salary
+  - salary_type
+  - reason
+- On save:
+  - insert into `salary_revisions`
+  - insert/update into `salary_records` with new effective_from
+
+====================================================
+4. DIGITAL HANDBÖCKER & DOKUMENT (HR CORE)
+====================================================
+
+We already have a `documents` table; extend its usage:
+
+- Types:
+  - "employee_handbook"
+  - "manager_handbook"
+  - "contract"
+  - "policy"
+  - "review_protocol"
+  - "other"
+
+### 4.1 Handbooks
+
+Create page `app/handbooks/page.tsx` that:
+
+- Lists documents where `type IN ('employee_handbook', 'manager_handbook')`.
+- Groups into:
+  - Employee handbook(s)
+  - Manager handbook(s)
+- Each entry: title + link (url).
+
+Integrate in main navigation.
+
+### 4.2 Person-specific docs
+
+On `/employees/[id]/page.tsx`:
+
+- Section “Dokument”.
+- List documents where `employee_id = this employee.id`.
+- Show: title, type, link.
+
+====================================================
+5. MAINTENANCE / SAFETY MANAGER VIEW
+====================================================
+
+We already have skills + person_events.  
+We now add a **Safety & Maintenance overview** for things like “Heta arbeten”, “Truckkort”, “EU-utbildning”.
+
+### 5.1 Certificates as skills
+
+Assume certificates are represented as `skills` with category "safety" or "certificate" (e.g. HEAT_WORK, TRUCK_A1, EU_FORKLIFT).
+
+Add page: `app/safety/certificates/page.tsx`
+
+- Shows table:
+  - Employee name
+  - Line / team
+  - Certificate (skill name)
+  - Current level
+  - Latest training date (if available from `person_events` of category "training")
+  - Next due date (if from `person_events` with recurrence)
+
+Allow filters:
+- by line
+- by certificate (skill_name)
+
+This page answers:
+- Who has Heta arbeten?
+- Who needs EU-truck trainer soon?
+- Who is missing required certification for their role?
+
+### 5.2 Integrate with person_events
+
+When a training event of certain type is completed (e.g. “Heta arbeten utbildning”):
+
+- Update relevant skill level to 3 or 4.
+- Create/update a recurring `person_event` with category "training" and due_date = completed_date + validity (e.g. 5 years).
+
+====================================================
+6. GDPR SUPPORT LAYER (EU / SWEDEN CONTEXT)
+====================================================
+
+We cannot implement legal GDPR compliance fully, but we can provide supportive features.
+
+### 6.1 Data access logging
+
+Create table `gdpr_access_logs`:
+
+- id (uuid, PK)
+- employee_id (uuid, FK employees)
+- accessed_by_user_id (uuid, nullable)
+- accessed_at (timestamptz)
+- access_type (text)   -- "view_profile" | "export_data" | "download_document"
+- metadata (jsonb, nullable)
+
+Implement a small helper in `services/gdpr.ts`:
+
+```ts
+export async function logEmployeeAccess(
+  employeeId: string,
+  accessType: string,
+  metadata?: Record<string, any>
+): Promise<void>;

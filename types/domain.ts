@@ -1,15 +1,27 @@
 export type Employee = {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   employeeNumber: string;
+  email?: string;
+  phone?: string;
+  dateOfBirth?: string;
   role: string;
   line: string;
   team: string;
-  employmentType: 'permanent' | 'temporary';
+  employmentType: 'permanent' | 'temporary' | 'consultant';
   startDate?: string;
   contractEndDate?: string;
   managerId?: string;
+  managerName?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  country?: string;
   isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type Skill = {
@@ -30,6 +42,9 @@ export type EmployeeSkill = {
   employeeId: string;
   skillId: string;
   level: CompetenceLevel["value"];
+  skillName?: string;
+  skillCode?: string;
+  skillCategory?: string;
 };
 
 export type RoleSkillRequirement = {
@@ -79,16 +94,28 @@ export type EmployeeEquipment = {
   id: string;
   employeeId: string;
   equipmentId: string;
+  equipmentName?: string;
+  serialNumber?: string;
   assignedDate: string;
   returnDate?: string;
   status: 'assigned' | 'returned' | 'lost';
 };
 
+export type DocumentType = 
+  | 'contract' 
+  | 'handbook' 
+  | 'policy' 
+  | 'certificate' 
+  | 'employee_handbook' 
+  | 'manager_handbook' 
+  | 'review_protocol' 
+  | 'other';
+
 export type Document = {
   id: string;
   employeeId?: string;
   title: string;
-  type: 'contract' | 'handbook' | 'policy' | 'certificate' | 'other';
+  type: DocumentType;
   url: string;
   createdAt: string;
   validTo?: string;
@@ -112,4 +139,85 @@ export type GapItem = {
   requiredLevel: number;
   currentAvgLevel: number;
   missingCount: number;
+};
+
+export type ReviewTemplate = {
+  id: string;
+  name: string;
+  description?: string;
+  audience: 'employee' | 'manager' | 'both';
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type ReviewGoal = {
+  id: string;
+  text: string;
+  status: 'pending' | 'in_progress' | 'completed';
+};
+
+export type EmployeeReview = {
+  id: string;
+  employeeId: string;
+  managerId?: string;
+  managerName?: string;
+  templateId?: string;
+  templateName?: string;
+  reviewDate: string;
+  periodStart?: string;
+  periodEnd?: string;
+  overallRating?: number;
+  summary?: string;
+  goals?: ReviewGoal[];
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type SalaryRecord = {
+  id: string;
+  employeeId: string;
+  effectiveFrom: string;
+  salaryAmountSek: number;
+  salaryType: 'monthly' | 'hourly';
+  positionTitle?: string;
+  notes?: string;
+  createdAt: string;
+  createdBy?: string;
+};
+
+export type SalaryRevision = {
+  id: string;
+  employeeId: string;
+  revisionDate: string;
+  previousSalarySek: number;
+  newSalarySek: number;
+  salaryType: 'monthly' | 'hourly';
+  reason?: string;
+  decidedByManagerId?: string;
+  decidedByManagerName?: string;
+  documentId?: string;
+  createdAt: string;
+};
+
+export type GdprAccessLog = {
+  id: string;
+  employeeId: string;
+  accessedByUserId?: string;
+  accessedAt: string;
+  accessType: 'view_profile' | 'export_data' | 'download_document' | 'update_profile' | 'delete_profile';
+  metadata?: Record<string, unknown>;
+};
+
+export type CertificateInfo = {
+  employeeId: string;
+  employeeName: string;
+  line: string;
+  team: string;
+  skillId: string;
+  skillName: string;
+  skillCode: string;
+  currentLevel: number;
+  latestTrainingDate?: string;
+  nextDueDate?: string;
 };
