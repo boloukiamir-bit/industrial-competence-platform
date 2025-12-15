@@ -1,3 +1,4 @@
 {
+  "/app/competence-matrix/page": "app/app/competence-matrix/page.js",
   "/page": "app/page.js"
 }

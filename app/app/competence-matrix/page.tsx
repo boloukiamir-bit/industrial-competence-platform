@@ -1,5 +1,5 @@
 import type { CompetenceLevel } from "@/types/domain";
-import { seedDemoDataIfEmpty, getEmployeesWithSkills } from "@/services/competenceService";
+import { seedDemoDataIfEmpty, getEmployeesWithSkills, getFilterOptions } from "@/services/competenceService";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +28,24 @@ function getLevelColor(level: CompetenceLevel["value"]): string {
   }
 }
 
-export default async function CompetenceMatrixPage() {
+interface PageProps {
+  searchParams: Promise<{ line?: string; team?: string }>;
+}
+
+export default async function CompetenceMatrixPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const selectedLine = params.line || "";
+  const selectedTeam = params.team || "";
+
   await seedDemoDataIfEmpty();
-  const { employees, skills, employeeSkills } = await getEmployeesWithSkills();
+  
+  const [{ employees, skills, employeeSkills }, filterOptions] = await Promise.all([
+    getEmployeesWithSkills({
+      line: selectedLine || undefined,
+      team: selectedTeam || undefined,
+    }),
+    getFilterOptions(),
+  ]);
 
   function getSkillLevel(employeeId: string, skillId: string): CompetenceLevel["value"] {
     const found = employeeSkills.find(
@@ -44,6 +59,77 @@ export default async function CompetenceMatrixPage() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
         Competence Matrix
       </h1>
+
+      <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-4">
+        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Filters
+        </h2>
+        <form method="GET" className="flex flex-wrap items-end gap-4">
+          <div>
+            <label
+              htmlFor="line-filter"
+              className="block text-xs text-gray-500 dark:text-gray-400 mb-1"
+            >
+              Line
+            </label>
+            <select
+              id="line-filter"
+              name="line"
+              defaultValue={selectedLine}
+              className="block w-40 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              data-testid="select-line-filter"
+            >
+              <option value="">All Lines</option>
+              {filterOptions.lines.map((line) => (
+                <option key={line} value={line}>
+                  {line}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="team-filter"
+              className="block text-xs text-gray-500 dark:text-gray-400 mb-1"
+            >
+              Team
+            </label>
+            <select
+              id="team-filter"
+              name="team"
+              defaultValue={selectedTeam}
+              className="block w-40 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              data-testid="select-team-filter"
+            >
+              <option value="">All Teams</option>
+              {filterOptions.teams.map((team) => (
+                <option key={team} value={team}>
+                  {team}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            data-testid="button-apply-filters"
+          >
+            Apply Filters
+          </button>
+
+          {(selectedLine || selectedTeam) && (
+            <a
+              href="/app/competence-matrix"
+              className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+              data-testid="link-clear-filters"
+            >
+              Clear Filters
+            </a>
+          )}
+        </form>
+      </div>
 
       <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-4">
         <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -91,39 +177,51 @@ export default async function CompetenceMatrixPage() {
               </tr>
             </thead>
             <tbody>
-              {employees.map((employee, index) => (
-                <tr
-                  key={employee.id}
-                  className={
-                    index < employees.length - 1
-                      ? "border-b border-gray-200 dark:border-gray-700"
-                      : ""
-                  }
-                  data-testid={`row-employee-${employee.id}`}
-                >
-                  <td className="p-3">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">
-                      {employee.name}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {employee.role} - {employee.team}
-                    </div>
+              {employees.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={skills.length + 1}
+                    className="p-6 text-center text-gray-500 dark:text-gray-400"
+                    data-testid="no-results-message"
+                  >
+                    No employees match the selected filters.
                   </td>
-                  {skills.map((skill) => {
-                    const level = getSkillLevel(employee.id, skill.id);
-                    return (
-                      <td key={skill.id} className="p-3 text-center">
-                        <div
-                          className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-medium text-gray-900 dark:text-white ${getLevelColor(level)}`}
-                          data-testid={`cell-${employee.id}-${skill.id}`}
-                        >
-                          {level}
-                        </div>
-                      </td>
-                    );
-                  })}
                 </tr>
-              ))}
+              ) : (
+                employees.map((employee, index) => (
+                  <tr
+                    key={employee.id}
+                    className={
+                      index < employees.length - 1
+                        ? "border-b border-gray-200 dark:border-gray-700"
+                        : ""
+                    }
+                    data-testid={`row-employee-${employee.id}`}
+                  >
+                    <td className="p-3">
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {employee.name}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {employee.role} - {employee.team}
+                      </div>
+                    </td>
+                    {skills.map((skill) => {
+                      const level = getSkillLevel(employee.id, skill.id);
+                      return (
+                        <td key={skill.id} className="p-3 text-center">
+                          <div
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-medium text-gray-900 dark:text-white ${getLevelColor(level)}`}
+                            data-testid={`cell-${employee.id}-${skill.id}`}
+                          >
+                            {level}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

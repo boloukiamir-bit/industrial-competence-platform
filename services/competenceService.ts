@@ -111,13 +111,43 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
   }
 }
 
-export async function getEmployeesWithSkills(): Promise<{
+export async function getFilterOptions(): Promise<{
+  lines: string[];
+  teams: string[];
+}> {
+  const { data, error } = await supabase
+    .from("employees")
+    .select("line, team");
+
+  if (error) {
+    throw new Error(`Failed to fetch filter options: ${error.message}`);
+  }
+
+  const lines = [...new Set((data || []).map((row) => row.line).filter(Boolean))].sort();
+  const teams = [...new Set((data || []).map((row) => row.team).filter(Boolean))].sort();
+
+  return { lines, teams };
+}
+
+export async function getEmployeesWithSkills(filters?: {
+  line?: string;
+  team?: string;
+}): Promise<{
   employees: Employee[];
   skills: Skill[];
   employeeSkills: EmployeeSkill[];
 }> {
+  let employeesQuery = supabase.from("employees").select("*");
+  
+  if (filters?.line) {
+    employeesQuery = employeesQuery.eq("line", filters.line);
+  }
+  if (filters?.team) {
+    employeesQuery = employeesQuery.eq("team", filters.team);
+  }
+
   const [employeesResult, skillsResult, employeeSkillsResult] = await Promise.all([
-    supabase.from("employees").select("*"),
+    employeesQuery,
     supabase.from("skills").select("*"),
     supabase.from("employee_skills").select("*"),
   ]);
