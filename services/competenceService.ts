@@ -291,3 +291,21 @@ export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
 
   return gaps;
 }
+
+interface RawGap {
+  line_name: string;
+  role_name: string;
+  skill_name: string;
+  missing: number;
+}
+
+export function getCriticalGaps(gaps: RawGap[]) {
+  return gaps
+    .filter(g => g.missing > 0)
+    .map(g => ({
+      line: g.line_name,
+      role: g.role_name,
+      skill: g.skill_name,
+      missingCount: g.missing,
+    }));
+}
