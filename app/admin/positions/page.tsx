@@ -112,7 +112,7 @@ export default function PositionsAdminPage() {
         <span>Positions</span>
       </nav>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+      <div className="admin-grid" style={{ gridTemplateColumns: "2fr 1fr" }}>
         <div className="hr-card" data-testid="panel-positions">
           <div className="hr-section__title" style={{ padding: "12px 16px", borderBottom: "1px solid var(--hr-border)" }}>
             Positions

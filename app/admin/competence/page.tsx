@@ -200,7 +200,7 @@ export default function CompetenceAdminPage() {
         <span>Competence Admin</span>
       </nav>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16 }}>
+      <div className="admin-grid">
         <div className="hr-card" data-testid="panel-groups">
           <div className="hr-section__title" style={{ padding: "12px 16px", borderBottom: "1px solid var(--hr-border)" }}>
             Groups
