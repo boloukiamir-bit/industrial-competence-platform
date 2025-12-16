@@ -38,6 +38,9 @@ Enterprise-grade competency management platform for industrial organizations. Bu
 │       ├── one-to-ones/[id]/  # 1:1 meeting detail (/app/one-to-ones/:id)
 │       ├── org/overview/   # Organization chart (/app/org/overview)
 │       ├── hr/analytics/   # HR analytics dashboard (/app/hr/analytics)
+│       ├── hr/workflows/   # HR workflows management (/app/hr/workflows)
+│       ├── hr/workflows/[id]/  # Workflow detail page
+│       ├── hr/tasks/       # HR tasks dashboard (/app/hr/tasks)
 │       ├── pricing/        # Pricing page (/app/pricing)
 │       └── settings/       # Settings (/app/settings)
 ├── components/
@@ -66,7 +69,9 @@ Enterprise-grade competency management platform for industrial organizations. Bu
 │   ├── oneToOne.ts         # 1:1 meeting management
 │   ├── notifications.ts    # Email outbox and event notifications
 │   ├── org.ts              # Organization structure and hierarchy
-│   └── analytics.ts        # HR analytics and metrics
+│   ├── analytics.ts        # HR analytics and metrics
+│   ├── hrWorkflows.ts      # HR workflow templates and instances
+│   └── hrTasks.ts          # HR tasks bucketing (overdue, today, upcoming)
 ├── lib/
 │   ├── auth.ts             # RBAC helpers and user management
 ├── public/                 # Static assets

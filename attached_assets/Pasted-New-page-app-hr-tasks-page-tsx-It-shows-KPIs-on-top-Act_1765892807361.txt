@@ -1,0 +1,573 @@
+New page: /app/hr/tasks/page.tsx
+
+It shows:
+
+KPIs on top:
+
+Active tasks total
+
+Overdue steps
+
+Due today
+
+Next 7 days
+
+3 sections:
+
+Overdue
+
+Due today
+
+Upcoming (7 days)
+
+Each row:
+
+Step name
+
+Employee name
+
+Workflow name
+
+Due date
+
+Status
+
+Click → goes to workflow detail page
+
+2. New service: services/hrTasks.ts
+
+Create this file (adjust table/column names if your schema differs slightly).
+
+// services/hrTasks.ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export type HrTask = {
+  id: string;
+  stepTitle: string;
+  status: string;
+  dueDate: string | null;
+  workflowInstanceId: string;
+  workflowName: string;
+  workflowCategory: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+};
+
+export type HrTaskBuckets = {
+  overdue: HrTask[];
+  today: HrTask[];
+  upcoming: HrTask[];
+};
+
+type StepRow = {
+  id: string;
+  instance_id: string;
+  title: string;
+  status: string;
+  due_date: string | null;
+};
+
+type InstanceRow = {
+  id: string;
+  template_id: string;
+  employee_id: string | null;
+  status: string;
+  start_date: string;
+  due_date: string | null;
+};
+
+type TemplateRow = {
+  id: string;
+  name: string;
+  category: string | null;
+};
+
+type EmployeeRow = {
+  id: string;
+  full_name?: string | null;
+  name?: string | null;
+  employee_number?: string | null;
+  email?: string | null;
+};
+
+export async function getHrTaskBuckets(): Promise<HrTaskBuckets> {
+  // 1) Fetch active steps with a due date
+  const { data: stepRows, error: stepError } = await supabase
+    .from('hr_workflow_instance_steps')
+    .select('id, instance_id, title, status, due_date')
+    .in('status', ['not_started', 'in_progress'])
+    .not('due_date', 'is', null)
+    .order('due_date', { ascending: true });
+
+  if (stepError) {
+    console.error(stepError);
+    throw stepError;
+  }
+
+  const steps = (stepRows ?? []) as StepRow[];
+
+  if (steps.length === 0) {
+    return {
+      overdue: [],
+      today: [],
+      upcoming: [],
+    };
+  }
+
+  // 2) Load related instances
+  const instanceIds = Array.from(new Set(steps.map((s) => s.instance_id)));
+  const { data: instanceRows, error: instanceError } = await supabase
+    .from('hr_workflow_instances')
+    .select('id, template_id, employee_id, status, start_date, due_date')
+    .in('id', instanceIds);
+
+  if (instanceError) {
+    console.error(instanceError);
+    throw instanceError;
+  }
+
+  const instances = (instanceRows ?? []) as InstanceRow[];
+
+  // 3) Load templates
+  const templateIds = Array.from(
+    new Set(instances.map((i) => i.template_id))
+  );
+  const { data: templateRows, error: templateError } = await supabase
+    .from('hr_workflow_templates')
+    .select('id, name, category')
+    .in('id', templateIds);
+
+  if (templateError) {
+    console.error(templateError);
+    throw templateError;
+  }
+
+  const templates = (templateRows ?? []) as TemplateRow[];
+
+  // 4) Load employees (optional – adapt to your schema)
+  const employeeIds = Array.from(
+    new Set(instances.map((i) => i.employee_id).filter(Boolean)) as string[]
+  );
+
+  let employees: EmployeeRow[] = [];
+  if (employeeIds.length > 0) {
+    const { data: employeeRows, error: employeeError } = await supabase
+      .from('employees')
+      .select('id, full_name, name, employee_number, email')
+      .in('id', employeeIds);
+
+    if (employeeError) {
+      console.error(employeeError);
+      // we don't throw – we can still show tasks without names
+    } else {
+      employees = (employeeRows ?? []) as EmployeeRow[];
+    }
+  }
+
+  const instanceById = new Map(instances.map((i) => [i.id, i]));
+  const templateById = new Map(templates.map((t) => [t.id, t]));
+  const employeeById = new Map(employees.map((e) => [e.id, e]));
+
+  const tasks: HrTask[] = steps.map((step) => {
+    const instance = instanceById.get(step.instance_id);
+    const template = instance
+      ? templateById.get(instance.template_id)
+      : undefined;
+    const employee =
+      instance && instance.employee_id
+        ? employeeById.get(instance.employee_id)
+        : undefined;
+
+    const employeeName =
+      employee?.full_name ??
+      employee?.name ??
+      employee?.employee_number ??
+      employee?.email ??
+      null;
+
+    return {
+      id: step.id,
+      stepTitle: step.title,
+      status: step.status,
+      dueDate: step.due_date,
+      workflowInstanceId: step.instance_id,
+      workflowName: template?.name ?? 'Workflow',
+      workflowCategory: template?.category ?? null,
+      employeeId: instance?.employee_id ?? null,
+      employeeName,
+    };
+  });
+
+  // 5) Bucket by due date
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const todayDate = new Date(`${todayStr}T00:00:00`);
+  const sevenDaysAhead = new Date(todayDate);
+  sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
+
+  const overdue: HrTask[] = [];
+  const todayBucket: HrTask[] = [];
+  const upcoming: HrTask[] = [];
+
+  function normalize(d: string) {
+    return new Date(`${d}T00:00:00`);
+  }
+
+  for (const task of tasks) {
+    if (!task.dueDate) continue;
+    const due = normalize(task.dueDate);
+
+    if (due < todayDate) {
+      overdue.push(task);
+    } else if (due.getTime() === todayDate.getTime()) {
+      todayBucket.push(task);
+    } else if (due > todayDate && due <= sevenDaysAhead) {
+      upcoming.push(task);
+    }
+  }
+
+  return {
+    overdue,
+    today: todayBucket,
+    upcoming,
+  };
+}
+
+3. New page: /app/hr/tasks/page.tsx
+
+Create folder app/hr/tasks/ and add page.tsx:
+
+// app/hr/tasks/page.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import {
+  getHrTaskBuckets,
+  HrTaskBuckets,
+  HrTask,
+} from '@/services/hrTasks';
+
+export default function HrTasksPage() {
+  const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getHrTaskBuckets();
+        setBuckets(data);
+      } catch (err) {
+        console.error(err);
+        setError('Could not load HR tasks.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const totalTasks =
+    (buckets?.overdue.length ?? 0) +
+    (buckets?.today.length ?? 0) +
+    (buckets?.upcoming.length ?? 0);
+
+  return (
+    <main className="hr-page">
+      <header className="hr-page__header">
+        <div>
+          <h1 className="hr-page__title">HR Tasks</h1>
+          <p className="hr-page__subtitle">
+            All open workflow steps, sorted by urgency – overdue, today and the coming week.
+          </p>
+        </div>
+      </header>
+
+      {loading && <p>Loading tasks…</p>}
+      {error && <p className="hr-error">{error}</p>}
+
+      {!loading && !error && buckets && (
+        <>
+          <section className="hr-kpi-grid">
+            <div className="hr-kpi">
+              <div className="hr-kpi__label">Active tasks</div>
+              <div className="hr-kpi__value">{totalTasks}</div>
+            </div>
+            <div className="hr-kpi">
+              <div className="hr-kpi__label">Overdue</div>
+              <div className="hr-kpi__value hr-kpi__value--danger">
+                {buckets.overdue.length}
+              </div>
+            </div>
+            <div className="hr-kpi">
+              <div className="hr-kpi__label">Due today</div>
+              <div className="hr-kpi__value hr-kpi__value--warn">
+                {buckets.today.length}
+              </div>
+            </div>
+            <div className="hr-kpi">
+              <div className="hr-kpi__label">Next 7 days</div>
+              <div className="hr-kpi__value hr-kpi__value--ok">
+                {buckets.upcoming.length}
+              </div>
+            </div>
+          </section>
+
+          <TaskSection
+            title="Overdue"
+            description="Tasks that should already have been completed."
+            tasks={buckets.overdue}
+            badgeClass="hr-pill--danger"
+          />
+
+          <TaskSection
+            title="Due today"
+            description="Tasks that must be handled today."
+            tasks={buckets.today}
+            badgeClass="hr-pill--warn"
+          />
+
+          <TaskSection
+            title="Coming 7 days"
+            description="Tasks with deadlines within the next week."
+            tasks={buckets.upcoming}
+            badgeClass="hr-pill--ok"
+          />
+        </>
+      )}
+    </main>
+  );
+}
+
+type TaskSectionProps = {
+  title: string;
+  description: string;
+  tasks: HrTask[];
+  badgeClass: string;
+};
+
+function TaskSection({ title, description, tasks, badgeClass }: TaskSectionProps) {
+  return (
+    <section className="hr-task-section">
+      <header className="hr-task-section__header">
+        <div>
+          <h2 className="hr-section__title">{title}</h2>
+          <p className="hr-task-section__description">{description}</p>
+        </div>
+        <span className={`hr-pill ${badgeClass}`}>{tasks.length}</span>
+      </header>
+
+      {tasks.length === 0 ? (
+        <p className="hr-task-empty">No tasks in this bucket.</p>
+      ) : (
+        <div className="hr-task-list">
+          {tasks.map((task) => (
+            <TaskRow key={task.id} task={task} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TaskRow({ task }: { task: HrTask }) {
+  const dueLabel = task.dueDate
+    ? new Date(task.dueDate).toLocaleDateString()
+    : 'No due date';
+
+  // We assume your instance detail page is /hr/workflows/[id]
+  const href = `/hr/workflows/${task.workflowInstanceId}`;
+
+  const statusLabel =
+    task.status === 'not_started'
+      ? 'Not started'
+      : task.status === 'in_progress'
+      ? 'In progress'
+      : task.status === 'done'
+      ? 'Done'
+      : task.status;
+
+  return (
+    <Link href={href} className="hr-task-row">
+      <div className="hr-task-row__main">
+        <h3 className="hr-task-row__title">{task.stepTitle}</h3>
+        <p className="hr-task-row__subtitle">
+          {task.employeeName ?? 'Unknown employee'} • {task.workflowName}
+        </p>
+      </div>
+      <div className="hr-task-row__meta">
+        <span className="hr-task-row__date">{dueLabel}</span>
+        <span className="hr-task-row__status">{statusLabel}</span>
+      </div>
+    </Link>
+  );
+}
+
+
+If your instance detail path is different, just change href in TaskRow.
+
+4. Add CSS to app/globals.css
+
+Append this to your existing Apple-style HR CSS.
+
+/* HR Tasks dashboard */
+
+.hr-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.hr-kpi {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: radial-gradient(circle at top left, #020617, #111827);
+  border: 1px solid rgba(55, 65, 81, 0.9);
+}
+
+.hr-kpi__label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.hr-kpi__value {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.hr-kpi__value--danger {
+  color: #fca5a5;
+}
+
+.hr-kpi__value--warn {
+  color: #fde68a;
+}
+
+.hr-kpi__value--ok {
+  color: #6ee7b7;
+}
+
+.hr-task-section {
+  margin-top: 24px;
+}
+
+.hr-task-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.hr-task-section__description {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+/* Generic pill for counters */
+.hr-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+}
+
+.hr-pill--danger {
+  background: rgba(127, 29, 29, 0.7);
+  border-color: rgba(248, 113, 113, 0.9);
+  color: #fee2e2;
+}
+
+.hr-pill--warn {
+  background: rgba(120, 53, 15, 0.7);
+  border-color: rgba(253, 224, 71, 0.9);
+  color: #fef9c3;
+}
+
+.hr-pill--ok {
+  background: rgba(6, 78, 59, 0.7);
+  border-color: rgba(52, 211, 153, 0.9);
+  color: #a7f3d0;
+}
+
+.hr-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hr-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.12s ease-out;
+}
+
+.hr-task-row:hover {
+  border-color: rgba(129, 140, 248, 0.95);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.9);
+  transform: translateY(-1px);
+}
+
+.hr-task-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hr-task-row__title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.hr-task-row__subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.hr-task-row__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.hr-task-row__status {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+.hr-task-row__date {
+  font-size: 0.8rem;
+}
+
+.hr-task-empty {
+  font-size: 0.85rem;
+  color: #6b7280;
+  padding: 8px 2px;
+}
