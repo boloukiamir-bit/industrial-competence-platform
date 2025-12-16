@@ -1859,11 +1859,6 @@ body {
   padding-bottom: .5rem;
 }
 
-.py-2\.5 {
-  padding-top: .625rem;
-  padding-bottom: .625rem;
-}
-
 .py-20 {
   padding-top: 5rem;
   padding-bottom: 5rem;
@@ -2697,6 +2692,44 @@ body {
   font-size: .9rem;
 }
 
+.hr-form-field {
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  display: flex;
+}
+
+.hr-form-label {
+  color: #9ca3af;
+  font-size: .8rem;
+}
+
+.hr-input {
+  color: #e5e7eb;
+  background: #0f172af2;
+  border: 1px solid #374151e6;
+  border-radius: 999px;
+  outline: none;
+  padding: 8px 12px;
+  font-size: .85rem;
+}
+
+.hr-input:focus {
+  border-color: #818cf8f2;
+  box-shadow: 0 0 0 1px #818cf899;
+}
+
+.hr-topuser {
+  align-items: center;
+  gap: 12px;
+  display: flex;
+}
+
+.hr-topuser__email {
+  color: hsl(var(--muted-foreground));
+  font-size: .85rem;
+}
+
 .lp {
   max-width: 1120px;
   min-height: 100vh;
@@ -3491,11 +3524,6 @@ body {
 .hover\:file\:bg-gray-200::file-selector-button:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(229 231 235 / var(--tw-bg-opacity, 1));
-}
-
-.focus\:border-blue-500:focus {
-  --tw-border-opacity: 1;
-  border-color: rgb(59 130 246 / var(--tw-border-opacity, 1));
 }
 
 .focus\:bg-accent:focus {
