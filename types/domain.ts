@@ -323,3 +323,60 @@ export type HRAnalytics = {
   riskIndexByUnit: { unitName: string; headcount: number; overdueCount: number; dueSoonCount: number; riskIndex: number }[];
   absencesAvailable: boolean;
 };
+
+export type HRWorkflowTemplateId = 
+  | 'sick_leave' 
+  | 'rehab' 
+  | 'parental_leave' 
+  | 'reboarding' 
+  | 'onboarding' 
+  | 'offboarding';
+
+export type HRWorkflowStatus = 'active' | 'completed' | 'cancelled';
+
+export type HRWorkflowStep = {
+  id: string;
+  title: string;
+  description?: string;
+  daysFromStart: number;
+  responsibleRole: 'hr' | 'manager' | 'employee';
+  isCompleted: boolean;
+  completedAt?: string;
+  completedBy?: string;
+  notes?: string;
+};
+
+export type HRWorkflowTemplate = {
+  id: HRWorkflowTemplateId;
+  name: string;
+  description: string;
+  category: 'leave' | 'lifecycle' | 'health';
+  defaultSteps: Omit<HRWorkflowStep, 'id' | 'isCompleted' | 'completedAt' | 'completedBy' | 'notes'>[];
+};
+
+export type HRWorkflowInstance = {
+  id: string;
+  templateId: HRWorkflowTemplateId;
+  templateName: string;
+  employeeId: string;
+  employeeName?: string;
+  startedAt: string;
+  dueDate?: string;
+  status: HRWorkflowStatus;
+  steps: HRWorkflowStep[];
+  createdBy?: string;
+  completedAt?: string;
+  notes?: string;
+};
+
+export type HRAnalyticsV2 = HRAnalytics & {
+  attritionRisk: { 
+    highrisk: number; 
+    mediumRisk: number; 
+    employees: { id: string; name: string; riskLevel: 'high' | 'medium'; factors: string[] }[];
+  };
+  tenureBands: { band: string; count: number }[];
+  avgTenureYears: number;
+  openWorkflowsByTemplate: { templateId: string; templateName: string; count: number }[];
+  skillGapSummary: { criticalGaps: number; trainingNeeded: number; wellStaffed: number };
+};
