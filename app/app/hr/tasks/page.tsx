@@ -6,8 +6,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getHrTaskBuckets, HrTaskBuckets, HrTask } from "@/services/hrTasks";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 export default function HrTasksPage() {
+  const { loading: authLoading } = useAuthGuard();
+
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+
+  return <HrTasksContent />;
+}
+
+function HrTasksContent() {
   const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -5,6 +5,7 @@ import { getPositionCoverageForDate, PositionCoverageSummary } from "@/services/
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 function getTomorrowDateString(): string {
   const today = new Date();
@@ -86,6 +87,20 @@ function PositionCoverageCard({ position }: { position: PositionCoverageSummary 
 }
 
 export default function TomorrowsGapsPage() {
+  const { loading: authLoading } = useAuthGuard();
+
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+
+  return <TomorrowsGapsContent />;
+}
+
+function TomorrowsGapsContent() {
   const [positions, setPositions] = useState<PositionCoverageSummary[]>([]);
   const [effectiveDate, setEffectiveDate] = useState<string>("");
   const [loading, setLoading] = useState(true);

@@ -18,8 +18,23 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { WORKFLOW_TEMPLATES } from "@/services/hrWorkflows";
 import type { HRWorkflowInstance, HRWorkflowStatus, HRWorkflowStep } from "@/types/domain";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 export default function WorkflowDetailPage() {
+  const { loading: authLoading } = useAuthGuard();
+
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+
+  return <WorkflowDetailContent />;
+}
+
+function WorkflowDetailContent() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;

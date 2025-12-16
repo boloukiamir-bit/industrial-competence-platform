@@ -8,8 +8,27 @@ import {
   EmployeeCompetenceProfile,
   EmployeeCompetenceItem,
 } from "@/services/competence";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 export default function EmployeeCompetencePage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const { loading: authLoading } = useAuthGuard();
+
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+
+  return <EmployeeCompetenceContent params={params} />;
+}
+
+function EmployeeCompetenceContent({
   params,
 }: {
   params: { id: string };

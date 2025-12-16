@@ -16,8 +16,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 export default function CompetenceMatrixPage() {
+  const { loading: authLoading } = useAuthGuard();
+
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+
+  return <CompetenceMatrixContent />;
+}
+
+function CompetenceMatrixContent() {
   const [positions, setPositions] = useState<PositionSummary[]>([]);
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const [columns, setColumns] = useState<MatrixColumn[]>([]);

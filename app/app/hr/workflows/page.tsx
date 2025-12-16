@@ -48,8 +48,23 @@ import type {
   HRWorkflowStatus,
   HRWorkflowTemplateId 
 } from "@/types/domain";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 export default function HRWorkflowsPage() {
+  const { loading: authLoading } = useAuthGuard();
+
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+  
+  return <HRWorkflowsPageContent />;
+}
+
+function HRWorkflowsPageContent() {
   const [templates] = useState<HRWorkflowTemplate[]>(getWorkflowTemplates());
   const [instances, setInstances] = useState<HRWorkflowInstance[]>([]);
   const [loading, setLoading] = useState(true);
