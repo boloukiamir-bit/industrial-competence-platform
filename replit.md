@@ -236,3 +236,14 @@ npm run start  # Start production server
 - **Services**: New `getTomorrowsGaps()` function in services/gaps.ts with graceful fallback
 - **Types**: PositionGapSummary, TomorrowsGapsOverview, PositionGapRisk
 - **Styling**: Added .hr-risk-pill--critical CSS class for critical risk badges
+
+### Competence Service Enhancements (services/competence.ts)
+- **getEmployeeCompetenceProfile(employeeId, effectiveDate?)**: Now date-aware with optional effectiveDate parameter
+  - Uses effectiveDate for expiry checking instead of hardcoded "today"
+  - All existing call sites work without changes (defaults to today)
+- **getPositionCoverageForDate(effectiveDate)**: New function for date-specific coverage analysis
+  - Returns PositionCoverageSummary[] for positions with min_headcount > 0
+  - Calculates availableCount (fully competent employees at given date)
+  - Risk levels: HIGH (gap>0, no available), MEDIUM (gap>0, some available), LOW (no gap)
+  - Sorted by risk level (HIGH first) then position name
+- **PositionCoverageSummary type**: positionId, positionName, site, department, minHeadcount, availableCount, gap, riskLevel

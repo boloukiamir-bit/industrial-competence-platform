@@ -128,7 +128,12 @@ type GroupRow = {
 
 export async function getEmployeeCompetenceProfile(
   employeeId: string,
+  effectiveDate?: string
 ): Promise<EmployeeCompetenceProfile> {
+  // Use provided date or default to today
+  const effectiveDateStr =
+    effectiveDate ?? new Date().toISOString().slice(0, 10);
+
   // 1) Employee
   const { data: employeeRow, error: empError } = await supabase
     .from("employees")
@@ -245,13 +250,9 @@ export async function getEmployeeCompetenceProfile(
     });
   }
 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-
   function isExpired(validTo: string | null): boolean {
     if (!validTo) return false;
-    // date-only compare
-    return validTo < todayStr;
+    return validTo < effectiveDateStr;
   }
 
   const items: EmployeeCompetenceItem[] = [];
@@ -373,4 +374,105 @@ export async function getEmployeeCompetenceProfile(
     },
     items,
   };
+}
+
+export type PositionCoverageSummary = {
+  positionId: string;
+  positionName: string;
+  site: string | null;
+  department: string | null;
+  minHeadcount: number;
+  availableCount: number;
+  gap: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
+export async function getPositionCoverageForDate(
+  effectiveDate: string
+): Promise<PositionCoverageSummary[]> {
+  const { data: posData, error: posError } = await supabase
+    .from('positions')
+    .select('id, name, site, department, min_headcount')
+    .gt('min_headcount', 0);
+
+  if (posError) throw posError;
+
+  const positions = (posData ?? []).map((p: any) => ({
+    id: p.id as string,
+    name: p.name as string,
+    site: (p.site ?? null) as string | null,
+    department: (p.department ?? null) as string | null,
+    minHeadcount: p.min_headcount as number,
+  }));
+
+  const results: PositionCoverageSummary[] = [];
+
+  for (const pos of positions) {
+    const employees = await getEmployeesForPosition(pos.id);
+
+    if (employees.length === 0) {
+      results.push({
+        positionId: pos.id,
+        positionName: pos.name,
+        site: pos.site,
+        department: pos.department,
+        minHeadcount: pos.minHeadcount,
+        availableCount: 0,
+        gap: pos.minHeadcount,
+        riskLevel: 'HIGH',
+      });
+      continue;
+    }
+
+    let availableCount = 0;
+
+    for (const emp of employees) {
+      const profile = await getEmployeeCompetenceProfile(
+        emp.id,
+        effectiveDate
+      );
+
+      const isFullyCompetent = profile.summary.gapCount === 0;
+
+      if (isFullyCompetent) {
+        availableCount += 1;
+      }
+    }
+
+    const gap = Math.max(0, pos.minHeadcount - availableCount);
+
+    let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+    if (gap > 0 && availableCount === 0) {
+      riskLevel = 'HIGH';
+    } else if (gap > 0) {
+      riskLevel = 'MEDIUM';
+    } else {
+      riskLevel = 'LOW';
+    }
+
+    results.push({
+      positionId: pos.id,
+      positionName: pos.name,
+      site: pos.site,
+      department: pos.department,
+      minHeadcount: pos.minHeadcount,
+      availableCount,
+      gap,
+      riskLevel,
+    });
+  }
+
+  const riskRank: Record<'LOW' | 'MEDIUM' | 'HIGH', number> = {
+    HIGH: 0,
+    MEDIUM: 1,
+    LOW: 2,
+  };
+
+  results.sort((a, b) => {
+    const rDiff = riskRank[a.riskLevel] - riskRank[b.riskLevel];
+    if (rDiff !== 0) return rDiff;
+    return a.positionName.localeCompare(b.positionName);
+  });
+
+  return results;
 }
