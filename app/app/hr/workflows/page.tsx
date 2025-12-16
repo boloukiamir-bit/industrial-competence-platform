@@ -29,7 +29,8 @@ import {
   XCircle, 
   ChevronRight,
   User,
-  Calendar
+  Calendar,
+  AlertTriangle
 } from "lucide-react";
 import { 
   getWorkflowTemplates, 
@@ -40,6 +41,7 @@ import {
   getWorkflowById
 } from "@/services/hrWorkflows";
 import { supabase } from "@/lib/supabaseClient";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import type { 
   HRWorkflowTemplate, 
   HRWorkflowInstance, 
@@ -51,6 +53,7 @@ export default function HRWorkflowsPage() {
   const [templates] = useState<HRWorkflowTemplate[]>(getWorkflowTemplates());
   const [instances, setInstances] = useState<HRWorkflowInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(true);
   const [statusFilter, setStatusFilter] = useState<HRWorkflowStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [showStartDialog, setShowStartDialog] = useState(false);
@@ -68,17 +71,27 @@ export default function HRWorkflowsPage() {
     }
     const data = await getWorkflowInstances(filters);
     setInstances(data);
-    setLoading(false);
   }, [statusFilter]);
 
   useEffect(() => {
-    loadInstances();
-    supabase
-      .from("employees")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("name")
-      .then(({ data }) => setEmployees(data || []));
+    async function checkAuthAndLoad() {
+      const user = await getCurrentUser();
+      if (!user || user.role !== "HR_ADMIN") {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
+      
+      await loadInstances();
+      const { data } = await supabase
+        .from("employees")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name");
+      setEmployees(data || []);
+      setLoading(false);
+    }
+    checkAuthAndLoad();
   }, [loadInstances]);
 
   const filteredInstances = instances.filter((i) => {
@@ -132,6 +145,33 @@ export default function HRWorkflowsPage() {
         return <Badge variant="outline"><XCircle className="h-3 w-3 mr-1" /> Cancelled</Badge>;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+          <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!authorized) {
+    return (
+      <div className="p-8">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h2>
+            <p className="text-gray-500 dark:text-gray-400">
+              This page is only accessible to HR Administrators.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8" data-testid="hr-workflows-page">

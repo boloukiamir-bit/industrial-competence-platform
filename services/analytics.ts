@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
-import type { HRAnalytics } from "@/types/domain";
+import type { HRAnalytics, HRAnalyticsV2 } from "@/types/domain";
 
 export async function getHRAnalytics(): Promise<HRAnalytics> {
   const today = new Date().toISOString().split("T")[0];
@@ -222,5 +222,115 @@ export async function getAbsenceSummary(fromDate: string, toDate: string): Promi
   return {
     totalAbsences: data?.length || 0,
     byType: Object.entries(typeCounts).map(([type, count]) => ({ type, count })),
+  };
+}
+
+export async function getHRAnalyticsV2(): Promise<HRAnalyticsV2> {
+  const baseAnalytics = await getHRAnalytics();
+  const today = new Date();
+
+  const [employeesRes, workflowsRes, gapsRes] = await Promise.all([
+    supabase.from("employees").select("id, name, start_date, employment_type, contract_end_date").eq("is_active", true),
+    supabase.from("hr_workflow_instances").select("template_id, template_name", { count: "exact" }).eq("status", "active"),
+    supabase.from("competence_requirements")
+      .select("line, skill_id, min_level, min_headcount, skills(name)")
+  ]);
+
+  const employees = employeesRes.data || [];
+  const tenureBands: Record<string, number> = { "0-1 years": 0, "1-3 years": 0, "3-5 years": 0, "5-10 years": 0, "10+ years": 0 };
+  let totalTenure = 0;
+  let attritionHighRisk = 0;
+  let attritionMediumRisk = 0;
+  const attritionEmployees: { id: string; name: string; riskLevel: 'high' | 'medium'; factors: string[] }[] = [];
+
+  for (const emp of employees) {
+    const factors: string[] = [];
+    let riskScore = 0;
+
+    if (emp.start_date) {
+      const startDate = new Date(emp.start_date);
+      const yearsEmployed = (today.getTime() - startDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      totalTenure += yearsEmployed;
+
+      if (yearsEmployed < 1) {
+        tenureBands["0-1 years"]++;
+        riskScore += 1;
+        if (yearsEmployed < 0.5) {
+          factors.push("New employee (<6 months)");
+          riskScore += 1;
+        }
+      } else if (yearsEmployed < 3) {
+        tenureBands["1-3 years"]++;
+      } else if (yearsEmployed < 5) {
+        tenureBands["3-5 years"]++;
+      } else if (yearsEmployed < 10) {
+        tenureBands["5-10 years"]++;
+      } else {
+        tenureBands["10+ years"]++;
+      }
+    } else {
+      tenureBands["0-1 years"]++;
+    }
+
+    if (emp.employment_type === "temporary") {
+      riskScore += 1;
+      factors.push("Temporary contract");
+      
+      if (emp.contract_end_date) {
+        const endDate = new Date(emp.contract_end_date);
+        const daysUntilEnd = (endDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000);
+        if (daysUntilEnd < 30) {
+          riskScore += 2;
+          factors.push("Contract ending within 30 days");
+        } else if (daysUntilEnd < 90) {
+          riskScore += 1;
+          factors.push("Contract ending within 90 days");
+        }
+      }
+    }
+
+    if (riskScore >= 3) {
+      attritionHighRisk++;
+      attritionEmployees.push({ id: emp.id, name: emp.name, riskLevel: 'high', factors });
+    } else if (riskScore >= 2) {
+      attritionMediumRisk++;
+      attritionEmployees.push({ id: emp.id, name: emp.name, riskLevel: 'medium', factors });
+    }
+  }
+
+  const avgTenureYears = employees.length > 0 ? Math.round((totalTenure / employees.length) * 10) / 10 : 0;
+
+  const workflowTemplateCount: Record<string, { name: string; count: number }> = {};
+  for (const row of workflowsRes.data || []) {
+    const templateId = row.template_id as string;
+    if (!workflowTemplateCount[templateId]) {
+      workflowTemplateCount[templateId] = { name: row.template_name as string, count: 0 };
+    }
+    workflowTemplateCount[templateId].count++;
+  }
+  const openWorkflowsByTemplate = Object.entries(workflowTemplateCount).map(([templateId, data]) => ({
+    templateId,
+    templateName: data.name,
+    count: data.count,
+  }));
+
+  let criticalGaps = 0;
+  let trainingNeeded = 0;
+  const wellStaffed = 0;
+
+  criticalGaps = baseAnalytics.criticalEventsByStatus.overdue;
+  trainingNeeded = baseAnalytics.criticalEventsByStatus.dueSoon;
+
+  return {
+    ...baseAnalytics,
+    attritionRisk: {
+      highrisk: attritionHighRisk,
+      mediumRisk: attritionMediumRisk,
+      employees: attritionEmployees.slice(0, 10),
+    },
+    tenureBands: Object.entries(tenureBands).map(([band, count]) => ({ band, count })),
+    avgTenureYears,
+    openWorkflowsByTemplate,
+    skillGapSummary: { criticalGaps, trainingNeeded, wellStaffed },
   };
 }

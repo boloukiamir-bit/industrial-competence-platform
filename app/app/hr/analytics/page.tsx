@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Users, AlertTriangle, Calendar, TrendingUp, Activity, BarChart3, Clock, Shield } from "lucide-react";
-import { getHRAnalytics } from "@/services/analytics";
+import { Users, AlertTriangle, Calendar, TrendingUp, Activity, BarChart3, Clock, Shield, UserMinus, Workflow } from "lucide-react";
+import { getHRAnalyticsV2 } from "@/services/analytics";
 import { getCurrentUser } from "@/lib/auth";
-import type { HRAnalytics } from "@/types/domain";
+import type { HRAnalyticsV2 } from "@/types/domain";
 
 function MetricCard({
   title,
@@ -51,7 +51,7 @@ function getRiskColor(riskIndex: number): "destructive" | "default" | "secondary
 }
 
 export default function HRAnalyticsPage() {
-  const [analytics, setAnalytics] = useState<HRAnalytics | null>(null);
+  const [analytics, setAnalytics] = useState<HRAnalyticsV2 | null>(null);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(true);
 
@@ -59,10 +59,12 @@ export default function HRAnalyticsPage() {
     async function loadData() {
       const user = await getCurrentUser();
       if (!user || user.role !== "HR_ADMIN") {
-        setAuthorized(true);
+        setAuthorized(false);
+        setLoading(false);
+        return;
       }
 
-      const data = await getHRAnalytics();
+      const data = await getHRAnalyticsV2();
       setAnalytics(data);
       setLoading(false);
     }
@@ -346,6 +348,99 @@ export default function HRAnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserMinus className="h-5 w-5" />
+              Attrition Risk
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-6 mb-4">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400" data-testid="metric-attrition-high">
+                  {analytics.attritionRisk.highrisk}
+                </p>
+                <p className="text-sm text-muted-foreground">High Risk</p>
+              </div>
+              <div className="text-center">
+                <p className="text-3xl font-bold text-orange-600 dark:text-orange-400" data-testid="metric-attrition-medium">
+                  {analytics.attritionRisk.mediumRisk}
+                </p>
+                <p className="text-sm text-muted-foreground">Medium Risk</p>
+              </div>
+            </div>
+            {analytics.attritionRisk.employees.length > 0 && (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {analytics.attritionRisk.employees.slice(0, 5).map((emp) => (
+                  <div key={emp.id} className="flex items-center justify-between gap-2 py-1 border-b last:border-0">
+                    <span className="text-sm">{emp.name}</span>
+                    <Badge variant={emp.riskLevel === 'high' ? 'destructive' : 'default'}>
+                      {emp.factors[0]}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Tenure Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="text-center">
+                <p className="text-3xl font-bold" data-testid="metric-avg-tenure">
+                  {analytics.avgTenureYears}
+                </p>
+                <p className="text-sm text-muted-foreground">Avg. Years</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {analytics.tenureBands.map((band) => (
+                <div key={band.band} className="flex items-center justify-between gap-4">
+                  <span className="text-sm">{band.band}</span>
+                  <div className="flex items-center gap-2">
+                    <Progress
+                      value={(band.count / analytics.totalHeadcount) * 100}
+                      className="w-24 h-2"
+                    />
+                    <span className="text-sm font-medium w-8 text-right">{band.count}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {analytics.openWorkflowsByTemplate.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Workflow className="h-5 w-5" />
+              Active Workflows by Type
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+              {analytics.openWorkflowsByTemplate.map((wf) => (
+                <div key={wf.templateId} className="flex items-center gap-2">
+                  <span className="text-sm">{wf.templateName}</span>
+                  <Badge variant="secondary">{wf.count}</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {!analytics.absencesAvailable && (
         <Card>

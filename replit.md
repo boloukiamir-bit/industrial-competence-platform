@@ -199,3 +199,23 @@ npm run start  # Start production server
 - **New Services**: oneToOne.ts, notifications.ts, org.ts, analytics.ts, auth.ts (RBAC)
 - **New Types**: OneToOneMeeting, OneToOneAction, OrgUnit, HRAnalytics, User
 - **Database Expansion**: one_to_one_meetings, one_to_one_actions, org_units, absences, email_outbox, users tables
+
+### December 2024 - Role-Based Dashboards & HR Workflow Engine
+- **Role-Based Dashboards**: Different views for HR_ADMIN, MANAGER, and EMPLOYEE roles
+  - HrDashboard: Headcount, compliance risk, expiring contracts, open workflows, quick actions
+  - ManagerDashboard: Team headcount, open tasks, upcoming 1:1s, critical items
+  - EmployeeDashboard: Upcoming trainings, next meeting, open tasks, documents, competencies
+- **HR Workflow Engine**: Standardized processes for leave and lifecycle management
+  - Templates: sick_leave, rehab, parental_leave, reboarding, onboarding, offboarding
+  - Step tracking with responsible role, due dates, and completion status
+  - Workflow instances with start, complete, and cancel operations
+- **HR Analytics V2**: Enhanced insights
+  - Attrition risk scoring (based on tenure, contract type, end dates)
+  - Tenure band distribution
+  - Average tenure calculation
+  - Active workflows by template
+- **Billing Page**: HR_ADMIN only access to view plan, headcount, and estimated costs
+- **Navigation Updates**: Role-based menu visibility, removed Pricing, added Billing and HR Workflows
+- **New Services**: hrWorkflows.ts with WORKFLOW_TEMPLATES and instance management
+- **New Types**: HRWorkflowTemplate, HRWorkflowInstance, HRWorkflowStep, HRAnalyticsV2
+- **Database Expansion**: hr_workflow_instances table for workflow tracking

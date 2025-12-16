@@ -342,6 +342,27 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_employee ON users(employee_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
+-- 23. HR Workflow Instances
+CREATE TABLE IF NOT EXISTS hr_workflow_instances (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  template_id TEXT NOT NULL CHECK (template_id IN ('sick_leave', 'rehab', 'parental_leave', 'reboarding', 'onboarding', 'offboarding')),
+  template_name TEXT NOT NULL,
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  employee_name TEXT,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  due_date DATE,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
+  steps JSONB NOT NULL DEFAULT '[]',
+  created_by UUID REFERENCES users(id),
+  completed_at TIMESTAMPTZ,
+  notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hr_workflow_instances_employee ON hr_workflow_instances(employee_id);
+CREATE INDEX IF NOT EXISTS idx_hr_workflow_instances_status ON hr_workflow_instances(status);
+CREATE INDEX IF NOT EXISTS idx_hr_workflow_instances_template ON hr_workflow_instances(template_id);
+CREATE INDEX IF NOT EXISTS idx_hr_workflow_instances_started ON hr_workflow_instances(started_at DESC);
+
 -- Seed default review templates
 INSERT INTO review_templates (name, description, audience, is_active)
 VALUES 
