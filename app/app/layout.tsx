@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Grid3X3, 
@@ -13,14 +14,23 @@ import {
   Package,
   Newspaper,
   FileText,
-  DollarSign,
+  CreditCard,
   BookOpen,
   Shield,
   Building2,
-  BarChart3
+  BarChart3,
+  Workflow
 } from "lucide-react";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 
-const navItems = [
+type NavItem = {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  hrAdminOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
@@ -32,14 +42,25 @@ const navItems = [
   { name: "Handbooks", href: "/app/handbooks", icon: BookOpen },
   { name: "Documents", href: "/app/documents", icon: FileText },
   { name: "News", href: "/app/news", icon: Newspaper },
-  { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3 },
-  { name: "Import Employees", href: "/app/import-employees", icon: Upload },
-  { name: "Pricing", href: "/app/pricing", icon: DollarSign },
+  { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
+  { name: "HR Workflows", href: "/app/hr/workflows", icon: Workflow, hrAdminOnly: true },
+  { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
+  { name: "Billing", href: "/app/billing", icon: CreditCard, hrAdminOnly: true },
   { name: "Settings", href: "/app/settings", icon: Settings },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [user, setUser] = useState<CurrentUser | null>(null);
+
+  useEffect(() => {
+    getCurrentUser().then(setUser);
+  }, []);
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.hrAdminOnly && user?.role !== "HR_ADMIN") return false;
+    return true;
+  });
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -52,7 +73,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
               const Icon = item.icon;
               return (
@@ -87,7 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 dark:text-gray-300">User</span>
+            <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email || "User"}</span>
             <div
               className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600"
               data-testid="user-avatar-placeholder"

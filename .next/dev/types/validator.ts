@@ -47,6 +47,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 }
 
 
+// Validate ../../../app/app/billing/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/app/billing">> = Specific
+  const handler = {} as typeof import("../../../app/app/billing/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../app/app/competence-matrix/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/app/competence-matrix">> = Specific

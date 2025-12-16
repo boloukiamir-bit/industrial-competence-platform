@@ -1,0 +1,253 @@
+You are working in an existing Next.js + TypeScript + Supabase app called Industrial Competence Platform.
+
+Context (already working):
+- Auth + basic roles (HR / Manager / Employee or similar)
+- Employees, skills, employee_skills
+- Competence Matrix
+- Tomorrow’s Gaps + risk engine
+- person_events + email_outbox + daily notification cron
+- 1:1 meetings (one_to_one_meetings, one_to_one_actions)
+- Manager Risk dashboard
+- HR Analytics v1
+- Pricing page at /pricing (currently visible in sidebar)
+- Left sidebar navigation like: Dashboard, Employees, Organization, Competence Matrix, Tomorrow’s Gaps, Manager Risks, Safety / Certificates, Equipment, Handbooks, Documents, News, HR Analytics, Import Employees, Pricing, Settings.
+
+You MUST NOT break existing working pages.  
+You will now:
+
+1) Separate marketing pricing from in-app navigation  
+2) Create role-based home dashboards  
+3) Add an HR workflow engine for standard processes  
+4) Extend HR Analytics with simple “future-style” insights (attrition risk, early warning)  
+5) Keep the UI modern, minimal, and consistent with current design.
+
+Return COMPLETE, production-ready code only. No TODOs, no comments-only blocks.
+
+====================================================
+1. REMOVE PRICING FROM APP NAV, ADD BILLING PAGE
+====================================================
+
+Goal: Pricing is *marketing only*, not part of logged-in app nav.
+
+1. Keep the existing `/pricing` page as a public marketing page (for now).
+2. Remove the "Pricing" link from the authenticated app sidebar.
+   - Wherever you define the sidebar items, remove or hide the Pricing item.
+3. Add a new page: `app/billing/page.tsx`
+   - For now, show:
+     - Current plan (e.g. “Business” / “Enterprise” from the existing pricingConfig)
+     - Effective price per year and per employee based on headcount
+     - Key included features
+     - A note that billing is handled manually (no payment integration yet).
+   - Only visible to HR_ADMIN role. Other roles should see 403 or redirect.
+
+If there is a `getCurrentUser()` or similar helper, reuse it. If not, implement a minimal placeholder and use it for access checks.
+
+====================================================
+2. ROLE-BASED HOME DASHBOARDS (2050-STYLE)
+====================================================
+
+Create a modern, card-based landing experience at `/` (Dashboard) that changes by role.
+
+### 2.1 Routing
+
+Ensure `app/page.tsx` (or the main dashboard route) loads a `Dashboard` component that:
+
+- Calls `getCurrentUser()` and decides which sub-dashboard to render:
+  - HR_ADMIN → `HrDashboard`
+  - MANAGER → `ManagerDashboard`
+  - EMPLOYEE → `EmployeeDashboard`
+
+### 2.2 HR Dashboard
+
+Create `components/dashboard/HrDashboard.tsx` with:
+
+- Cards for:
+  - Active headcount + breakdown (per org unit if available)
+  - Number of overdue + due_soon person_events (compliance risk)
+  - Number of expiring temporary contracts (next 90 days)
+  - Number of open HR workflows (see section 3)
+- A “Quick Actions” area with buttons:
+  - “Start sick leave follow-up workflow”
+  - “Start rehab process”
+  - “Start parental leave follow-up”
+  - “Start reboarding workflow”
+- A compact table “Top risk units”:
+  - unit name, risk index, number of critical events
+
+### 2.3 Manager Dashboard
+
+Create `components/dashboard/ManagerDashboard.tsx` with:
+
+- Cards:
+  - My team headcount
+  - My team’s open tasks (person_events owned by this manager)
+  - Upcoming 1:1 meetings (next 14 days)
+- List “My critical items”:
+  - Top 5 person_events (overdue / due_soon) for their direct reports
+- List “My 1:1 meetings”:
+  - meetings with status planned / in_progress, with quick links
+
+### 2.4 Employee Dashboard
+
+Create `components/dashboard/EmployeeDashboard.tsx` with:
+
+- Cards:
+  - Upcoming trainings / certificates (person_events where category = training or certificate and due_date in future)
+  - Next scheduled 1:1
+  - Open tasks for the employee (person_events assigned to them)
+- Section “My Documents”:
+  - Latest 3 documents linked to that employee
+- Section “My Competence”:
+  - Short view of key skills and levels (top 5)
+
+Use clean, minimal Tailwind layouts and keep text short. Think “2050 HR OS”: few words, clear status, no clutter.
+
+====================================================
+3. HR WORKFLOW ENGINE (STANDARD PROCESSES)
+====================================================
+
+We want configurable workflows for HR core processes like sick leave follow-up, rehab, parental leave, job change, reboarding, safety routines.
+
+### 3.1 DB schema
+
+Create tables:
+
+`hr_workflow_templates`:
+- id UUID PK
+- name TEXT (e.g. "Sick leave follow-up", "Rehab process", "Parental leave follow-up", "Reboarding", "Safety routine – dangerous work")
+- description TEXT
+- target_type TEXT  -- "employee" | "org_unit" | "company"
+- is_active BOOLEAN DEFAULT true
+- created_at, updated_at TIMESTAMPTZ
+
+`hr_workflow_steps`:
+- id UUID PK
+- template_id UUID FK hr_workflow_templates
+- step_order INT
+- title TEXT           -- "Initial contact", "Doctor’s note follow-up", etc.
+- description TEXT
+- offset_days INT      -- relative to workflow start date (can be negative / positive)
+- category TEXT        -- optional, e.g. "contact", "meeting", "documentation"
+- creates_person_event BOOLEAN DEFAULT true
+- person_event_category TEXT NULLABLE -- e.g. "sick_followup", "rehab", "parental_followup"
+
+`hr_workflow_instances`:
+- id UUID PK
+- template_id UUID FK
+- target_employee_id UUID NULL
+- target_org_unit_id UUID NULL
+- started_by_user_id UUID NULL
+- start_date DATE
+- status TEXT  -- "active" | "completed" | "cancelled"
+- created_at, updated_at TIMESTAMPTZ
+
+`hr_workflow_instance_steps`:
+- id UUID PK
+- instance_id UUID FK
+- step_id UUID FK hr_workflow_steps
+- due_date DATE
+- status TEXT  -- "pending" | "completed" | "skipped"
+- completed_at TIMESTAMPTZ NULL
+- person_event_id UUID NULL -- link to created person_events (if any)
+
+### 3.2 Services
+
+Create `services/hrWorkflows.ts` with:
+
+- `getActiveWorkflowsForEmployee(employeeId: string)`
+- `getActiveWorkflowsForManager(managerId: string)`  // via their team
+- `startWorkflowForEmployee(templateId: string, employeeId: string, startDate: Date)`
+  - Creates `hr_workflow_instances`
+  - For each step:
+    - Compute due_date = startDate + offset_days
+    - Create `hr_workflow_instance_steps`
+    - If `creates_person_event`:
+      - Create corresponding `person_events` row
+      - Link its id into `hr_workflow_instance_steps.person_event_id`
+
+### 3.3 UI – HR Workflow Management
+
+Create `app/hr/workflows/page.tsx`:
+
+- List of `hr_workflow_templates`
+- Option to start a workflow for a selected employee (maybe simple select + date input)
+- List of active `hr_workflow_instances`:
+  - template name, target employee, status, number of open steps
+
+Add a section on the HR Dashboard that shows “Open workflows: X” and link to this page.
+
+====================================================
+4. HR ANALYTICS V2 – SIMPLE FUTURE-FACING INSIGHTS
+====================================================
+
+Update `app/hr/analytics/page.tsx` to include:
+
+1) **Headcount by unit**
+   - Table: unit | total | permanent | temporary | consultant.
+
+2) **Expiring temporary contracts**
+   - List employees with `employment_type = 'temporary'` and `contract_end_date <= CURRENT_DATE + 90 days`.
+
+3) **Critical events per category**
+   - Summary counts: overdue + due_soon (next 30 days) grouped by category in person_events.
+
+4) **People Risk Index per unit**
+   - For each unit (or line/team if org_units is not fully used yet):
+     - risk_index = (overdue + due_soon events) / headcount.
+   - Display as colored badges (green/yellow/red).
+
+5) **Basic turnover / attrition risk signal**
+   - For now, define a simple score per employee:
+     - +1 if temporary contract ending within 90 days
+     - +1 if more than 3 unresolved person_events
+     - +1 if no 1:1 meeting in the last 12 months
+   - Aggregate by unit: average attrition risk score per unit.
+   - Show top 5 units with highest scores.
+
+No machine learning needed; just clear, deterministic logic.
+
+====================================================
+5. UI & NAV CLEANUP
+====================================================
+
+- Ensure the sidebar shows:
+  - Dashboard
+  - Employees
+  - Organization
+  - Competence Matrix
+  - Tomorrow’s Gaps
+  - Manager Risks
+  - Safety / Certificates
+  - Equipment
+  - Handbooks
+  - Documents
+  - News
+  - HR Analytics
+  - Import Employees
+  - Billing (HR_ADMIN only)
+  - Settings
+
+- Keep the design clean and minimal:
+  - Card-based dashboards
+  - Plenty of whitespace
+  - Consistent typography with current app
+  - No overloaded tables where a few cards or stacked sections are enough.
+
+====================================================
+6. IMPLEMENTATION RULES
+====================================================
+
+- Do not remove or break existing behaviour.
+- Use existing Supabase client and auth helpers.
+- Keep TypeScript strict and passing.
+- Ensure Next.js builds without errors.
+- Return full new/updated code for:
+  - Sidebar nav / layout
+  - `app/page.tsx` (dashboard router)
+  - `components/dashboard/*`
+  - `services/hrWorkflows.ts`
+  - `services/notifications.ts` (only if you need to integrate workflow events later)
+  - `app/hr/workflows/page.tsx`
+  - `app/hr/analytics/page.tsx`
+  - `app/billing/page.tsx`
+- No prose, just code.

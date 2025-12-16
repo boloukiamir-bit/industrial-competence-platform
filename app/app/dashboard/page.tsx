@@ -1,56 +1,76 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth";
+import { HrDashboard } from "@/components/dashboard/HrDashboard";
+import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
+import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
+
 export default function DashboardPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-        Dashboard
-      </h1>
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div
-          className="bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-6"
-          data-testid="card-tomorrows-gaps"
-        >
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-            Tomorrow&apos;s Gaps
-          </h2>
-          <p className="text-3xl font-semibold text-gray-900 dark:text-white">
-            --
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Skill gaps requiring attention
-          </p>
-        </div>
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      setUser(u);
+      setLoading(false);
+    });
+  }, []);
 
-        <div
-          className="bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-6"
-          data-testid="card-certification-status"
-        >
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-            Certification Status
-          </h2>
-          <p className="text-3xl font-semibold text-gray-900 dark:text-white">
-            --
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Certifications expiring soon
-          </p>
-        </div>
-
-        <div
-          className="bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-6"
-          data-testid="card-critical-lines"
-        >
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-            Critical Lines
-          </h2>
-          <p className="text-3xl font-semibold text-gray-900 dark:text-white">
-            --
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Production lines at risk
-          </p>
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 bg-gray-200 dark:bg-gray-700 rounded" />
+            ))}
+          </div>
         </div>
       </div>
+    );
+  }
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const getRoleLabel = () => {
+    switch (user?.role) {
+      case "HR_ADMIN":
+        return "HR Administrator";
+      case "MANAGER":
+        return "Manager";
+      case "EMPLOYEE":
+        return "Employee";
+      default:
+        return "";
+    }
+  };
+
+  return (
+    <div className="p-8" data-testid="dashboard-page">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          {getGreeting()}
+        </h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">
+          {getRoleLabel()} Dashboard
+        </p>
+      </div>
+
+      {user?.role === "HR_ADMIN" && <HrDashboard />}
+      {user?.role === "MANAGER" && <ManagerDashboard user={user} />}
+      {user?.role === "EMPLOYEE" && <EmployeeDashboard user={user} />}
+      {!user?.role && (
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+          Unable to determine user role. Please contact support.
+        </div>
+      )}
     </div>
   );
 }
