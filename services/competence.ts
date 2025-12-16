@@ -38,6 +38,13 @@ export type EmployeeCompetenceProfile = {
   items: EmployeeCompetenceItem[];
 };
 
+export type PositionSummary = {
+  id: string;
+  name: string;
+  site: string | null;
+  department: string | null;
+};
+
 type EmployeeRow = {
   id: string;
   full_name?: string | null;
