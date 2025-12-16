@@ -1,0 +1,217 @@
+Logic:
+
+For enqueueDueEventNotifications:
+
+Find person_events where status = "due_soon" or "overdue".
+
+Join employees to get email + manager email.
+
+Insert new rows in email_outbox with helpful subject & body per event.
+
+For enqueueUpcomingOneToOnes:
+
+Find one_to_one_meetings with scheduled_at within the next 7 days and status = "planned".
+
+Notify employee and manager.
+
+For enqueueOverdueActions:
+
+Find one_to_one_actions where is_completed = false and due_date < referenceDate.
+
+Notify the appropriate owner (employee or manager).
+
+2.3 Cron entrypoint (Next.js route)
+
+Create route: app/api/cron/daily-notifications/route.ts:
+
+Run all three functions above with referenceDate = new Date().
+
+Return summary JSON.
+
+This route can be called by Replit’s scheduler/cron feature once per day.
+
+====================================================
+3. EMPLOYEE PERSON PAGE – HR HUB
+
+You already have /employees/[id]. Make it a hub with left-side menu like:
+
+Personal data
+
+Contact information
+
+Organisation
+
+Job & employment
+
+Compensation
+
+Competence
+
+1:1 / Medarbetarsamtal
+
+Documents
+
+People Risk & tasks
+
+Equipment
+
+Implement as a single page using tabs or a side navigation.
+
+Use existing data:
+
+employees table for personal & job data
+
+salary tables (if present)
+
+employee_skills for competence
+
+one_to_one_meetings for 1:1 section
+
+documents for document section
+
+person_events for People Risk tasks
+
+employee_equipment for equipment
+
+Clean, simple Tailwind layout, similar to Huma-style screenshot but with your existing design language.
+
+====================================================
+4. ORG OVERVIEW / ORG CHART
+4.1 DB
+
+Create table org_units:
+
+id (uuid, PK)
+
+name (text)
+
+code (text, nullable)
+
+parent_id (uuid, nullable, FK org_units)
+
+type (text, nullable) -- e.g. "company", "site", "department", "team"
+
+manager_employee_id (uuid, nullable)
+
+created_at (timestamptz)
+
+Add org_unit_id column to employees (nullable).
+
+4.2 Services + UI
+
+services/org.ts with:
+
+getOrgTree() → returns hierarchical org units + employees.
+
+Page: app/org/overview/page.tsx:
+
+Render a simple top-down org chart (not fancy D3, just nested cards).
+
+Show unit name, manager, number of employees.
+
+Allow toggling “Show employee pictures/names”.
+
+====================================================
+5. HR ANALYTICS / KPI DASHBOARD
+
+Create page: app/hr/analytics/page.tsx.
+
+This page is only for HR_ADMIN role (see RBAC below).
+
+5.1 Metrics to show (using Supabase queries):
+
+Total headcount, by org_unit and employment_type.
+
+Sick leave ratio (if you have an absences table; if not, create a simple one: id, employee_id, type, from_date, to_date).
+
+Count of temporary contracts ending within next 90 days.
+
+Count of critical person_events (overdue + due_soon) per category.
+
+Distribution of skill levels for key skills (0–4).
+
+Implement all queries directly in TS services, no mock data.
+Use simple charts where relevant (e.g. bar or pie using a lightweight approach or just tables).
+
+====================================================
+6. ROLE-BASED ACCESS CONTROL (RBAC)
+
+Implement a simple RBAC layer.
+
+6.1 Roles
+
+Assume a users or employees-backed auth; if none exists, create a simple users table:
+
+users:
+
+id (uuid, PK)
+
+employee_id (uuid, nullable)
+
+email (text, unique)
+
+role (text) -- "HR_ADMIN" | "MANAGER" | "EMPLOYEE"
+
+Create helper in lib/auth.ts:
+
+export type AppRole = "HR_ADMIN" | "MANAGER" | "EMPLOYEE";
+
+export async function getCurrentUser(): Promise<{ id: string; role: AppRole; employeeId?: string } | null>;
+
+
+For now, implement getCurrentUser as:
+
+fetch a fixed user by email from env or hard-coded (for development). No real auth required.
+
+6.2 Middleware / Guards
+
+Create a simple guard function:
+
+export function requireRole(user: { role: AppRole } | null, allowed: AppRole[]): void;
+
+
+Use this in server components/pages to enforce:
+
+/hr/analytics → HR_ADMIN only.
+
+/org/overview → HR_ADMIN and MANAGER.
+
+/manager/risks → MANAGER and HR_ADMIN.
+
+/employees/[id]:
+
+HR_ADMIN: all
+
+MANAGER: only employees they manage
+
+EMPLOYEE: only their own profile
+
+Apply checks in the relevant page loaders / server components.
+
+====================================================
+7. GENERIC, NOT INDUSTRY-LOCKED
+
+Make sure:
+
+Nothing is hard-coded to “factory” or “pressline”.
+
+Names like org_units, line, team are generic enough for hospitals, municipalities etc.
+
+All new code uses neutral wording: "unit", "department", "site", "team".
+
+====================================================
+8. IMPLEMENTATION RULES
+
+DO NOT break or remove existing features from previous iterations.
+
+Reuse the existing Supabase client and Tailwind styling.
+
+Keep TypeScript strict and fix all type errors.
+
+Ensure Next.js builds without errors.
+
+No mock data left in pages (only real queries).
+
+Return full contents of all new/changed files needed for this feature set.
+
+No prose, no explanations, just code.
