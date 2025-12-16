@@ -8,7 +8,7 @@ export async function calculateTomorrowsGaps(): Promise<GapItem[]> {
 
   if (reqError) {
     console.error("Failed to fetch requirements:", reqError);
-    return [];
+    throw new Error(`Legacy skill requirements unavailable: ${reqError.message}`);
   }
 
   if (!requirements || requirements.length === 0) {
@@ -208,6 +208,7 @@ export type TomorrowsGapsOverview = {
     lowRiskPositions: number;
     totalGapHeadcount: number;
   };
+  configWarning?: string;
 };
 
 type PositionRow = {
@@ -219,12 +220,47 @@ type PositionRow = {
 };
 
 export async function getTomorrowsGaps(): Promise<TomorrowsGapsOverview> {
-  const { data: posData, error: posError } = await supabase
+  let posData: PositionRow[] = [];
+  let minHeadcountMissing = false;
+  
+  // First try with min_headcount column
+  const result = await supabase
     .from("positions")
     .select("id, name, site, department, min_headcount")
     .order("name", { ascending: true });
 
-  if (posError) throw posError;
+  // If min_headcount column doesn't exist (error 42703), fall back to query without it
+  if (result.error) {
+    const errorCode = (result.error as any).code;
+    if (errorCode === "42703" || result.error.message?.includes("min_headcount")) {
+      console.warn("min_headcount column not found, fetching positions without it");
+      minHeadcountMissing = true;
+      const fallbackResult = await supabase
+        .from("positions")
+        .select("id, name, site, department")
+        .order("name", { ascending: true });
+      
+      if (fallbackResult.error) throw fallbackResult.error;
+      
+      // Add null min_headcount to all positions
+      posData = (fallbackResult.data ?? []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        site: p.site ?? null,
+        department: p.department ?? null,
+        min_headcount: null
+      }));
+    } else {
+      throw result.error;
+    }
+  } else {
+    posData = (result.data ?? []) as PositionRow[];
+    // Check if ALL positions have null min_headcount (column exists but not configured)
+    const allNull = posData.every(p => p.min_headcount === null || p.min_headcount === 0);
+    if (allNull && posData.length > 0) {
+      minHeadcountMissing = true;
+    }
+  }
 
   const positions = (posData ?? []) as PositionRow[];
   const positionGaps: PositionGapSummary[] = [];
@@ -315,6 +351,10 @@ export async function getTomorrowsGaps(): Promise<TomorrowsGapsOverview> {
     return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
   });
 
+  const configWarning = minHeadcountMissing 
+    ? "Minimum headcount requirements are not configured for positions. Risk levels may not reflect actual coverage needs. Configure min_headcount for each position to enable accurate gap analysis."
+    : undefined;
+
   return {
     positions: positionGaps,
     summary: {
@@ -325,5 +365,6 @@ export async function getTomorrowsGaps(): Promise<TomorrowsGapsOverview> {
       lowRiskPositions,
       totalGapHeadcount,
     },
+    configWarning,
   };
 }

@@ -144,10 +144,11 @@ npm run start  # Start production server
 ## Services
 
 ### Gap Analysis (services/gaps.ts)
-- `calculateTomorrowsGaps()` - Calculate all gaps for next shift
+- `calculateTomorrowsGaps()` - Calculate all gaps for next shift (legacy)
 - `getCriticalGapsFromItems()` - Find critical missing competencies
 - `getTrainingPriorities()` - Find skills needing training (levels 0-1)
 - `getOverstaffedSkills()` - Find skills with excess capacity (levels 3-4)
+- `getTomorrowsGaps()` - **NEW (v1)** Position-based gap analysis with risk levels per position
 
 ### Events (services/events.ts)
 - `getAllEvents()` - Fetch all events with status classification
@@ -224,3 +225,14 @@ npm run start  # Start production server
 - **New Services**: hrWorkflows.ts with WORKFLOW_TEMPLATES and instance management
 - **New Types**: HRWorkflowTemplate, HRWorkflowInstance, HRWorkflowStep, HRAnalyticsV2
 - **Database Expansion**: hr_workflow_instances table for workflow tracking
+
+### December 2024 - Tomorrow's Gaps v1 & Competence Matrix
+- **Tomorrow's Gaps v1** (/app/tomorrows-gaps): Position-based risk/coverage dashboard
+  - Shows risk level per position (CRITICAL, HIGH, MEDIUM, LOW)
+  - Calculates fully competent employee count vs minimum headcount requirement
+  - Displays coverage percentage with progress bars
+  - Tabs for Position Coverage and Skill Gaps
+- **Database**: Added `min_headcount` column to `positions` table
+- **Services**: New `getTomorrowsGaps()` function in services/gaps.ts with graceful fallback
+- **Types**: PositionGapSummary, TomorrowsGapsOverview, PositionGapRisk
+- **Styling**: Added .hr-risk-pill--critical CSS class for critical risk badges

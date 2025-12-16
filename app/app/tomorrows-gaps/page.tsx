@@ -98,6 +98,7 @@ export default function TomorrowsGapsPage() {
   const [positionGaps, setPositionGaps] = useState<TomorrowsGapsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [legacyGapsUnavailable, setLegacyGapsUnavailable] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -105,17 +106,21 @@ export default function TomorrowsGapsPage() {
       setError(null);
       
       try {
-        const [gapsData, skillStats, positionGapsData] = await Promise.all([
-          calculateTomorrowsGaps(),
-          getSkillStats(),
-          getTomorrowsGaps()
-        ]);
-        
-        setGaps(gapsData);
-        setCriticalGaps(getCriticalGapsFromItems(gapsData));
-        setTrainingPriorities(getTrainingPriorities(skillStats));
-        setOverstaffedSkills(getOverstaffedSkills(skillStats));
+        const positionGapsData = await getTomorrowsGaps();
         setPositionGaps(positionGapsData);
+        
+        try {
+          const gapsData = await calculateTomorrowsGaps();
+          setGaps(gapsData);
+          setCriticalGaps(getCriticalGapsFromItems(gapsData));
+          
+          const skillStats = await getSkillStats();
+          setTrainingPriorities(getTrainingPriorities(skillStats));
+          setOverstaffedSkills(getOverstaffedSkills(skillStats));
+        } catch (legacyErr) {
+          console.warn("Legacy skill gaps not available:", legacyErr);
+          setLegacyGapsUnavailable(true);
+        }
       } catch (err) {
         console.error("Failed to load gaps data:", err);
         setError("Failed to load gap analysis data");
@@ -199,6 +204,18 @@ export default function TomorrowsGapsPage() {
         </div>
       )}
 
+      {positionGaps?.configWarning && (
+        <div className="flex items-start gap-3 p-4 mt-4 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950" data-testid="config-warning">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Configuration Needed</p>
+            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+              {positionGaps.configWarning}
+            </p>
+          </div>
+        </div>
+      )}
+
       <Tabs defaultValue="positions" className="mt-6">
         <TabsList>
           <TabsTrigger value="positions" data-testid="tab-positions">
@@ -224,56 +241,68 @@ export default function TomorrowsGapsPage() {
         </TabsContent>
 
         <TabsContent value="skills" className="mt-4">
-          <WhatToFixSummary
-            criticalGaps={criticalGaps}
-            trainingPriorities={trainingPriorities}
-            overstaffedSkills={overstaffedSkills}
-          />
+          {legacyGapsUnavailable ? (
+            <div className="hr-empty" data-testid="legacy-gaps-unavailable">
+              <p className="font-medium mb-2">Skill Gap Analysis Unavailable</p>
+              <p className="text-sm text-muted-foreground">
+                The legacy skill gap analysis requires role_skill_requirements and skills tables to be configured.
+                Use the Position Coverage tab to see gap analysis based on position competence requirements.
+              </p>
+            </div>
+          ) : (
+            <>
+              <WhatToFixSummary
+                criticalGaps={criticalGaps}
+                trainingPriorities={trainingPriorities}
+                overstaffedSkills={overstaffedSkills}
+              />
 
-          <div className="mt-8">
-            <h2 className="hr-section__title">Detailed Skill Gaps</h2>
-            
-            {gaps.length === 0 ? (
-              <div className="hr-empty" data-testid="no-skill-gaps-message">
-                No skill gaps detected. All skill requirements are met.
+              <div className="mt-8">
+                <h2 className="hr-section__title">Detailed Skill Gaps</h2>
+                
+                {gaps.length === 0 ? (
+                  <div className="hr-empty" data-testid="no-skill-gaps-message">
+                    No skill gaps detected. All skill requirements are met.
+                  </div>
+                ) : (
+                  <div className="hr-grid">
+                    {gaps.map((gap, index) => (
+                      <Card key={index} data-testid={`card-gap-${index}`}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <CardTitle className="text-base">{gap.skillName}</CardTitle>
+                            <Badge variant="destructive">
+                              Missing: {gap.missingCount}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Line:</span>
+                              <p className="font-medium">{gap.line}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Role:</span>
+                              <p className="font-medium">{gap.role}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Required Level:</span>
+                              <p className="font-medium">{gap.requiredLevel}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Current Avg:</span>
+                              <p className="font-medium">{gap.currentAvgLevel}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="hr-grid">
-                {gaps.map((gap, index) => (
-                  <Card key={index} data-testid={`card-gap-${index}`}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <CardTitle className="text-base">{gap.skillName}</CardTitle>
-                        <Badge variant="destructive">
-                          Missing: {gap.missingCount}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Line:</span>
-                          <p className="font-medium">{gap.line}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Role:</span>
-                          <p className="font-medium">{gap.role}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Required Level:</span>
-                          <p className="font-medium">{gap.requiredLevel}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Current Avg:</span>
-                          <p className="font-medium">{gap.currentAvgLevel}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>
