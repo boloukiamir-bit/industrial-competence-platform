@@ -1,10 +1,5 @@
 // services/competence.ts
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "@/lib/supabaseClient";
 
 export type EmployeeCompetenceItem = {
   competenceId: string;
@@ -83,20 +78,19 @@ export async function getAllPositions(): Promise<PositionSummary[]> {
 export async function getEmployeesForPosition(positionId: string): Promise<SimpleEmployee[]> {
   const { data, error } = await supabase
     .from('employees')
-    .select('id, full_name, name')
+    .select('id, name')
     .eq('position_id', positionId);
 
   if (error) throw error;
 
   return (data ?? []).map((row: any) => ({
     id: row.id,
-    name: row.full_name ?? row.name ?? 'Employee',
+    name: row.name ?? 'Employee',
   }));
 }
 
 type EmployeeRow = {
   id: string;
-  full_name?: string | null;
   name?: string | null;
   position_id?: string | null;
 };
@@ -138,7 +132,7 @@ export async function getEmployeeCompetenceProfile(
   // 1) Employee
   const { data: employeeRow, error: empError } = await supabase
     .from("employees")
-    .select("id, full_name, name, position_id")
+    .select("id, name, position_id")
     .eq("id", employeeId)
     .single<EmployeeRow>();
 
@@ -147,7 +141,7 @@ export async function getEmployeeCompetenceProfile(
     throw empError ?? new Error("Employee not found");
   }
 
-  const employeeName = employeeRow.full_name ?? employeeRow.name ?? "Employee";
+  const employeeName = employeeRow.name ?? "Employee";
 
   // 2) Position (optional)
   let positionName: string | null = null;

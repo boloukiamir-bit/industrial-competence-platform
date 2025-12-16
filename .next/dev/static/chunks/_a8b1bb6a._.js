@@ -150,7 +150,7 @@ const navItems = [
     },
     {
         name: "Competence Matrix",
-        href: "/app/competence-matrix",
+        href: "/competence/matrix",
         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$grid$2d$3x3$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Grid3X3$3e$__["Grid3X3"]
     },
     {
