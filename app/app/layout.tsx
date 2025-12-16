@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
-  { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
+  { name: "Competence Matrix", href: "/competence/matrix", icon: Grid3X3 },
   { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: AlertTriangle },
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
   { name: "Safety / Certificates", href: "/app/safety/certificates", icon: Shield },
