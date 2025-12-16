@@ -65,12 +65,19 @@ export default function HRWorkflowsPage() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
 
   const loadInstances = useCallback(async () => {
-    const filters: { status?: HRWorkflowStatus } = {};
-    if (statusFilter !== "all") {
-      filters.status = statusFilter;
+    try {
+      const response = await fetch("/api/workflows");
+      if (response.ok) {
+        let data = await response.json();
+        if (statusFilter !== "all") {
+          data = data.filter((i: HRWorkflowInstance) => i.status === statusFilter);
+        }
+        setInstances(data);
+      }
+    } catch (err) {
+      console.error("Failed to load workflow instances:", err);
+      setInstances([]);
     }
-    const data = await getWorkflowInstances(filters);
-    setInstances(data);
   }, [statusFilter]);
 
   useEffect(() => {
@@ -106,7 +113,22 @@ export default function HRWorkflowsPage() {
   async function handleStartWorkflow() {
     if (!selectedTemplate || !selectedEmployeeId) return;
     setStarting(true);
-    await startWorkflow(selectedTemplate, selectedEmployeeId);
+    try {
+      const response = await fetch("/api/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateId: selectedTemplate,
+          employeeId: selectedEmployeeId,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        console.error("Failed to start workflow:", err);
+      }
+    } catch (err) {
+      console.error("Error starting workflow:", err);
+    }
     await loadInstances();
     setShowStartDialog(false);
     setSelectedTemplate(null);

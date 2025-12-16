@@ -1021,7 +1021,7 @@ async function startWorkflow(templateId, employeeId, createdBy, notes) {
         }));
     const maxDays = Math.max(...template.defaultSteps.map((s)=>s.daysFromStart));
     const dueDate = new Date(now.getTime() + maxDays * 24 * 60 * 60 * 1000);
-    const instance = {
+    const instanceData = {
         template_id: templateId,
         template_name: template.name,
         employee_id: employeeId,
@@ -1033,7 +1033,7 @@ async function startWorkflow(templateId, employeeId, createdBy, notes) {
         created_by: createdBy || null,
         notes: notes || null
     };
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("hr_workflow_instances").insert(instance).select().single();
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("hr_workflow_instances").insert(instanceData).select().single();
     if (error || !data) {
         console.error("Failed to start workflow:", error);
         return null;
@@ -1171,12 +1171,21 @@ function HRWorkflowsPage() {
     const [showDetailDialog, setShowDetailDialog] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const loadInstances = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
         "HRWorkflowsPage.useCallback[loadInstances]": async ()=>{
-            const filters = {};
-            if (statusFilter !== "all") {
-                filters.status = statusFilter;
+            try {
+                const response = await fetch("/api/workflows");
+                if (response.ok) {
+                    let data = await response.json();
+                    if (statusFilter !== "all") {
+                        data = data.filter({
+                            "HRWorkflowsPage.useCallback[loadInstances]": (i)=>i.status === statusFilter
+                        }["HRWorkflowsPage.useCallback[loadInstances]"]);
+                    }
+                    setInstances(data);
+                }
+            } catch (err) {
+                console.error("Failed to load workflow instances:", err);
+                setInstances([]);
             }
-            const data = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$hrWorkflows$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getWorkflowInstances"])(filters);
-            setInstances(data);
         }
     }["HRWorkflowsPage.useCallback[loadInstances]"], [
         statusFilter
@@ -1208,7 +1217,24 @@ function HRWorkflowsPage() {
     async function handleStartWorkflow() {
         if (!selectedTemplate || !selectedEmployeeId) return;
         setStarting(true);
-        await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$hrWorkflows$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["startWorkflow"])(selectedTemplate, selectedEmployeeId);
+        try {
+            const response = await fetch("/api/workflows", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    templateId: selectedTemplate,
+                    employeeId: selectedEmployeeId
+                })
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                console.error("Failed to start workflow:", err);
+            }
+        } catch (err) {
+            console.error("Error starting workflow:", err);
+        }
         await loadInstances();
         setShowStartDialog(false);
         setSelectedTemplate(null);
@@ -1243,14 +1269,14 @@ function HRWorkflowsPage() {
                             className: "h-3 w-3 mr-1"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 141,
+                            lineNumber: 163,
                             columnNumber: 41
                         }, this),
                         " Active"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                    lineNumber: 141,
+                    lineNumber: 163,
                     columnNumber: 16
                 }, this);
             case "completed":
@@ -1261,14 +1287,14 @@ function HRWorkflowsPage() {
                             className: "h-3 w-3 mr-1"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 143,
+                            lineNumber: 165,
                             columnNumber: 43
                         }, this),
                         " Completed"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                    lineNumber: 143,
+                    lineNumber: 165,
                     columnNumber: 16
                 }, this);
             case "cancelled":
@@ -1279,14 +1305,14 @@ function HRWorkflowsPage() {
                             className: "h-3 w-3 mr-1"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 145,
+                            lineNumber: 167,
                             columnNumber: 41
                         }, this),
                         " Cancelled"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                    lineNumber: 145,
+                    lineNumber: 167,
                     columnNumber: 16
                 }, this);
         }
@@ -1301,25 +1327,25 @@ function HRWorkflowsPage() {
                         className: "h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 153,
+                        lineNumber: 175,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "h-64 bg-gray-200 dark:bg-gray-700 rounded"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 154,
+                        lineNumber: 176,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                lineNumber: 152,
+                lineNumber: 174,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/hr/workflows/page.tsx",
-            lineNumber: 151,
+            lineNumber: 173,
             columnNumber: 7
         }, this);
     }
@@ -1334,7 +1360,7 @@ function HRWorkflowsPage() {
                             className: "h-12 w-12 text-red-500 mx-auto mb-4"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 165,
+                            lineNumber: 187,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -1342,7 +1368,7 @@ function HRWorkflowsPage() {
                             children: "Access Denied"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 166,
+                            lineNumber: 188,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1350,23 +1376,23 @@ function HRWorkflowsPage() {
                             children: "This page is only accessible to HR Administrators."
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 167,
+                            lineNumber: 189,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                    lineNumber: 164,
+                    lineNumber: 186,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                lineNumber: 163,
+                lineNumber: 185,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/hr/workflows/page.tsx",
-            lineNumber: 162,
+            lineNumber: 184,
             columnNumber: 7
         }, this);
     }
@@ -1384,7 +1410,7 @@ function HRWorkflowsPage() {
                                 children: "HR Workflows"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 180,
+                                lineNumber: 202,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1392,13 +1418,13 @@ function HRWorkflowsPage() {
                                 children: "Manage standardized HR processes"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 181,
+                                lineNumber: 203,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 179,
+                        lineNumber: 201,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1409,20 +1435,20 @@ function HRWorkflowsPage() {
                                 className: "h-4 w-4 mr-2"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 184,
+                                lineNumber: 206,
                                 columnNumber: 11
                             }, this),
                             "Start Workflow"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 183,
+                        lineNumber: 205,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                lineNumber: 178,
+                lineNumber: 200,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tabs"], {
@@ -1436,7 +1462,7 @@ function HRWorkflowsPage() {
                                 children: "Active Workflows"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 191,
+                                lineNumber: 213,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TabsTrigger"], {
@@ -1444,13 +1470,13 @@ function HRWorkflowsPage() {
                                 children: "Templates"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 192,
+                                lineNumber: 214,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 190,
+                        lineNumber: 212,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TabsContent"], {
@@ -1467,7 +1493,7 @@ function HRWorkflowsPage() {
                                                 className: "absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 198,
+                                                lineNumber: 220,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$input$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Input"], {
@@ -1478,13 +1504,13 @@ function HRWorkflowsPage() {
                                                 "data-testid": "input-search-workflows"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 199,
+                                                lineNumber: 221,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 197,
+                                        lineNumber: 219,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -1498,12 +1524,12 @@ function HRWorkflowsPage() {
                                                     placeholder: "All statuses"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 209,
+                                                    lineNumber: 231,
                                                     columnNumber: 17
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 208,
+                                                lineNumber: 230,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -1513,7 +1539,7 @@ function HRWorkflowsPage() {
                                                         children: "All statuses"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 212,
+                                                        lineNumber: 234,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -1521,7 +1547,7 @@ function HRWorkflowsPage() {
                                                         children: "Active"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 213,
+                                                        lineNumber: 235,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -1529,7 +1555,7 @@ function HRWorkflowsPage() {
                                                         children: "Completed"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 214,
+                                                        lineNumber: 236,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -1537,25 +1563,25 @@ function HRWorkflowsPage() {
                                                         children: "Cancelled"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 215,
+                                                        lineNumber: 237,
                                                         columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 211,
+                                                lineNumber: 233,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 207,
+                                        lineNumber: 229,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 196,
+                                lineNumber: 218,
                                 columnNumber: 11
                             }, this),
                             loading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1568,12 +1594,12 @@ function HRWorkflowsPage() {
                                         className: "h-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"
                                     }, i, false, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 223,
+                                        lineNumber: 245,
                                         columnNumber: 17
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 221,
+                                lineNumber: 243,
                                 columnNumber: 13
                             }, this) : filteredInstances.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Card"], {
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -1586,7 +1612,7 @@ function HRWorkflowsPage() {
                                                 children: "No workflows found"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 230,
+                                                lineNumber: 252,
                                                 columnNumber: 19
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1595,23 +1621,23 @@ function HRWorkflowsPage() {
                                                 children: "Start a Workflow"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 231,
+                                                lineNumber: 253,
                                                 columnNumber: 19
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 229,
+                                        lineNumber: 251,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 228,
+                                    lineNumber: 250,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 227,
+                                lineNumber: 249,
                                 columnNumber: 13
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "space-y-3",
@@ -1639,14 +1665,14 @@ function HRWorkflowsPage() {
                                                                         children: instance.templateName
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 255,
+                                                                        lineNumber: 277,
                                                                         columnNumber: 29
                                                                     }, this),
                                                                     statusBadge(instance.status)
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 254,
+                                                                lineNumber: 276,
                                                                 columnNumber: 27
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1659,14 +1685,14 @@ function HRWorkflowsPage() {
                                                                                 className: "h-3 w-3"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                                lineNumber: 260,
+                                                                                lineNumber: 282,
                                                                                 columnNumber: 31
                                                                             }, this),
                                                                             instance.employeeName || "Unknown"
                                                                         ]
                                                                     }, void 0, true, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 259,
+                                                                        lineNumber: 281,
                                                                         columnNumber: 29
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1676,7 +1702,7 @@ function HRWorkflowsPage() {
                                                                                 className: "h-3 w-3"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                                lineNumber: 264,
+                                                                                lineNumber: 286,
                                                                                 columnNumber: 31
                                                                             }, this),
                                                                             "Started ",
@@ -1684,7 +1710,7 @@ function HRWorkflowsPage() {
                                                                         ]
                                                                     }, void 0, true, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 263,
+                                                                        lineNumber: 285,
                                                                         columnNumber: 29
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1698,54 +1724,54 @@ function HRWorkflowsPage() {
                                                                         ]
                                                                     }, void 0, true, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 267,
+                                                                        lineNumber: 289,
                                                                         columnNumber: 29
                                                                     }, this)
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 258,
+                                                                lineNumber: 280,
                                                                 columnNumber: 27
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 253,
+                                                        lineNumber: 275,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$right$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronRight$3e$__["ChevronRight"], {
                                                         className: "h-5 w-5 text-gray-400"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 270,
+                                                        lineNumber: 292,
                                                         columnNumber: 25
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 252,
+                                                lineNumber: 274,
                                                 columnNumber: 23
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 251,
+                                            lineNumber: 273,
                                             columnNumber: 21
                                         }, this)
                                     }, instance.id, false, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 245,
+                                        lineNumber: 267,
                                         columnNumber: 19
                                     }, this);
                                 })
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 238,
+                                lineNumber: 260,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 195,
+                        lineNumber: 217,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$tabs$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["TabsContent"], {
@@ -1766,7 +1792,7 @@ function HRWorkflowsPage() {
                                                         children: template.name
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 286,
+                                                        lineNumber: 308,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Badge"], {
@@ -1774,18 +1800,18 @@ function HRWorkflowsPage() {
                                                         children: template.category
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 287,
+                                                        lineNumber: 309,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 285,
+                                                lineNumber: 307,
                                                 columnNumber: 19
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 284,
+                                            lineNumber: 306,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -1795,7 +1821,7 @@ function HRWorkflowsPage() {
                                                     children: template.description
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 291,
+                                                    lineNumber: 313,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1806,7 +1832,7 @@ function HRWorkflowsPage() {
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 292,
+                                                    lineNumber: 314,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1820,35 +1846,35 @@ function HRWorkflowsPage() {
                                                     children: "Start This Workflow"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 293,
+                                                    lineNumber: 315,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 290,
+                                            lineNumber: 312,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, template.id, true, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 283,
+                                    lineNumber: 305,
                                     columnNumber: 15
                                 }, this))
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 281,
+                            lineNumber: 303,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                        lineNumber: 280,
+                        lineNumber: 302,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                lineNumber: 189,
+                lineNumber: 211,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Dialog"], {
@@ -1862,20 +1888,20 @@ function HRWorkflowsPage() {
                                     children: "Start New Workflow"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 314,
+                                    lineNumber: 336,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["DialogDescription"], {
                                     children: "Select a workflow template and employee to begin the process."
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 315,
+                                    lineNumber: 337,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 313,
+                            lineNumber: 335,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1889,7 +1915,7 @@ function HRWorkflowsPage() {
                                             children: "Template"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 321,
+                                            lineNumber: 343,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -1902,12 +1928,12 @@ function HRWorkflowsPage() {
                                                         placeholder: "Select a template"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 324,
+                                                        lineNumber: 346,
                                                         columnNumber: 19
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 323,
+                                                    lineNumber: 345,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -1916,24 +1942,24 @@ function HRWorkflowsPage() {
                                                             children: t.name
                                                         }, t.id, false, {
                                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                            lineNumber: 328,
+                                                            lineNumber: 350,
                                                             columnNumber: 21
                                                         }, this))
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 326,
+                                                    lineNumber: 348,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 322,
+                                            lineNumber: 344,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 320,
+                                    lineNumber: 342,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1944,7 +1970,7 @@ function HRWorkflowsPage() {
                                             children: "Employee"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 334,
+                                            lineNumber: 356,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -1957,12 +1983,12 @@ function HRWorkflowsPage() {
                                                         placeholder: "Select an employee"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 337,
+                                                        lineNumber: 359,
                                                         columnNumber: 19
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 336,
+                                                    lineNumber: 358,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -1971,30 +1997,30 @@ function HRWorkflowsPage() {
                                                             children: e.name
                                                         }, e.id, false, {
                                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                            lineNumber: 341,
+                                                            lineNumber: 363,
                                                             columnNumber: 21
                                                         }, this))
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                    lineNumber: 339,
+                                                    lineNumber: 361,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 335,
+                                            lineNumber: 357,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 333,
+                                    lineNumber: 355,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 319,
+                            lineNumber: 341,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["DialogFooter"], {
@@ -2005,7 +2031,7 @@ function HRWorkflowsPage() {
                                     children: "Cancel"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 348,
+                                    lineNumber: 370,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -2015,24 +2041,24 @@ function HRWorkflowsPage() {
                                     children: starting ? "Starting..." : "Start Workflow"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 349,
+                                    lineNumber: 371,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                            lineNumber: 347,
+                            lineNumber: 369,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                    lineNumber: 312,
+                    lineNumber: 334,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                lineNumber: 311,
+                lineNumber: 333,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Dialog"], {
@@ -2051,14 +2077,14 @@ function HRWorkflowsPage() {
                                                 children: selectedInstance.templateName
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 366,
+                                                lineNumber: 388,
                                                 columnNumber: 19
                                             }, this),
                                             statusBadge(selectedInstance.status)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 365,
+                                        lineNumber: 387,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["DialogDescription"], {
@@ -2069,13 +2095,13 @@ function HRWorkflowsPage() {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 369,
+                                        lineNumber: 391,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 364,
+                                lineNumber: 386,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2101,7 +2127,7 @@ function HRWorkflowsPage() {
                                                                         ]
                                                                     }, void 0, true, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 387,
+                                                                        lineNumber: 409,
                                                                         columnNumber: 29
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Badge"], {
@@ -2110,7 +2136,7 @@ function HRWorkflowsPage() {
                                                                         children: step.responsibleRole.toUpperCase()
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 390,
+                                                                        lineNumber: 412,
                                                                         columnNumber: 29
                                                                     }, this),
                                                                     step.daysFromStart !== 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2121,13 +2147,13 @@ function HRWorkflowsPage() {
                                                                         ]
                                                                     }, void 0, true, {
                                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                        lineNumber: 394,
+                                                                        lineNumber: 416,
                                                                         columnNumber: 31
                                                                     }, this)
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 386,
+                                                                lineNumber: 408,
                                                                 columnNumber: 27
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2135,7 +2161,7 @@ function HRWorkflowsPage() {
                                                                 children: step.title
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 399,
+                                                                lineNumber: 421,
                                                                 columnNumber: 27
                                                             }, this),
                                                             step.description && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2143,7 +2169,7 @@ function HRWorkflowsPage() {
                                                                 children: step.description
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 401,
+                                                                lineNumber: 423,
                                                                 columnNumber: 29
                                                             }, this),
                                                             step.isCompleted && step.completedAt && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2154,13 +2180,13 @@ function HRWorkflowsPage() {
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 404,
+                                                                lineNumber: 426,
                                                                 columnNumber: 29
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 385,
+                                                        lineNumber: 407,
                                                         columnNumber: 25
                                                     }, this),
                                                     !step.isCompleted && selectedInstance.status === "active" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -2172,42 +2198,42 @@ function HRWorkflowsPage() {
                                                                 className: "h-4 w-4 mr-1"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                                lineNumber: 415,
+                                                                lineNumber: 437,
                                                                 columnNumber: 29
                                                             }, this),
                                                             "Complete"
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 410,
+                                                        lineNumber: 432,
                                                         columnNumber: 27
                                                     }, this),
                                                     step.isCompleted && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$circle$2d$check$2d$big$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__CheckCircle$3e$__["CheckCircle"], {
                                                         className: "h-5 w-5 text-green-500"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                        lineNumber: 420,
+                                                        lineNumber: 442,
                                                         columnNumber: 27
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                                lineNumber: 384,
+                                                lineNumber: 406,
                                                 columnNumber: 23
                                             }, this)
                                         }, step.id, false, {
                                             fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                            lineNumber: 376,
+                                            lineNumber: 398,
                                             columnNumber: 21
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                    lineNumber: 374,
+                                    lineNumber: 396,
                                     columnNumber: 17
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 373,
+                                lineNumber: 395,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["DialogFooter"], {
@@ -2218,7 +2244,7 @@ function HRWorkflowsPage() {
                                         children: "Cancel Workflow"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 429,
+                                        lineNumber: 451,
                                         columnNumber: 19
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -2227,31 +2253,31 @@ function HRWorkflowsPage() {
                                         children: "Close"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                        lineNumber: 433,
+                                        lineNumber: 455,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                                lineNumber: 427,
+                                lineNumber: 449,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true)
                 }, void 0, false, {
                     fileName: "[project]/app/app/hr/workflows/page.tsx",
-                    lineNumber: 361,
+                    lineNumber: 383,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/hr/workflows/page.tsx",
-                lineNumber: 360,
+                lineNumber: 382,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/app/hr/workflows/page.tsx",
-        lineNumber: 177,
+        lineNumber: 199,
         columnNumber: 5
     }, this);
 }

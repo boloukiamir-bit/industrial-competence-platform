@@ -13,26 +13,34 @@ export type CurrentUser = {
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const devEmail = process.env.NEXT_PUBLIC_DEV_USER_EMAIL || "hr@example.com";
   
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, employee_id, email, role")
-    .eq("email", devEmail)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, employee_id, email, role")
+      .eq("email", devEmail)
+      .single();
 
-  if (error || !data) {
+    if (error || !data) {
+      return {
+        id: "dev-user",
+        role: "HR_ADMIN" as AppRole,
+        email: devEmail,
+      };
+    }
+
+    return {
+      id: data.id,
+      role: data.role as AppRole,
+      employeeId: data.employee_id || undefined,
+      email: data.email,
+    };
+  } catch {
     return {
       id: "dev-user",
       role: "HR_ADMIN" as AppRole,
       email: devEmail,
     };
   }
-
-  return {
-    id: data.id,
-    role: data.role as AppRole,
-    employeeId: data.employee_id || undefined,
-    email: data.email,
-  };
 }
 
 export function requireRole(

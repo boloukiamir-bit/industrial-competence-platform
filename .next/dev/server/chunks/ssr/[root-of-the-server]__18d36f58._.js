@@ -65,20 +65,28 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts_
 ;
 async function getCurrentUser() {
     const devEmail = process.env.NEXT_PUBLIC_DEV_USER_EMAIL || "hr@example.com";
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("users").select("id, employee_id, email, role").eq("email", devEmail).single();
-    if (error || !data) {
+    try {
+        const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("users").select("id, employee_id, email, role").eq("email", devEmail).single();
+        if (error || !data) {
+            return {
+                id: "dev-user",
+                role: "HR_ADMIN",
+                email: devEmail
+            };
+        }
+        return {
+            id: data.id,
+            role: data.role,
+            employeeId: data.employee_id || undefined,
+            email: data.email
+        };
+    } catch  {
         return {
             id: "dev-user",
             role: "HR_ADMIN",
             email: devEmail
         };
     }
-    return {
-        id: data.id,
-        role: data.role,
-        employeeId: data.employee_id || undefined,
-        email: data.email
-    };
 }
 function requireRole(user, allowed) {
     if (!user) {

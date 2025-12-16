@@ -128,7 +128,7 @@ export async function startWorkflow(
   const maxDays = Math.max(...template.defaultSteps.map((s) => s.daysFromStart));
   const dueDate = new Date(now.getTime() + maxDays * 24 * 60 * 60 * 1000);
 
-  const instance = {
+  const instanceData = {
     template_id: templateId,
     template_name: template.name,
     employee_id: employeeId,
@@ -143,7 +143,7 @@ export async function startWorkflow(
 
   const { data, error } = await supabase
     .from("hr_workflow_instances")
-    .insert(instance)
+    .insert(instanceData)
     .select()
     .single();
 
