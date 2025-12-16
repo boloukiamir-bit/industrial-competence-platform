@@ -11,9 +11,10 @@ export async function getCertificates(filters?: {
       employee_id,
       skill_id,
       level,
-      employees!inner(id, name, line, team, is_active),
+      employees!inner(id, name, line, team),
       skills!inner(id, name, code, category)
     `)
+    .eq("employees.is_active", true)
     .in("skills.category", ["safety", "certificate"]);
 
   if (filters?.line) {
@@ -76,12 +77,6 @@ export async function getCertificates(filters?: {
       latestTrainingDate: training?.completedDate,
       nextDueDate: training?.dueDate,
     };
-  }).filter((c: CertificateInfo) => {
-    const emp = (skillsData || []).find((s: Record<string, unknown>) => {
-      const e = s.employees as Record<string, unknown>;
-      return e?.id === c.employeeId;
-    })?.employees as Record<string, unknown>;
-    return emp?.is_active === true;
   });
 
   if (filters?.skillName) {
