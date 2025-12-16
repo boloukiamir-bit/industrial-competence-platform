@@ -3,19 +3,9 @@ import type { PersonEvent } from "@/types/domain";
 import { getUpcomingMeetings, getOverdueActions } from "./oneToOne";
 
 export async function enqueueDueEventNotifications(referenceDate: Date): Promise<number> {
-  const startDate = new Date(referenceDate);
-  startDate.setDate(startDate.getDate() - 7);
-  const endDate = new Date(referenceDate);
-  endDate.setDate(endDate.getDate() + 7);
-
-  const startDateStr = startDate.toISOString().split("T")[0];
-  const endDateStr = endDate.toISOString().split("T")[0];
-
   const { data: events, error } = await supabase
     .from("person_events")
     .select("id, title, category, due_date, employee_id, employees:employee_id(name, email)")
-    .gte("due_date", startDateStr)
-    .lte("due_date", endDateStr)
     .neq("status", "completed");
 
   if (error || !events) {
