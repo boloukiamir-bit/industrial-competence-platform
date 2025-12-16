@@ -17,7 +17,7 @@ import {
 } from "@/services/adminCompetence";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Shield, X } from "lucide-react";
 
-type EditingGroup = { id: string; name: string; description: string; sort_order: number } | null;
+type EditingGroup = CompetenceGroup | null;
 type EditingCompetence = Competence | null;
 
 export default function CompetenceAdminPage() {
@@ -30,7 +30,7 @@ export default function CompetenceAdminPage() {
   
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<EditingGroup>(null);
-  const [groupForm, setGroupForm] = useState({ name: "", description: "", sort_order: 0 });
+  const [groupForm, setGroupForm] = useState({ name: "", description: "" });
   
   const [showCompetenceModal, setShowCompetenceModal] = useState(false);
   const [editingCompetence, setEditingCompetence] = useState<EditingCompetence>(null);
@@ -40,7 +40,6 @@ export default function CompetenceAdminPage() {
     name: "",
     description: "",
     is_safety_critical: false,
-    active: true,
   });
 
   useEffect(() => {
@@ -80,7 +79,7 @@ export default function CompetenceAdminPage() {
 
   function openNewGroupModal() {
     setEditingGroup(null);
-    setGroupForm({ name: "", description: "", sort_order: groups.length });
+    setGroupForm({ name: "", description: "" });
     setShowGroupModal(true);
   }
 
@@ -89,7 +88,6 @@ export default function CompetenceAdminPage() {
     setGroupForm({
       name: group.name,
       description: group.description || "",
-      sort_order: group.sort_order,
     });
     setShowGroupModal(true);
   }
@@ -100,13 +98,11 @@ export default function CompetenceAdminPage() {
         await updateCompetenceGroup(editingGroup.id, {
           name: groupForm.name,
           description: groupForm.description || null,
-          sort_order: groupForm.sort_order,
         });
       } else {
         await createCompetenceGroup({
           name: groupForm.name,
           description: groupForm.description || null,
-          sort_order: groupForm.sort_order,
         });
       }
       setShowGroupModal(false);
@@ -136,7 +132,6 @@ export default function CompetenceAdminPage() {
       name: "",
       description: "",
       is_safety_critical: false,
-      active: true,
     });
     setShowCompetenceModal(true);
   }
@@ -149,7 +144,6 @@ export default function CompetenceAdminPage() {
       name: comp.name,
       description: comp.description || "",
       is_safety_critical: comp.is_safety_critical,
-      active: comp.active,
     });
     setShowCompetenceModal(true);
   }
@@ -162,7 +156,6 @@ export default function CompetenceAdminPage() {
         name: competenceForm.name,
         description: competenceForm.description || null,
         is_safety_critical: competenceForm.is_safety_critical,
-        active: competenceForm.active,
       };
       if (editingCompetence) {
         await updateCompetence(editingCompetence.id, payload);
@@ -293,7 +286,6 @@ export default function CompetenceAdminPage() {
                         <span style={{ flex: 1 }}>
                           {comp.code && <span className="hr-code">{comp.code}</span>} {comp.name}
                         </span>
-                        {!comp.active && <span className="hr-badge hr-badge--muted">Inactive</span>}
                         <button
                           className="hr-button hr-button--ghost hr-button--sm"
                           onClick={() => openEditCompetenceModal(comp)}
@@ -337,7 +329,6 @@ export default function CompetenceAdminPage() {
                   <span style={{ flex: 1 }}>
                     {comp.code && <span className="hr-code">{comp.code}</span>} {comp.name}
                   </span>
-                  {!comp.active && <span className="hr-badge hr-badge--muted">Inactive</span>}
                   <button
                     className="hr-button hr-button--ghost hr-button--sm"
                     onClick={() => openEditCompetenceModal(comp)}
@@ -390,16 +381,6 @@ export default function CompetenceAdminPage() {
                   value={groupForm.description}
                   onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
                   data-testid="input-group-description"
-                />
-              </div>
-              <div className="hr-form-field">
-                <label className="hr-form-label">Sort Order</label>
-                <input
-                  type="number"
-                  className="hr-input"
-                  value={groupForm.sort_order}
-                  onChange={(e) => setGroupForm({ ...groupForm, sort_order: parseInt(e.target.value) || 0 })}
-                  data-testid="input-group-sort-order"
                 />
               </div>
             </div>
@@ -478,16 +459,6 @@ export default function CompetenceAdminPage() {
                   data-testid="checkbox-safety-critical"
                 />
                 <label htmlFor="is_safety_critical" className="hr-form-label">Safety Critical</label>
-              </div>
-              <div className="hr-form-field hr-form-field--inline">
-                <input
-                  type="checkbox"
-                  id="active"
-                  checked={competenceForm.active}
-                  onChange={(e) => setCompetenceForm({ ...competenceForm, active: e.target.checked })}
-                  data-testid="checkbox-active"
-                />
-                <label htmlFor="active" className="hr-form-label">Active</label>
               </div>
             </div>
             <div className="hr-modal__footer">

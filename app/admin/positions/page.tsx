@@ -27,7 +27,6 @@ export default function PositionsAdminPage() {
     description: "",
     site: "",
     department: "",
-    min_headcount: 1,
   });
 
   useEffect(() => {
@@ -51,7 +50,7 @@ export default function PositionsAdminPage() {
 
   function openNewModal() {
     setEditingPosition(null);
-    setForm({ name: "", description: "", site: "", department: "", min_headcount: 1 });
+    setForm({ name: "", description: "", site: "", department: "" });
     setShowModal(true);
   }
 
@@ -62,7 +61,6 @@ export default function PositionsAdminPage() {
       description: pos.description || "",
       site: pos.site || "",
       department: pos.department || "",
-      min_headcount: pos.min_headcount || 1,
     });
     setShowModal(true);
   }
@@ -74,7 +72,6 @@ export default function PositionsAdminPage() {
         description: form.description || null,
         site: form.site || null,
         department: form.department || null,
-        min_headcount: form.min_headcount,
       };
       if (editingPosition) {
         await updatePosition(editingPosition.id, payload);
@@ -160,7 +157,6 @@ export default function PositionsAdminPage() {
                 <tr>
                   <th>Position</th>
                   <th>Department</th>
-                  <th>Min Headcount</th>
                   <th style={{ width: 150 }}>Actions</th>
                 </tr>
               </thead>
@@ -174,7 +170,6 @@ export default function PositionsAdminPage() {
                       )}
                     </td>
                     <td>{pos.department || "-"}</td>
-                    <td>{pos.min_headcount || "-"}</td>
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <Link href={`/admin/positions/${pos.id}/requirements`}>
@@ -264,17 +259,6 @@ export default function PositionsAdminPage() {
                     data-testid="input-position-department"
                   />
                 </div>
-              </div>
-              <div className="hr-form-field">
-                <label className="hr-form-label">Minimum Headcount</label>
-                <input
-                  type="number"
-                  className="hr-input"
-                  value={form.min_headcount}
-                  onChange={(e) => setForm({ ...form, min_headcount: parseInt(e.target.value) || 1 })}
-                  min={1}
-                  data-testid="input-position-headcount"
-                />
               </div>
             </div>
             <div className="hr-modal__footer">

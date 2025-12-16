@@ -4,7 +4,6 @@ export type CompetenceGroup = {
   id: string;
   name: string;
   description: string | null;
-  sort_order: number;
 };
 
 export type Competence = {
@@ -14,7 +13,6 @@ export type Competence = {
   name: string;
   description: string | null;
   is_safety_critical: boolean;
-  active: boolean;
 };
 
 export type PositionAdmin = {
@@ -23,7 +21,6 @@ export type PositionAdmin = {
   description: string | null;
   site: string | null;
   department: string | null;
-  min_headcount: number | null;
 };
 
 export type PositionRequirementAdmin = {
@@ -32,7 +29,6 @@ export type PositionRequirementAdmin = {
   competence_id: string;
   required_level: number;
   mandatory: boolean;
-  notes: string | null;
 };
 
 export type PositionRequirementWithCompetence = PositionRequirementAdmin & {
@@ -44,8 +40,8 @@ export type PositionRequirementWithCompetence = PositionRequirementAdmin & {
 export async function getCompetenceGroups(): Promise<CompetenceGroup[]> {
   const { data, error } = await supabase
     .from("competence_groups")
-    .select("id, name, description, sort_order")
-    .order("sort_order", { ascending: true });
+    .select("id, name, description")
+    .order("name", { ascending: true });
 
   if (error) throw error;
   return data || [];
@@ -91,7 +87,7 @@ export async function deleteCompetenceGroup(id: string): Promise<void> {
 export async function getCompetences(): Promise<Competence[]> {
   const { data, error } = await supabase
     .from("competences")
-    .select("id, group_id, code, name, description, is_safety_critical, active")
+    .select("id, group_id, code, name, description, is_safety_critical")
     .order("name", { ascending: true });
 
   if (error) throw error;
@@ -101,7 +97,7 @@ export async function getCompetences(): Promise<Competence[]> {
 export async function getCompetencesByGroup(groupId: string): Promise<Competence[]> {
   const { data, error } = await supabase
     .from("competences")
-    .select("id, group_id, code, name, description, is_safety_critical, active")
+    .select("id, group_id, code, name, description, is_safety_critical")
     .eq("group_id", groupId)
     .order("name", { ascending: true });
 
@@ -149,7 +145,7 @@ export async function deleteCompetence(id: string): Promise<void> {
 export async function getPositions(): Promise<PositionAdmin[]> {
   const { data, error } = await supabase
     .from("positions")
-    .select("id, name, description, site, department, min_headcount")
+    .select("id, name, description, site, department")
     .order("name", { ascending: true });
 
   if (error) throw error;
@@ -159,7 +155,7 @@ export async function getPositions(): Promise<PositionAdmin[]> {
 export async function getPosition(id: string): Promise<PositionAdmin | null> {
   const { data, error } = await supabase
     .from("positions")
-    .select("id, name, description, site, department, min_headcount")
+    .select("id, name, description, site, department")
     .eq("id", id)
     .single();
 
@@ -218,7 +214,6 @@ export async function getPositionRequirements(
       competence_id,
       required_level,
       mandatory,
-      notes,
       competences (
         name,
         code,
@@ -237,7 +232,6 @@ export async function getPositionRequirements(
     competence_id: row.competence_id,
     required_level: row.required_level,
     mandatory: row.mandatory,
-    notes: row.notes,
     competence_name: row.competences?.name || "Unknown",
     competence_code: row.competences?.code || null,
     group_name: row.competences?.competence_groups?.name || null,
