@@ -16,7 +16,8 @@ export async function enqueueDueEventNotifications(referenceDate: Date): Promise
   let count = 0;
 
   for (const event of events) {
-    const employee = event.employees as { name: string; email: string } | null;
+    const employeesArr = event.employees as { name: string; email: string }[] | null;
+    const employee = employeesArr?.[0] ?? null;
     const toEmail = employee?.email;
 
     if (!toEmail) continue;
