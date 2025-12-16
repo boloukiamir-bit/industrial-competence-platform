@@ -1,45 +1,6 @@
-import { supabase } from "@/lib/supabaseClient";
+Add functions:
 
-export type CompetenceGroup = {
-  id: string;
-  name: string;
-  description: string | null;
-  sort_order?: number;
-};
-
-export type Competence = {
-  id: string;
-  group_id: string | null;
-  code: string | null;
-  name: string;
-  description: string | null;
-  is_safety_critical: boolean;
-  active: boolean;
-};
-
-export type PositionAdmin = {
-  id: string;
-  name: string;
-  description: string | null;
-  site: string | null;
-  department: string | null;
-  // Note: min_headcount exists in DB but Supabase schema cache doesn't recognize it
-  // min_headcount: number | null;
-};
-
-export type PositionRequirementAdmin = {
-  id: string;
-  competence_id: string;
-  required_level: number;
-  mandatory: boolean;
-  notes?: string | null;
-};
-
-export type PositionRequirementWithCompetence = PositionRequirementAdmin & {
-  competence_name: string;
-  competence_code: string | null;
-  group_name: string | null;
-};
+Competence groups & competences
 
 export async function listCompetenceGroups(): Promise<CompetenceGroup[]> {
   const { data, error } = await supabase
@@ -77,15 +38,6 @@ export async function updateCompetenceGroup(id: string, payload: {
   if (error) throw error;
 }
 
-export async function deleteCompetenceGroup(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("competence_groups")
-    .delete()
-    .eq("id", id);
-
-  if (error) throw error;
-}
-
 export async function listCompetences(): Promise<Competence[]> {
   const { data, error } = await supabase
     .from('competences')
@@ -96,17 +48,6 @@ export async function listCompetences(): Promise<Competence[]> {
 
   if (error) throw error;
   return (data ?? []) as Competence[];
-}
-
-export async function getCompetencesByGroup(groupId: string): Promise<Competence[]> {
-  const { data, error } = await supabase
-    .from("competences")
-    .select("id, group_id, code, name, description, is_safety_critical, active")
-    .eq("group_id", groupId)
-    .order("name", { ascending: true });
-
-  if (error) throw error;
-  return data || [];
 }
 
 export async function createCompetence(payload: {
@@ -144,19 +85,13 @@ export async function updateCompetence(id: string, payload: {
   if (error) throw error;
 }
 
-export async function deleteCompetence(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("competences")
-    .delete()
-    .eq("id", id);
 
-  if (error) throw error;
-}
+Positions & requirements
 
 export async function listPositions(): Promise<PositionAdmin[]> {
   const { data, error } = await supabase
     .from('positions')
-    .select('id, name, description, site, department')
+    .select('id, name, description, site, department, min_headcount')
     .order('name', { ascending: true });
 
   if (error) throw error;
@@ -168,12 +103,13 @@ export async function getPositionById(
 ): Promise<PositionAdmin | null> {
   const { data, error } = await supabase
     .from('positions')
-    .select('id, name, description, site, department')
+    .select('id, name, description, site, department, min_headcount')
     .eq('id', id)
     .single();
 
   if (error) {
     if ((error as any).code === 'PGRST116') {
+      // no rows
       return null;
     }
     throw error;
@@ -186,12 +122,17 @@ export async function createPosition(payload: {
   description?: string;
   site?: string;
   department?: string;
+  min_headcount?: number | null;
 }): Promise<void> {
   const { error } = await supabase.from('positions').insert({
     name: payload.name,
     description: payload.description ?? null,
     site: payload.site ?? null,
     department: payload.department ?? null,
+    min_headcount:
+      typeof payload.min_headcount === 'number'
+        ? payload.min_headcount
+        : null,
   });
 
   if (error) throw error;
@@ -202,20 +143,12 @@ export async function updatePosition(id: string, payload: {
   description?: string | null;
   site?: string | null;
   department?: string | null;
+  min_headcount?: number | null;
 }): Promise<void> {
   const { error } = await supabase
     .from('positions')
     .update(payload)
     .eq('id', id);
-
-  if (error) throw error;
-}
-
-export async function deletePosition(id: string): Promise<void> {
-  const { error } = await supabase
-    .from("positions")
-    .delete()
-    .eq("id", id);
 
   if (error) throw error;
 }
@@ -233,41 +166,6 @@ export async function listPositionRequirements(
 
   if (error) throw error;
   return (data ?? []) as PositionRequirementAdmin[];
-}
-
-export async function getPositionRequirements(
-  positionId: string
-): Promise<PositionRequirementWithCompetence[]> {
-  const { data, error } = await supabase
-    .from("position_competence_requirements")
-    .select(`
-      id,
-      competence_id,
-      required_level,
-      mandatory,
-      notes,
-      competences (
-        name,
-        code,
-        competence_groups (
-          name
-        )
-      )
-    `)
-    .eq("position_id", positionId);
-
-  if (error) throw error;
-
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    competence_id: row.competence_id,
-    required_level: row.required_level,
-    mandatory: row.mandatory,
-    notes: row.notes,
-    competence_name: row.competences?.name || "Unknown",
-    competence_code: row.competences?.code || null,
-    group_name: row.competences?.competence_groups?.name || null,
-  }));
 }
 
 export async function createPositionRequirement(payload: {
@@ -314,9 +212,3 @@ export async function deletePositionRequirement(id: string): Promise<void> {
 
   if (error) throw error;
 }
-
-// Legacy aliases for backward compatibility
-export const getCompetenceGroups = listCompetenceGroups;
-export const getCompetences = listCompetences;
-export const getPositions = listPositions;
-export const getPosition = getPositionById;

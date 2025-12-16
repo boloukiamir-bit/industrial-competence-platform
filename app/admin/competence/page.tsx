@@ -102,7 +102,7 @@ export default function CompetenceAdminPage() {
       } else {
         await createCompetenceGroup({
           name: groupForm.name,
-          description: groupForm.description || null,
+          description: groupForm.description || undefined,
         });
       }
       setShowGroupModal(false);
@@ -150,17 +150,22 @@ export default function CompetenceAdminPage() {
 
   async function handleSaveCompetence() {
     try {
-      const payload = {
-        group_id: competenceForm.group_id || null,
-        code: competenceForm.code || null,
-        name: competenceForm.name,
-        description: competenceForm.description || null,
-        is_safety_critical: competenceForm.is_safety_critical,
-      };
       if (editingCompetence) {
-        await updateCompetence(editingCompetence.id, payload);
+        await updateCompetence(editingCompetence.id, {
+          group_id: competenceForm.group_id || null,
+          code: competenceForm.code || null,
+          name: competenceForm.name,
+          description: competenceForm.description || null,
+          is_safety_critical: competenceForm.is_safety_critical,
+        });
       } else {
-        await createCompetence(payload);
+        await createCompetence({
+          name: competenceForm.name,
+          code: competenceForm.code || undefined,
+          group_id: competenceForm.group_id || null,
+          description: competenceForm.description || undefined,
+          is_safety_critical: competenceForm.is_safety_critical,
+        });
       }
       setShowCompetenceModal(false);
       loadData();

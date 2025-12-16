@@ -163,10 +163,20 @@ __turbopack_context__.s([
     ()=>getCompetencesByGroup,
     "getPosition",
     ()=>getPosition,
+    "getPositionById",
+    ()=>getPositionById,
     "getPositionRequirements",
     ()=>getPositionRequirements,
     "getPositions",
     ()=>getPositions,
+    "listCompetenceGroups",
+    ()=>listCompetenceGroups,
+    "listCompetences",
+    ()=>listCompetences,
+    "listPositionRequirements",
+    ()=>listPositionRequirements,
+    "listPositions",
+    ()=>listPositions,
     "updateCompetence",
     ()=>updateCompetence,
     "updateCompetenceGroup",
@@ -178,91 +188,111 @@ __turbopack_context__.s([
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/supabaseClient.ts [app-client] (ecmascript)");
 ;
-async function getCompetenceGroups() {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competence_groups").select("id, name, description").order("name", {
+async function listCompetenceGroups() {
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('competence_groups').select('id, name, description, sort_order').order('sort_order', {
+        ascending: true
+    }).order('name', {
         ascending: true
     });
     if (error) throw error;
-    return data || [];
+    return data ?? [];
 }
-async function createCompetenceGroup(group) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competence_groups").insert(group).select().single();
+async function createCompetenceGroup(payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('competence_groups').insert({
+        name: payload.name,
+        description: payload.description ?? null
+    });
     if (error) throw error;
-    return data;
 }
-async function updateCompetenceGroup(id, updates) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competence_groups").update(updates).eq("id", id).select().single();
+async function updateCompetenceGroup(id, payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('competence_groups').update(payload).eq('id', id);
     if (error) throw error;
-    return data;
 }
 async function deleteCompetenceGroup(id) {
     const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competence_groups").delete().eq("id", id);
     if (error) throw error;
 }
-async function getCompetences() {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competences").select("id, group_id, code, name, description, is_safety_critical").order("name", {
+async function listCompetences() {
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('competences').select('id, group_id, code, name, description, is_safety_critical, active').order('name', {
         ascending: true
     });
     if (error) throw error;
-    return data || [];
+    return data ?? [];
 }
 async function getCompetencesByGroup(groupId) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competences").select("id, group_id, code, name, description, is_safety_critical").eq("group_id", groupId).order("name", {
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competences").select("id, group_id, code, name, description, is_safety_critical, active").eq("group_id", groupId).order("name", {
         ascending: true
     });
     if (error) throw error;
     return data || [];
 }
-async function createCompetence(competence) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competences").insert(competence).select().single();
+async function createCompetence(payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('competences').insert({
+        name: payload.name,
+        code: payload.code ?? null,
+        group_id: payload.group_id ?? null,
+        description: payload.description ?? null,
+        is_safety_critical: payload.is_safety_critical ?? false,
+        active: true
+    });
     if (error) throw error;
-    return data;
 }
-async function updateCompetence(id, updates) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competences").update(updates).eq("id", id).select().single();
+async function updateCompetence(id, payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('competences').update(payload).eq('id', id);
     if (error) throw error;
-    return data;
 }
 async function deleteCompetence(id) {
     const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("competences").delete().eq("id", id);
     if (error) throw error;
 }
-async function getPositions() {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("positions").select("id, name, description, site, department").order("name", {
+async function listPositions() {
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').select('id, name, description, site, department').order('name', {
         ascending: true
     });
     if (error) throw error;
-    return data || [];
+    return data ?? [];
 }
-async function getPosition(id) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("positions").select("id, name, description, site, department").eq("id", id).single();
+async function getPositionById(id) {
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').select('id, name, description, site, department').eq('id', id).single();
     if (error) {
-        if (error.code === "PGRST116") return null;
+        if (error.code === 'PGRST116') {
+            return null;
+        }
         throw error;
     }
     return data;
 }
-async function createPosition(position) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("positions").insert(position).select().single();
+async function createPosition(payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').insert({
+        name: payload.name,
+        description: payload.description ?? null,
+        site: payload.site ?? null,
+        department: payload.department ?? null
+    });
     if (error) throw error;
-    return data;
 }
-async function updatePosition(id, updates) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("positions").update(updates).eq("id", id).select().single();
+async function updatePosition(id, payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').update(payload).eq('id', id);
     if (error) throw error;
-    return data;
 }
 async function deletePosition(id) {
     const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("positions").delete().eq("id", id);
     if (error) throw error;
 }
+async function listPositionRequirements(positionId) {
+    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('position_competence_requirements').select('id, competence_id, required_level, mandatory, notes').eq('position_id', positionId).order('required_level', {
+        ascending: false
+    });
+    if (error) throw error;
+    return data ?? [];
+}
 async function getPositionRequirements(positionId) {
     const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("position_competence_requirements").select(`
       id,
-      position_id,
       competence_id,
       required_level,
       mandatory,
+      notes,
       competences (
         name,
         code,
@@ -274,29 +304,37 @@ async function getPositionRequirements(positionId) {
     if (error) throw error;
     return (data || []).map((row)=>({
             id: row.id,
-            position_id: row.position_id,
             competence_id: row.competence_id,
             required_level: row.required_level,
             mandatory: row.mandatory,
+            notes: row.notes,
             competence_name: row.competences?.name || "Unknown",
             competence_code: row.competences?.code || null,
             group_name: row.competences?.competence_groups?.name || null
         }));
 }
-async function createPositionRequirement(requirement) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("position_competence_requirements").insert(requirement).select().single();
+async function createPositionRequirement(payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('position_competence_requirements').insert({
+        position_id: payload.position_id,
+        competence_id: payload.competence_id,
+        required_level: payload.required_level,
+        mandatory: payload.mandatory,
+        notes: payload.notes ?? null
+    });
     if (error) throw error;
-    return data;
 }
-async function updatePositionRequirement(id, updates) {
-    const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("position_competence_requirements").update(updates).eq("id", id).select().single();
+async function updatePositionRequirement(id, payload) {
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('position_competence_requirements').update(payload).eq('id', id);
     if (error) throw error;
-    return data;
 }
 async function deletePositionRequirement(id) {
-    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("position_competence_requirements").delete().eq("id", id);
+    const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('position_competence_requirements').delete().eq('id', id);
     if (error) throw error;
 }
+const getCompetenceGroups = listCompetenceGroups;
+const getCompetences = listCompetences;
+const getPositions = listPositions;
+const getPosition = getPositionById;
 if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
     __turbopack_context__.k.registerExports(__turbopack_context__.m, globalThis.$RefreshHelpers$);
 }
@@ -385,9 +423,9 @@ function PositionsAdminPage() {
         try {
             const payload = {
                 name: form.name,
-                description: form.description || null,
-                site: form.site || null,
-                department: form.department || null
+                description: form.description || undefined,
+                site: form.site || undefined,
+                department: form.department || undefined
             };
             if (editingPosition) {
                 await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$adminCompetence$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["updatePosition"])(editingPosition.id, payload);

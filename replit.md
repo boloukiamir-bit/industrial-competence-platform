@@ -37,5 +37,14 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - **Database Schema:** Designed with tables for employees, skills, reviews, salaries, equipment, person events, news, documents, GDPR logs, 1:1 meetings, organization units, absences, email outbox, and HR workflow instances.
 - **Date-Awareness:** Competence profile and position coverage analysis functions are designed to be date-aware, allowing for historical or future analysis.
 
+## Admin Console
+- **Competence Admin (/admin/competence):** CRUD for competence groups and competences
+- **Positions Admin (/admin/positions):** CRUD for positions
+- **Position Requirements (/admin/positions/[id]/requirements):** Manage competence requirements per position
+
+## Known Limitations
+- **Supabase Schema Cache:** The `min_headcount` column exists in the `positions` table but Supabase's PostgREST schema cache doesn't recognize it. This requires refreshing the schema cache through the Supabase dashboard (Database > API > Reload). The admin console currently excludes this field as a workaround.
+- **Supabase Schema Cache for other columns:** Same issue may affect `sort_order` on competence_groups and `active` on competences if the schema cache is stale.
+
 ## External Dependencies
-- **Supabase:** Used for database (PostgreSQL) and potentially authentication services.
+- **Supabase:** Used for database (PostgreSQL) and authentication services.

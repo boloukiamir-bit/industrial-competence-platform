@@ -69,9 +69,9 @@ export default function PositionsAdminPage() {
     try {
       const payload = {
         name: form.name,
-        description: form.description || null,
-        site: form.site || null,
-        department: form.department || null,
+        description: form.description || undefined,
+        site: form.site || undefined,
+        department: form.department || undefined,
       };
       if (editingPosition) {
         await updatePosition(editingPosition.id, payload);
