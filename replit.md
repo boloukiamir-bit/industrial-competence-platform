@@ -35,10 +35,13 @@ Enterprise-grade competency management platform for industrial organizations. Bu
 │       ├── handbooks/      # Digital handbooks (/app/handbooks)
 │       ├── news/           # News posts (/app/news)
 │       ├── documents/      # Document library (/app/documents)
+│       ├── one-to-ones/[id]/  # 1:1 meeting detail (/app/one-to-ones/:id)
+│       ├── org/overview/   # Organization chart (/app/org/overview)
+│       ├── hr/analytics/   # HR analytics dashboard (/app/hr/analytics)
 │       ├── pricing/        # Pricing page (/app/pricing)
 │       └── settings/       # Settings (/app/settings)
 ├── components/
-│   ├── ui/                 # UI primitives (Button, Card, Badge, Input, Select, Textarea)
+│   ├── ui/                 # UI primitives (Button, Card, Badge, Input, Select, Textarea, Switch, Progress, Tabs, Checkbox)
 │   ├── ManagerRiskCard.tsx # Risk event card component
 │   ├── RiskListSection.tsx # Risk list grouping component
 │   ├── WhatToFixSummary.tsx # Gap analysis summary component
@@ -59,7 +62,13 @@ Enterprise-grade competency management platform for industrial organizations. Bu
 │   ├── reviews.ts          # Performance reviews / medarbetarsamtal
 │   ├── salary.ts           # Salary records and revisions
 │   ├── certificates.ts     # Safety certificates tracking
-│   └── gdpr.ts             # GDPR access logging, data export, anonymization
+│   ├── gdpr.ts             # GDPR access logging, data export, anonymization
+│   ├── oneToOne.ts         # 1:1 meeting management
+│   ├── notifications.ts    # Email outbox and event notifications
+│   ├── org.ts              # Organization structure and hierarchy
+│   └── analytics.ts        # HR analytics and metrics
+├── lib/
+│   ├── auth.ts             # RBAC helpers and user management
 ├── public/                 # Static assets
 ├── supabase_schema.sql     # Database schema reference
 └── design_guidelines.md    # UI/UX design guidelines
@@ -179,3 +188,14 @@ npm run start  # Start production server
 - Added review_templates, employee_reviews, salary_records, salary_revisions tables
 - Added gdpr_access_logs table for audit trail
 - Updated navigation with Employees, Safety/Certificates, Handbooks
+
+### Latest (December 2024 - HR Expansion)
+- **1:1 Meetings System**: Full meeting lifecycle (plan, conduct, follow-up) with action items
+- **Notification Engine**: email_outbox table, cron endpoint for daily notifications
+- **Organization Overview**: Hierarchical org chart with org_units table
+- **HR Analytics Dashboard**: Workforce metrics (headcount, sick leave ratio, contract risks, skill gaps)
+- **Employee Person Hub Refactored**: Left-side navigation pattern (Huma-style) with all sections
+- **New UI Components**: Switch, Progress, Tabs, Checkbox
+- **New Services**: oneToOne.ts, notifications.ts, org.ts, analytics.ts, auth.ts (RBAC)
+- **New Types**: OneToOneMeeting, OneToOneAction, OrgUnit, HRAnalytics, User
+- **Database Expansion**: one_to_one_meetings, one_to_one_actions, org_units, absences, email_outbox, users tables

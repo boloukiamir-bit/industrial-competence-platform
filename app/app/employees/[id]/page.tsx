@@ -19,8 +19,13 @@ import {
   Plus,
   Download,
   Shield,
+  MessageSquare,
+  Building2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import type {
   Employee,
   EmployeeSkill,
@@ -30,8 +35,12 @@ import type {
   EmployeeReview,
   SalaryRecord,
   SalaryRevision,
+  OneToOneMeeting,
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
+import { getMeetingsForEmployee } from "@/services/oneToOne";
+
+type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "one-to-ones" | "documents" | "events" | "equipment";
 
 type EmployeeData = {
   employee: Employee | null;
@@ -42,7 +51,20 @@ type EmployeeData = {
   reviews: EmployeeReview[];
   currentSalary: SalaryRecord | null;
   salaryRevisions: SalaryRevision[];
+  meetings: OneToOneMeeting[];
 };
+
+function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3" data-testid={`info-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+      <Icon className="h-4 w-4 text-muted-foreground mt-0.5" />
+      <div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="font-medium">{value}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function EmployeeDetailPage() {
   const params = useParams();
@@ -58,11 +80,10 @@ export default function EmployeeDetailPage() {
     reviews: [],
     currentSalary: null,
     salaryRevisions: [],
+    meetings: [],
   });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<
-    "personal" | "employment" | "competence" | "events" | "documents" | "equipment" | "reviews" | "salary"
-  >("personal");
+  const [activeTab, setActiveTab] = useState<TabId>("personal");
 
   useEffect(() => {
     async function loadData() {
@@ -75,6 +96,7 @@ export default function EmployeeDetailPage() {
         reviewsRes,
         salaryRes,
         revisionsRes,
+        meetingsData,
       ] = await Promise.all([
         supabase.from("employees").select("*, manager:manager_id(name)").eq("id", id).single(),
         supabase.from("employee_skills").select("*, skills(*)").eq("employee_id", id),
@@ -84,6 +106,7 @@ export default function EmployeeDetailPage() {
         supabase.from("employee_reviews").select("*, manager:manager_id(name), template:template_id(name)").eq("employee_id", id).order("review_date", { ascending: false }),
         supabase.from("salary_records").select("*").eq("employee_id", id).order("effective_from", { ascending: false }).limit(1),
         supabase.from("salary_revisions").select("*, manager:decided_by_manager_id(name)").eq("employee_id", id).order("revision_date", { ascending: false }),
+        getMeetingsForEmployee(id),
       ]);
 
       if (employeeRes.data) {
@@ -95,6 +118,8 @@ export default function EmployeeDetailPage() {
       }
 
       const empData = employeeRes.data;
+      const managerData = empData?.manager as { name: string } | null;
+      
       setData({
         employee: empData
           ? {
@@ -113,7 +138,7 @@ export default function EmployeeDetailPage() {
               startDate: empData.start_date || undefined,
               contractEndDate: empData.contract_end_date || undefined,
               managerId: empData.manager_id || undefined,
-              managerName: empData.manager?.name || undefined,
+              managerName: managerData?.name || undefined,
               address: empData.address || undefined,
               city: empData.city || undefined,
               postalCode: empData.postal_code || undefined,
@@ -121,14 +146,17 @@ export default function EmployeeDetailPage() {
               isActive: empData.is_active ?? true,
             }
           : null,
-        skills: (skillsRes.data || []).map((row) => ({
-          employeeId: row.employee_id,
-          skillId: row.skill_id,
-          level: row.level,
-          skillName: row.skills?.name,
-          skillCode: row.skills?.code,
-          skillCategory: row.skills?.category,
-        })),
+        skills: (skillsRes.data || []).map((row) => {
+          const skill = row.skills as { name: string; code: string; category: string } | null;
+          return {
+            employeeId: row.employee_id,
+            skillId: row.skill_id,
+            level: row.level,
+            skillName: skill?.name,
+            skillCode: skill?.code,
+            skillCategory: skill?.category,
+          };
+        }),
         events: (eventsRes.data || []).map((row) => ({
           id: row.id,
           employeeId: row.employee_id,
@@ -151,33 +179,40 @@ export default function EmployeeDetailPage() {
           createdAt: row.created_at,
           validTo: row.valid_to,
         })),
-        equipment: (equipRes.data || []).map((row) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          equipmentId: row.equipment_id,
-          equipmentName: row.equipment?.name,
-          serialNumber: row.equipment?.serial_number,
-          assignedDate: row.assigned_date,
-          returnDate: row.return_date,
-          status: row.status,
-        })),
-        reviews: (reviewsRes.data || []).map((row) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          managerId: row.manager_id,
-          managerName: row.manager?.name,
-          templateId: row.template_id,
-          templateName: row.template?.name,
-          reviewDate: row.review_date,
-          periodStart: row.period_start,
-          periodEnd: row.period_end,
-          overallRating: row.overall_rating,
-          summary: row.summary,
-          goals: row.goals,
-          notes: row.notes,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        })),
+        equipment: (equipRes.data || []).map((row) => {
+          const equip = row.equipment as { name: string; serial_number: string } | null;
+          return {
+            id: row.id,
+            employeeId: row.employee_id,
+            equipmentId: row.equipment_id,
+            equipmentName: equip?.name,
+            serialNumber: equip?.serial_number,
+            assignedDate: row.assigned_date,
+            returnDate: row.return_date,
+            status: row.status,
+          };
+        }),
+        reviews: (reviewsRes.data || []).map((row) => {
+          const manager = row.manager as { name: string } | null;
+          const template = row.template as { name: string } | null;
+          return {
+            id: row.id,
+            employeeId: row.employee_id,
+            managerId: row.manager_id,
+            managerName: manager?.name,
+            templateId: row.template_id,
+            templateName: template?.name,
+            reviewDate: row.review_date,
+            periodStart: row.period_start,
+            periodEnd: row.period_end,
+            overallRating: row.overall_rating,
+            summary: row.summary,
+            goals: row.goals,
+            notes: row.notes,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          };
+        }),
         currentSalary:
           salaryRes.data && salaryRes.data.length > 0
             ? {
@@ -192,19 +227,23 @@ export default function EmployeeDetailPage() {
                 createdBy: salaryRes.data[0].created_by || undefined,
               }
             : null,
-        salaryRevisions: (revisionsRes.data || []).map((row) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          revisionDate: row.revision_date,
-          previousSalarySek: parseFloat(row.previous_salary_sek) || 0,
-          newSalarySek: parseFloat(row.new_salary_sek) || 0,
-          salaryType: row.salary_type || "monthly",
-          reason: row.reason || undefined,
-          decidedByManagerId: row.decided_by_manager_id || undefined,
-          decidedByManagerName: row.manager?.name || undefined,
-          documentId: row.document_id,
-          createdAt: row.created_at,
-        })),
+        salaryRevisions: (revisionsRes.data || []).map((row) => {
+          const manager = row.manager as { name: string } | null;
+          return {
+            id: row.id,
+            employeeId: row.employee_id,
+            revisionDate: row.revision_date,
+            previousSalarySek: parseFloat(row.previous_salary_sek) || 0,
+            newSalarySek: parseFloat(row.new_salary_sek) || 0,
+            salaryType: row.salary_type || "monthly",
+            reason: row.reason || undefined,
+            decidedByManagerId: row.decided_by_manager_id || undefined,
+            decidedByManagerName: manager?.name || undefined,
+            documentId: row.document_id,
+            createdAt: row.created_at,
+          };
+        }),
+        meetings: meetingsData,
       });
       setLoading(false);
     }
@@ -227,8 +266,8 @@ export default function EmployeeDetailPage() {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48" />
-          <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-8 bg-muted rounded w-48" />
+          <div className="h-64 bg-muted rounded" />
         </div>
       </div>
     );
@@ -237,29 +276,28 @@ export default function EmployeeDetailPage() {
   if (!data.employee) {
     return (
       <div className="p-6">
-        <p className="text-gray-500 dark:text-gray-400">Employee not found</p>
-        <Link
-          href="/app/employees"
-          className="text-blue-600 dark:text-blue-400 hover:underline mt-2 inline-block"
-        >
+        <p className="text-muted-foreground">Employee not found</p>
+        <Link href="/app/employees" className="text-primary hover:underline mt-2 inline-block">
           Back to employees
         </Link>
       </div>
     );
   }
 
-  const { employee, skills, events, documents, equipment, reviews, currentSalary, salaryRevisions } = data;
+  const { employee, skills, events, documents, equipment, reviews, currentSalary, salaryRevisions, meetings } = data;
 
-  const tabs = [
-    { id: "personal", label: "Personal Info", icon: User },
-    { id: "employment", label: "Employment", icon: Briefcase },
-    { id: "competence", label: "Competence", icon: Star },
-    { id: "events", label: "Events", icon: AlertTriangle, count: events.filter((e) => e.status !== "completed").length },
+  const navItems: { id: TabId; label: string; icon: React.ElementType; count?: number }[] = [
+    { id: "personal", label: "Personal Data", icon: User },
+    { id: "contact", label: "Contact Information", icon: Mail },
+    { id: "organisation", label: "Organisation", icon: Building2 },
+    { id: "employment", label: "Job & Employment", icon: Briefcase },
+    { id: "compensation", label: "Compensation", icon: Banknote },
+    { id: "competence", label: "Competence", icon: Star, count: skills.length },
+    { id: "one-to-ones", label: "1:1 / Medarbetarsamtal", icon: MessageSquare, count: meetings.length },
     { id: "documents", label: "Documents", icon: FileText, count: documents.length },
+    { id: "events", label: "People Risk & Tasks", icon: AlertTriangle, count: events.filter((e) => e.status !== "completed").length },
     { id: "equipment", label: "Equipment", icon: Package, count: equipment.length },
-    { id: "reviews", label: "Reviews", icon: Star, count: reviews.length },
-    { id: "salary", label: "Salary", icon: Banknote },
-  ] as const;
+  ];
 
   const levelLabels = ["Not trained", "In training", "Can assist", "Trained", "Can train others"];
 
@@ -273,398 +311,389 @@ export default function EmployeeDetailPage() {
     equipment: "Equipment",
   };
 
-  const statusColors: Record<string, string> = {
-    upcoming: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    due_soon: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    overdue: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+    upcoming: "outline",
+    due_soon: "default",
+    overdue: "destructive",
+    completed: "secondary",
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => router.push("/app/employees")}
-          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
-          data-testid="button-back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-            {employee.name}
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {employee.employeeNumber} &middot; {employee.role || "No role"} &middot;{" "}
-            {employee.line || "No line"}
-          </p>
+    <div className="flex h-full">
+      <aside className="w-64 border-r bg-muted/30 p-4 flex flex-col">
+        <div className="mb-6">
+          <Button variant="ghost" size="sm" onClick={() => router.push("/app/employees")} data-testid="button-back">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
         </div>
-        <button
-          onClick={handleExportData}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          data-testid="button-export-gdpr"
-        >
-          <Shield className="h-4 w-4" />
-          Export Data (GDPR)
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                activeTab === tab.id
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-              }`}
-              data-testid={`tab-${tab.id}`}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-              {"count" in tab && tab.count > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        {activeTab === "personal" && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Personal Information
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoRow icon={User} label="Full Name" value={employee.name} />
-              <InfoRow icon={User} label="Employee Number" value={employee.employeeNumber} />
-              <InfoRow icon={Mail} label="Email" value={employee.email || "-"} />
-              <InfoRow icon={Phone} label="Phone" value={employee.phone || "-"} />
-              <InfoRow icon={Calendar} label="Date of Birth" value={employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : "-"} />
-              <InfoRow icon={MapPin} label="Address" value={employee.address || "-"} />
-              <InfoRow icon={MapPin} label="City" value={employee.city || "-"} />
-              <InfoRow icon={MapPin} label="Postal Code" value={employee.postalCode || "-"} />
-              <InfoRow icon={MapPin} label="Country" value={employee.country || "Sweden"} />
+        
+        <div className="mb-6 px-2">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <User className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold" data-testid="text-employee-name">{employee.name}</h2>
+              <p className="text-sm text-muted-foreground">{employee.role || "No role"}</p>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground px-1">{employee.employeeNumber}</p>
+        </div>
+
+        <nav className="flex-1 space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover-elevate"
+                }`}
+                data-testid={`nav-${item.id}`}
+              >
+                <span className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </span>
+                {item.count !== undefined && item.count > 0 && (
+                  <Badge variant={isActive ? "secondary" : "outline"} className="text-xs">
+                    {item.count}
+                  </Badge>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mt-4 pt-4 border-t">
+          <Button variant="outline" size="sm" className="w-full" onClick={handleExportData} data-testid="button-export-gdpr">
+            <Shield className="h-4 w-4 mr-2" />
+            Export Data (GDPR)
+          </Button>
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-auto p-6">
+        {activeTab === "personal" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Personal Data</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <InfoRow icon={User} label="Full Name" value={employee.name} />
+                <InfoRow icon={User} label="First Name" value={employee.firstName || "-"} />
+                <InfoRow icon={User} label="Last Name" value={employee.lastName || "-"} />
+                <InfoRow icon={Calendar} label="Date of Birth" value={employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString("sv-SE") : "-"} />
+                <InfoRow icon={User} label="Employee Number" value={employee.employeeNumber} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "contact" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Contact Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <InfoRow icon={Mail} label="Email" value={employee.email || "-"} />
+                <InfoRow icon={Phone} label="Phone" value={employee.phone || "-"} />
+                <InfoRow icon={MapPin} label="Address" value={employee.address || "-"} />
+                <InfoRow icon={MapPin} label="City" value={employee.city || "-"} />
+                <InfoRow icon={MapPin} label="Postal Code" value={employee.postalCode || "-"} />
+                <InfoRow icon={MapPin} label="Country" value={employee.country || "Sweden"} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "organisation" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Organisation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <InfoRow icon={Building2} label="Line" value={employee.line || "-"} />
+                <InfoRow icon={Building2} label="Team" value={employee.team || "-"} />
+                <InfoRow icon={User} label="Manager" value={employee.managerName || "-"} />
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {activeTab === "employment" && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Employment Information
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoRow icon={Briefcase} label="Employment Type" value={employee.employmentType} />
-              <InfoRow icon={Briefcase} label="Role" value={employee.role || "-"} />
-              <InfoRow icon={Briefcase} label="Line" value={employee.line || "-"} />
-              <InfoRow icon={Briefcase} label="Team" value={employee.team || "-"} />
-              <InfoRow icon={Calendar} label="Start Date" value={employee.startDate ? new Date(employee.startDate).toLocaleDateString() : "-"} />
-              <InfoRow icon={Calendar} label="Contract End Date" value={employee.contractEndDate ? new Date(employee.contractEndDate).toLocaleDateString() : "-"} />
-              <InfoRow icon={User} label="Manager" value={employee.managerName || "-"} />
-            </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Job & Employment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <InfoRow icon={Briefcase} label="Role" value={employee.role || "-"} />
+                <InfoRow icon={Briefcase} label="Employment Type" value={employee.employmentType} />
+                <InfoRow icon={Calendar} label="Start Date" value={employee.startDate ? new Date(employee.startDate).toLocaleDateString("sv-SE") : "-"} />
+                <InfoRow icon={Calendar} label="Contract End Date" value={employee.contractEndDate ? new Date(employee.contractEndDate).toLocaleDateString("sv-SE") : "-"} />
+                <InfoRow icon={User} label="Status" value={employee.isActive ? "Active" : "Inactive"} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "compensation" && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <CardTitle>Current Salary</CardTitle>
+                <Link href={`/app/employees/${id}/salary/new`}>
+                  <Button size="sm" data-testid="button-new-salary">
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Revision
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {currentSalary ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Amount</p>
+                      <p className="text-2xl font-bold">{currentSalary.salaryAmountSek.toLocaleString("sv-SE")} SEK</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Type</p>
+                      <p className="font-medium capitalize">{currentSalary.salaryType}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Effective From</p>
+                      <p className="font-medium">{new Date(currentSalary.effectiveFrom).toLocaleDateString("sv-SE")}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No salary record</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Salary History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {salaryRevisions.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No salary revisions</p>
+                ) : (
+                  <div className="space-y-3">
+                    {salaryRevisions.map((rev) => (
+                      <div key={rev.id} className="flex items-center justify-between p-3 border rounded-md">
+                        <div>
+                          <p className="font-medium">
+                            {rev.previousSalarySek.toLocaleString("sv-SE")} → {rev.newSalarySek.toLocaleString("sv-SE")} SEK
+                          </p>
+                          <p className="text-sm text-muted-foreground">{rev.reason || "No reason"}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm">{new Date(rev.revisionDate).toLocaleDateString("sv-SE")}</p>
+                          {rev.decidedByManagerName && (
+                            <p className="text-xs text-muted-foreground">by {rev.decidedByManagerName}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
 
         {activeTab === "competence" && (
-          <div>
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Competence Summary
-            </h2>
-            {skills.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No skills recorded</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {skills.map((skill) => (
-                  <div
-                    key={skill.skillId}
-                    className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-gray-900 dark:text-white text-sm">
-                        {skill.skillName}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {skill.skillCode}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500"
-                          style={{ width: `${(skill.level / 4) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-600 dark:text-gray-300 w-20 text-right">
-                        {levelLabels[skill.level]}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "events" && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-                Person Events / Tasks
-              </h2>
-            </div>
-            {events.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No events</p>
-            ) : (
-              <div className="space-y-3">
-                {events.map((event) => (
-                  <div
-                    key={event.id}
-                    className="flex items-start gap-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          {event.title}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 text-xs rounded-full ${statusColors[event.status]}`}
-                        >
-                          {event.status.replace("_", " ")}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {categoryLabels[event.category]} &middot; Due:{" "}
-                        {new Date(event.dueDate).toLocaleDateString()}
-                        {event.completedDate && (
-                          <> &middot; Completed: {new Date(event.completedDate).toLocaleDateString()}</>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "documents" && (
-          <div>
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Documents
-            </h2>
-            {documents.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No documents attached</p>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md"
-                  >
-                    <FileText className="h-5 w-5 text-gray-400" />
-                    <div className="flex-1">
-                      <a
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        {doc.title}
-                      </a>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {doc.type} &middot; {new Date(doc.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "equipment" && (
-          <div>
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Assigned Equipment
-            </h2>
-            {equipment.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No equipment assigned</p>
-            ) : (
-              <div className="space-y-2">
-                {equipment.map((eq) => (
-                  <div
-                    key={eq.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md"
-                  >
-                    <Package className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{eq.equipmentName}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        SN: {eq.serialNumber} &middot; Assigned:{" "}
-                        {new Date(eq.assignedDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "reviews" && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-                Medarbetarsamtal & Development
-              </h2>
-              <Link
-                href={`/app/employees/${id}/reviews/new`}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
-                data-testid="button-new-review"
-              >
-                <Plus className="h-4 w-4" />
-                New Review
-              </Link>
-            </div>
-            {reviews.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No reviews yet</p>
-            ) : (
-              <div className="space-y-3">
-                {reviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-md"
-                  >
-                    <div className="flex items-start justify-between mb-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Competence</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {skills.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No competencies registered</p>
+              ) : (
+                <div className="space-y-3">
+                  {skills.map((skill) => (
+                    <div key={skill.skillId} className="flex items-center justify-between p-3 border rounded-md">
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {review.templateName || "Review"}
-                        </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {new Date(review.reviewDate).toLocaleDateString()} &middot; by{" "}
-                          {review.managerName || "Unknown"}
-                        </p>
+                        <p className="font-medium">{skill.skillName || "Unknown"}</p>
+                        <p className="text-sm text-muted-foreground">{skill.skillCategory || "Uncategorized"}</p>
                       </div>
-                      {review.overallRating && (
-                        <div className="flex items-center gap-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star
-                              key={star}
-                              className={`h-4 w-4 ${
-                                star <= review.overallRating!
-                                  ? "text-yellow-400 fill-yellow-400"
-                                  : "text-gray-300 dark:text-gray-600"
-                              }`}
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {[0, 1, 2, 3, 4].map((l) => (
+                            <div
+                              key={l}
+                              className={`w-3 h-3 rounded-full ${l <= skill.level ? "bg-primary" : "bg-muted"}`}
                             />
                           ))}
                         </div>
-                      )}
-                    </div>
-                    {review.summary && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
-                        {review.summary}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "salary" && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-                Salary & Revisions
-              </h2>
-              <Link
-                href={`/app/employees/${id}/salary/new`}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
-                data-testid="button-new-revision"
-              >
-                <Plus className="h-4 w-4" />
-                New Revision
-              </Link>
-            </div>
-
-            {currentSalary && (
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md mb-4">
-                <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Current Salary</p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                  {currentSalary.salaryAmountSek.toLocaleString("sv-SE")} SEK
-                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
-                    / {currentSalary.salaryType}
-                  </span>
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Effective from {new Date(currentSalary.effectiveFrom).toLocaleDateString()}
-                </p>
-              </div>
-            )}
-
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Revision History
-            </h3>
-            {salaryRevisions.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No revisions recorded</p>
-            ) : (
-              <div className="space-y-2">
-                {salaryRevisions.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500 dark:text-gray-400 line-through">
-                          {rev.previousSalarySek.toLocaleString("sv-SE")}
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          {rev.newSalarySek.toLocaleString("sv-SE")} SEK
+                        <span className="text-sm text-muted-foreground w-24 text-right">
+                          {levelLabels[skill.level]}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(rev.revisionDate).toLocaleDateString()}
-                        {rev.decidedByManagerName && <> &middot; by {rev.decidedByManagerName}</>}
-                        {rev.reason && <> &middot; {rev.reason}</>}
-                      </p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
-      </div>
-    </div>
-  );
-}
 
-function InfoRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <Icon className="h-5 w-5 text-gray-400 mt-0.5" />
-      <div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-        <p className="text-sm font-medium text-gray-900 dark:text-white">{value}</p>
-      </div>
+        {activeTab === "one-to-ones" && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <CardTitle>1:1 Meetings / Medarbetarsamtal</CardTitle>
+              <Link href={`/app/employees/${id}/one-to-ones`}>
+                <Button size="sm" data-testid="button-view-all-meetings">
+                  View All
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {meetings.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">No 1:1 meetings scheduled</p>
+                  <Link href={`/app/employees/${id}/one-to-ones`}>
+                    <Button data-testid="button-schedule-meeting">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Schedule Meeting
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {meetings.slice(0, 5).map((meeting) => (
+                    <Link key={meeting.id} href={`/app/one-to-ones/${meeting.id}`}>
+                      <div className="flex items-center justify-between p-3 border rounded-md hover-elevate cursor-pointer">
+                        <div>
+                          <p className="font-medium">{meeting.templateName || "1:1 Meeting"}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(meeting.scheduledAt).toLocaleDateString("sv-SE")} with {meeting.managerName}
+                          </p>
+                        </div>
+                        <Badge variant={statusVariants[meeting.status] || "outline"}>
+                          {meeting.status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "documents" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Documents</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {documents.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No documents</p>
+              ) : (
+                <div className="space-y-3">
+                  {documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-md">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{doc.title}</p>
+                          <p className="text-sm text-muted-foreground capitalize">{doc.type.replace("_", " ")}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {doc.validTo && (
+                          <span className="text-sm text-muted-foreground">
+                            Valid to: {new Date(doc.validTo).toLocaleDateString("sv-SE")}
+                          </span>
+                        )}
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                          <Button size="icon" variant="ghost">
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "events" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>People Risk & Tasks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {events.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No events or tasks</p>
+              ) : (
+                <div className="space-y-3">
+                  {events.map((event) => (
+                    <div key={event.id} className="flex items-center justify-between p-3 border rounded-md">
+                      <div>
+                        <p className="font-medium">{event.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {categoryLabels[event.category] || event.category} &middot; Due: {new Date(event.dueDate).toLocaleDateString("sv-SE")}
+                        </p>
+                      </div>
+                      <Badge variant={statusVariants[event.status] || "outline"}>
+                        {event.status.replace("_", " ")}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "equipment" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Equipment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {equipment.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No equipment assigned</p>
+              ) : (
+                <div className="space-y-3">
+                  {equipment.map((eq) => (
+                    <div key={eq.id} className="flex items-center justify-between p-3 border rounded-md">
+                      <div className="flex items-center gap-3">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{eq.equipmentName || "Unknown"}</p>
+                          <p className="text-sm text-muted-foreground">{eq.serialNumber}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="secondary">{eq.status}</Badge>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Assigned: {new Date(eq.assignedDate).toLocaleDateString("sv-SE")}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </main>
     </div>
   );
 }

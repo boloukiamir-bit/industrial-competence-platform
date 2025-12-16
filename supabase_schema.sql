@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS employees (
   city TEXT,
   postal_code TEXT,
   country TEXT DEFAULT 'Sweden',
+  org_unit_id UUID,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -34,6 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_employees_line ON employees(line);
 CREATE INDEX IF NOT EXISTS idx_employees_team ON employees(team);
 CREATE INDEX IF NOT EXISTS idx_employees_manager ON employees(manager_id);
 CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(email);
+CREATE INDEX IF NOT EXISTS idx_employees_org_unit ON employees(org_unit_id);
 
 -- 2. Skills table
 CREATE TABLE IF NOT EXISTS skills (
@@ -239,6 +241,106 @@ CREATE TABLE IF NOT EXISTS gdpr_access_logs (
 
 CREATE INDEX IF NOT EXISTS idx_gdpr_access_logs_employee ON gdpr_access_logs(employee_id);
 CREATE INDEX IF NOT EXISTS idx_gdpr_access_logs_accessed_at ON gdpr_access_logs(accessed_at DESC);
+
+-- 17. One-to-One Meetings (1:1 / Medarbetarsamtal)
+CREATE TABLE IF NOT EXISTS one_to_one_meetings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  manager_id UUID REFERENCES employees(id),
+  scheduled_at TIMESTAMPTZ NOT NULL,
+  duration_minutes SMALLINT,
+  location TEXT,
+  status TEXT DEFAULT 'planned' CHECK (status IN ('planned', 'in_progress', 'completed', 'cancelled')),
+  template_name TEXT,
+  shared_agenda TEXT,
+  employee_notes_private TEXT,
+  manager_notes_private TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_one_to_one_employee ON one_to_one_meetings(employee_id);
+CREATE INDEX IF NOT EXISTS idx_one_to_one_manager ON one_to_one_meetings(manager_id);
+CREATE INDEX IF NOT EXISTS idx_one_to_one_scheduled ON one_to_one_meetings(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_one_to_one_status ON one_to_one_meetings(status);
+
+-- 18. One-to-One Actions
+CREATE TABLE IF NOT EXISTS one_to_one_actions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  meeting_id UUID REFERENCES one_to_one_meetings(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  owner_type TEXT CHECK (owner_type IN ('employee', 'manager')),
+  is_completed BOOLEAN DEFAULT false,
+  due_date DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_one_to_one_actions_meeting ON one_to_one_actions(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_one_to_one_actions_due ON one_to_one_actions(due_date);
+
+-- 19. Email Outbox (Notification Engine)
+CREATE TABLE IF NOT EXISTS email_outbox (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  to_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  sent_at TIMESTAMPTZ,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+  error_message TEXT,
+  meta JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_outbox_status ON email_outbox(status);
+CREATE INDEX IF NOT EXISTS idx_email_outbox_created ON email_outbox(created_at DESC);
+
+-- 20. Org Units (Organization Structure)
+CREATE TABLE IF NOT EXISTS org_units (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  code TEXT,
+  parent_id UUID REFERENCES org_units(id),
+  type TEXT CHECK (type IN ('company', 'site', 'department', 'team', 'division', 'unit')),
+  manager_employee_id UUID REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_units_parent ON org_units(parent_id);
+CREATE INDEX IF NOT EXISTS idx_org_units_manager ON org_units(manager_employee_id);
+CREATE INDEX IF NOT EXISTS idx_org_units_type ON org_units(type);
+
+-- Add FK for employees.org_unit_id
+ALTER TABLE employees ADD CONSTRAINT fk_employees_org_unit 
+  FOREIGN KEY (org_unit_id) REFERENCES org_units(id) ON DELETE SET NULL;
+
+-- 21. Absences (for HR Analytics)
+CREATE TABLE IF NOT EXISTS absences (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  type TEXT CHECK (type IN ('sick', 'vacation', 'parental', 'leave', 'other')),
+  from_date DATE NOT NULL,
+  to_date DATE NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_absences_employee ON absences(employee_id);
+CREATE INDEX IF NOT EXISTS idx_absences_dates ON absences(from_date, to_date);
+CREATE INDEX IF NOT EXISTS idx_absences_type ON absences(type);
+
+-- 22. Users (for RBAC)
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'EMPLOYEE' CHECK (role IN ('HR_ADMIN', 'MANAGER', 'EMPLOYEE')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_employee ON users(employee_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 -- Seed default review templates
 INSERT INTO review_templates (name, description, audience, is_active)

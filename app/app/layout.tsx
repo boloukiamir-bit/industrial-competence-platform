@@ -15,12 +15,15 @@ import {
   FileText,
   DollarSign,
   BookOpen,
-  Shield
+  Shield,
+  Building2,
+  BarChart3
 } from "lucide-react";
 
 const navItems = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Employees", href: "/app/employees", icon: Users },
+  { name: "Organization", href: "/app/org/overview", icon: Building2 },
   { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
   { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: AlertTriangle },
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
@@ -29,6 +32,7 @@ const navItems = [
   { name: "Handbooks", href: "/app/handbooks", icon: BookOpen },
   { name: "Documents", href: "/app/documents", icon: FileText },
   { name: "News", href: "/app/news", icon: Newspaper },
+  { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3 },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload },
   { name: "Pricing", href: "/app/pricing", icon: DollarSign },
   { name: "Settings", href: "/app/settings", icon: Settings },

@@ -19,6 +19,7 @@ export type Employee = {
   city?: string;
   postalCode?: string;
   country?: string;
+  orgUnitId?: string;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -71,6 +72,7 @@ export type PersonEvent = {
   id: string;
   employeeId: string;
   employeeName?: string;
+  employeeEmail?: string;
   category: PersonEventCategory;
   title: string;
   description?: string;
@@ -78,6 +80,7 @@ export type PersonEvent = {
   completedDate?: string;
   recurrence?: string;
   ownerManagerId?: string;
+  ownerManagerEmail?: string;
   status: PersonEventStatus;
   notes?: string;
 };
@@ -220,4 +223,99 @@ export type CertificateInfo = {
   currentLevel: number;
   latestTrainingDate?: string;
   nextDueDate?: string;
+};
+
+export type OneToOneMeetingStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled';
+
+export type OneToOneMeeting = {
+  id: string;
+  employeeId: string;
+  employeeName?: string;
+  managerId?: string;
+  managerName?: string;
+  scheduledAt: string;
+  durationMinutes?: number;
+  location?: string;
+  status: OneToOneMeetingStatus;
+  templateName?: string;
+  sharedAgenda?: string;
+  employeeNotesPrivate?: string;
+  managerNotesPrivate?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type OneToOneActionOwner = 'employee' | 'manager';
+
+export type OneToOneAction = {
+  id: string;
+  meetingId: string;
+  description: string;
+  ownerType: OneToOneActionOwner;
+  isCompleted: boolean;
+  dueDate?: string;
+  createdAt: string;
+  completedAt?: string;
+};
+
+export type EmailOutboxStatus = 'pending' | 'sent' | 'failed';
+
+export type EmailOutbox = {
+  id: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+  createdAt: string;
+  sentAt?: string;
+  status: EmailOutboxStatus;
+  errorMessage?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type OrgUnitType = 'company' | 'site' | 'department' | 'team' | 'division' | 'unit';
+
+export type OrgUnit = {
+  id: string;
+  name: string;
+  code?: string;
+  parentId?: string;
+  type?: OrgUnitType;
+  managerEmployeeId?: string;
+  managerName?: string;
+  createdAt: string;
+  children?: OrgUnit[];
+  employees?: Employee[];
+  employeeCount?: number;
+};
+
+export type AbsenceType = 'sick' | 'vacation' | 'parental' | 'leave' | 'other';
+
+export type Absence = {
+  id: string;
+  employeeId: string;
+  type: AbsenceType;
+  fromDate: string;
+  toDate: string;
+  notes?: string;
+  createdAt: string;
+};
+
+export type AppRole = 'HR_ADMIN' | 'MANAGER' | 'EMPLOYEE';
+
+export type AppUser = {
+  id: string;
+  employeeId?: string;
+  email: string;
+  role: AppRole;
+  createdAt: string;
+};
+
+export type HRAnalytics = {
+  totalHeadcount: number;
+  headcountByOrgUnit: { orgUnitName: string; count: number }[];
+  headcountByEmploymentType: { type: string; count: number }[];
+  sickLeaveRatio: number;
+  temporaryContractsEndingSoon: number;
+  criticalEventsCount: { category: string; count: number }[];
+  skillDistribution: { skillName: string; levels: number[] }[];
 };
