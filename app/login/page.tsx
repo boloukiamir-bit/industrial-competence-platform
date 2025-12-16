@@ -42,7 +42,9 @@ export default function LoginPage() {
       let message = 'Failed to sign in.';
       if (error instanceof Error) {
         if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
-          message = 'Network error. Please check your internet connection and try again.';
+          message = 'Unable to connect to authentication service. Please try again in a moment.';
+        } else if (error.message.includes('placeholder')) {
+          message = 'Authentication service is not configured. Please contact support.';
         } else {
           message = error.message;
         }
