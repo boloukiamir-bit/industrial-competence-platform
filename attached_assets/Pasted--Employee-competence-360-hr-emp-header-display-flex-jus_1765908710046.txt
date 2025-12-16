@@ -1,0 +1,182 @@
+/* Employee competence 360 */
+
+.hr-emp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.hr-emp-header__badge {
+  display: flex;
+  align-items: center;
+}
+
+.hr-risk-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hr-risk-pill--low {
+  background: rgba(22, 163, 74, 0.25);
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.9);
+}
+
+.hr-risk-pill--medium {
+  background: rgba(202, 138, 4, 0.25);
+  color: #fef3c7;
+  border-color: rgba(245, 158, 11, 0.9);
+}
+
+.hr-risk-pill--high {
+  background: rgba(185, 28, 28, 0.25);
+  color: #fee2e2;
+  border-color: rgba(248, 113, 113, 0.95);
+}
+
+.hr-emp-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.hr-emp-summary-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: radial-gradient(circle at top left, #020617, #111827);
+  border: 1px solid rgba(55, 65, 81, 0.9);
+}
+
+.hr-emp-summary-label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.hr-emp-summary-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.hr-competence-section {
+  margin-top: 12px;
+}
+
+.hr-competence-table-wrapper {
+  margin-top: 10px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.hr-competence-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.hr-competence-table th,
+.hr-competence-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+  text-align: left;
+}
+
+.hr-competence-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+  background: rgba(15, 23, 42, 1);
+}
+
+.hr-competence-table tr:last-child td {
+  border-bottom: none;
+}
+
+.hr-competence-table tr:hover td {
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.hr-competence-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hr-competence-chip {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 250, 252, 0.3);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.7);
+}
+
+.hr-level-chip {
+  display: inline-flex;
+  min-width: 28px;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  font-size: 0.75rem;
+}
+
+.hr-level-chip--owned {
+  border-color: rgba(129, 140, 248, 0.9);
+}
+
+.hr-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid transparent;
+}
+
+.hr-status-badge--ok {
+  background: rgba(21, 128, 61, 0.35);
+  border-color: rgba(34, 197, 94, 0.9);
+  color: #bbf7d0;
+}
+
+.hr-status-badge--risk {
+  background: rgba(185, 28, 28, 0.35);
+  border-color: rgba(248, 113, 113, 0.95);
+  color: #fecaca;
+}
+
+.hr-status-badge--na {
+  background: rgba(31, 41, 55, 0.9);
+  border-color: rgba(75, 85, 99, 0.9);
+  color: #9ca3af;
+}
+
+.hr-status-reason {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.hr-button--dense {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+}
+
+.hr-action-message {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-bottom: 8px;
+}

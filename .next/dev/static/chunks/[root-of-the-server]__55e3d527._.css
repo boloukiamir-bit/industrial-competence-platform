@@ -3011,6 +3011,186 @@ body {
   font-size: .85rem;
 }
 
+.hr-emp-header {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+  display: flex;
+}
+
+.hr-emp-header__badge {
+  align-items: center;
+  display: flex;
+}
+
+.hr-risk-pill {
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  border: 1px solid #94a3b8cc;
+  border-radius: 999px;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: .75rem;
+  display: inline-flex;
+}
+
+.hr-risk-pill--low {
+  color: #bbf7d0;
+  background: #16a34a40;
+  border-color: #22c55ee6;
+}
+
+.hr-risk-pill--medium {
+  color: #fef3c7;
+  background: #ca8a0440;
+  border-color: #f59e0be6;
+}
+
+.hr-risk-pill--high {
+  color: #fee2e2;
+  background: #b91c1c40;
+  border-color: #f87171f2;
+}
+
+.hr-emp-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+  display: grid;
+}
+
+.hr-emp-summary-card {
+  background: radial-gradient(circle at 0 0, #020617, #111827);
+  border: 1px solid #374151e6;
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.hr-emp-summary-label {
+  color: #9ca3af;
+  margin-bottom: 4px;
+  font-size: .8rem;
+}
+
+.hr-emp-summary-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.hr-competence-section {
+  margin-top: 12px;
+}
+
+.hr-competence-table-wrapper {
+  background: #0f172ae6;
+  border: 1px solid #374151e6;
+  border-radius: 18px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.hr-competence-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: .85rem;
+}
+
+.hr-competence-table th, .hr-competence-table td {
+  text-align: left;
+  border-bottom: 1px solid #1f2937e6;
+  padding: 8px 10px;
+}
+
+.hr-competence-table th {
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #9ca3af;
+  background: #0f172a;
+  font-size: .8rem;
+}
+
+.hr-competence-table tr:last-child td {
+  border-bottom: none;
+}
+
+.hr-competence-table tr:hover td {
+  background: #0f172ae6;
+}
+
+.hr-competence-name {
+  align-items: center;
+  gap: 6px;
+  display: flex;
+}
+
+.hr-competence-chip {
+  color: #fecaca;
+  background: #7f1d1db3;
+  border: 1px solid #f8fafc4d;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: .7rem;
+}
+
+.hr-level-chip {
+  border: 1px solid #4b5563e6;
+  border-radius: 999px;
+  justify-content: center;
+  min-width: 28px;
+  padding: 2px 6px;
+  font-size: .75rem;
+  display: inline-flex;
+}
+
+.hr-level-chip--owned {
+  border-color: #818cf8e6;
+}
+
+.hr-status-badge {
+  border: 1px solid #0000;
+  border-radius: 999px;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: .75rem;
+  display: inline-flex;
+}
+
+.hr-status-badge--ok {
+  color: #bbf7d0;
+  background: #15803d59;
+  border-color: #22c55ee6;
+}
+
+.hr-status-badge--risk {
+  color: #fecaca;
+  background: #b91c1c59;
+  border-color: #f87171f2;
+}
+
+.hr-status-badge--na {
+  color: #9ca3af;
+  background: #1f2937e6;
+  border-color: #4b5563e6;
+}
+
+.hr-status-reason {
+  color: #9ca3af;
+  margin-top: 2px;
+  font-size: .7rem;
+}
+
+.hr-button--dense {
+  padding: 6px 10px;
+  font-size: .75rem;
+}
+
+.hr-action-message {
+  color: #9ca3af;
+  margin-bottom: 8px;
+  font-size: .8rem;
+}
+
 .file\:mr-4::file-selector-button {
   margin-right: 1rem;
 }
