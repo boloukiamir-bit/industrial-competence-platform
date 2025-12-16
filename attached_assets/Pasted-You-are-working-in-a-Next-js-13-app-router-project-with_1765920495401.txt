@@ -1,0 +1,85 @@
+You are working in a Next.js 13+ app router project with Supabase.
+
+Context:
+- Auth with Supabase is already implemented:
+  - services/auth.ts with signInWithEmail, signOut, getCurrentUser
+  - useAuthGuard() hook in hooks/useAuthGuard.ts to protect pages
+  - /login exists as a sign-in page
+- HR & competence features already exist:
+  - app/hr/workflows/...
+  - app/hr/tasks/page.tsx
+  - app/employees/[id]/competence/page.tsx
+  - app/competence/matrix/page.tsx
+  - app/tomorrows-gaps/page.tsx
+- Supabase tables:
+  - competence_groups (id, name, description, sort_order, created_at)
+  - competences (id, group_id, code, name, description, is_safety_critical, active, created_at)
+  - positions (id, name, description, site, department, min_headcount, created_at)
+  - position_competence_requirements (id, position_id, competence_id, required_level, mandatory, notes, created_at)
+- Styling:
+  - Apple-like HR styling via app/globals.css
+  - Reusable classes like .hr-page, .hr-card, .hr-button, .hr-input, .hr-form-field, .hr-section__title, etc.
+
+GOAL:
+Implement a **Competence Admin Console** so HR can configure competences, positions, and requirements via UI instead of SQL.
+
+We need:
+
+1) Admin: Competence Groups & Competences at /admin/competence
+2) Admin: Positions list at /admin/positions
+3) Admin: Position requirements editor at /admin/positions/[id]/requirements
+4) All these routes must be protected with useAuthGuard() and use the existing Apple-like styling.
+
+==================================================
+1) SERVICE LAYER – services/adminCompetence.ts
+==================================================
+
+Create a new file: services/adminCompetence.ts
+
+Reuse the same Supabase client pattern you already use (either import an existing supabase client, or create one using NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY).
+
+Implement:
+
+```ts
+// services/adminCompetence.ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+// If there is a shared supabase client elsewhere, reuse it instead:
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export type CompetenceGroup = {
+  id: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+};
+
+export type Competence = {
+  id: string;
+  group_id: string | null;
+  code: string | null;
+  name: string;
+  description: string | null;
+  is_safety_critical: boolean;
+  active: boolean;
+};
+
+export type PositionAdmin = {
+  id: string;
+  name: string;
+  description: string | null;
+  site: string | null;
+  department: string | null;
+  min_headcount: number | null;
+};
+
+export type PositionRequirementAdmin = {
+  id: string;
+  competence_id: string;
+  required_level: number;
+  mandatory: boolean;
+  notes: string | null;
+};
