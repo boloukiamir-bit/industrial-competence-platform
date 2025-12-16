@@ -1,0 +1,74 @@
+// app/hr/workflows/page.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { listWorkflowTemplates, HrWorkflowTemplate } from '@/services/hrWorkflows';
+
+export default function HrWorkflowsPage() {
+  const [templates, setTemplates] = useState<HrWorkflowTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await listWorkflowTemplates();
+        setTemplates(data);
+      } catch (err: any) {
+        console.error(err);
+        setError('Kunde inte hämta workflows.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  return (
+    <main className="hr-page">
+      <header className="hr-page__header">
+        <div>
+          <h1 className="hr-page__title">HR Workflows</h1>
+          <p className="hr-page__subtitle">
+            Standardisera onboarding, offboarding och utbildningar i hela organisationen.
+          </p>
+        </div>
+        <button className="hr-button hr-button--primary">
+          + Ny workflow-mall
+        </button>
+      </header>
+
+      {loading && <p>Laddar workflows…</p>}
+      {error && <p className="hr-error">{error}</p>}
+
+      {!loading && !error && (
+        <section className="hr-grid">
+          {templates.length === 0 ? (
+            <div className="hr-empty">
+              <h2>Inga workflows ännu</h2>
+              <p>Skapa din första mall för onboarding, offboarding eller återkommande utbildningar.</p>
+            </div>
+          ) : (
+            templates.map((t) => (
+              <Link
+                key={t.id}
+                href={`/hr/workflows/${t.id}`}
+                className="hr-card"
+              >
+                <div className="hr-card__badge">
+                  {t.category ?? 'Workflow'}
+                </div>
+                <h2 className="hr-card__title">{t.name}</h2>
+                {t.description && (
+                  <p className="hr-card__body">{t.description}</p>
+                )}
+                <span className="hr-card__link">Visa detaljer →</span>
+              </Link>
+            ))
+          )}
+        </section>
+      )}
+    </main>
+  );
+}

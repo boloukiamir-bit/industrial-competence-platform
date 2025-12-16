@@ -1,0 +1,116 @@
+// app/hr/workflows/[id]/page.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { getWorkflowTemplate } from '@/services/hrWorkflows';
+
+type TemplateStep = {
+  id: string;
+  title: string;
+  description: string | null;
+  order_index: number;
+  responsible_role: string | null;
+  due_days_offset: number | null;
+};
+
+export default function WorkflowTemplatePage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const { id } = params;
+  const router = useRouter();
+  const [template, setTemplate] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getWorkflowTemplate(id);
+        setTemplate(data);
+      } catch (err: any) {
+        console.error(err);
+        setError('Kunde inte hämta workflow-mallen.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [id]);
+
+  const steps: TemplateStep[] = template?.hr_workflow_template_steps ?? [];
+
+  return (
+    <main className="hr-page">
+      <button className="hr-link" onClick={() => router.back()}>
+        ← Tillbaka till alla workflows
+      </button>
+
+      {loading && <p>Laddar…</p>}
+      {error && <p className="hr-error">{error}</p>}
+
+      {!loading && !error && template && (
+        <>
+          <header className="hr-page__header hr-page__header--compact">
+            <div>
+              <div className="hr-card__badge">
+                {template.category ?? 'Workflow'}
+              </div>
+              <h1 className="hr-page__title">{template.name}</h1>
+              {template.description && (
+                <p className="hr-page__subtitle">{template.description}</p>
+              )}
+            </div>
+            <div className="hr-page__actions">
+              <button className="hr-button hr-button--secondary">
+                Redigera mall
+              </button>
+              <button className="hr-button hr-button--primary">
+                Starta workflow för anställd
+              </button>
+            </div>
+          </header>
+
+          <section className="hr-steps">
+            <h2 className="hr-section__title">Steg i workflowet</h2>
+            {steps.length === 0 ? (
+              <div className="hr-empty hr-empty--light">
+                <p>Inga steg definierade ännu. Lägg till första steget.</p>
+              </div>
+            ) : (
+              <ol className="hr-steps__list">
+                {steps
+                  .sort((a, b) => a.order_index - b.order_index)
+                  .map((step, index) => (
+                    <li key={step.id} className="hr-steps__item">
+                      <div className="hr-steps__index">{index + 1}</div>
+                      <div className="hr-steps__content">
+                        <div className="hr-steps__header">
+                          <h3>{step.title}</h3>
+                          <span className="hr-tag">
+                            {step.responsible_role ?? 'Ansvar: Ej satt'}
+                          </span>
+                        </div>
+                        {step.description && (
+                          <p className="hr-steps__description">
+                            {step.description}
+                          </p>
+                        )}
+                        {step.due_days_offset != null && (
+                          <p className="hr-steps__meta">
+                            Förfallo: dag {step.due_days_offset} efter start
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+              </ol>
+            )}
+          </section>
+        </>
+      )}
+    </main>
+  );
+}

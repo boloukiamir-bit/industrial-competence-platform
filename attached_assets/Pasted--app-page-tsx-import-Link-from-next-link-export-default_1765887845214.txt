@@ -1,0 +1,77 @@
+// app/page.tsx
+import Link from 'next/link';
+
+export default function LandingPage() {
+  return (
+    <main className="lp">
+      <section className="lp-hero">
+        <div className="lp-hero__content">
+          <div className="lp-pill">HR for industrial champions</div>
+          <h1 className="lp-title">
+            From spreadsheets to <span>structured HR</span>.
+          </h1>
+          <p className="lp-subtitle">
+            Nadiplan samlar onboarding, kompetens, säkerhet och HR-flöden i ett
+            system anpassat för produktion, lager och verkstad. Lätt att använda,
+            svårt att vara utan.
+          </p>
+          <div className="lp-hero__actions">
+            <Link href="/hr/workflows" className="lp-btn lp-btn--primary">
+              Gå till HR Workflows
+            </Link>
+            <Link href="/dashboard" className="lp-btn lp-btn--ghost">
+              Öppna dashboard
+            </Link>
+          </div>
+          <p className="lp-hero__meta">
+            Byggt för skiftgång, certifikat, skyddsronder och verkligheten på golvet.
+          </p>
+        </div>
+        <div className="lp-hero__panel">
+          <div className="lp-panel-card">
+            <h2>HR Command Center</h2>
+            <ul>
+              <li>✔ Onboarding-flöden per roll och site</li>
+              <li>✔ Kompetensmatris kopplad till maskiner och risk</li>
+              <li>✔ Gaps per skift, linje och grupp</li>
+            </ul>
+          </div>
+          <div className="lp-panel-card lp-panel-card--secondary">
+            <h3>Morgondagens risker</h3>
+            <p>
+              En överblick över vilka kompetens- och säkerhetsluckor som måste
+              stängas innan nästa skift startar.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="lp-section">
+        <h2>Byggt för HR som jobbar nära produktionen</h2>
+        <div className="lp-columns">
+          <div className="lp-feature">
+            <h3>Onboarding utan friktion</h3>
+            <p>
+              Standardisera introduktion per roll, site och bemanningspartner.
+              Följ upp att varje steg är gjort – med digital sign-off.
+            </p>
+          </div>
+          <div className="lp-feature">
+            <h3>Kompetens & behörigheter</h3>
+            <p>
+              Koppla kompetenser till maskiner, zoner och risknivåer. Se vem som
+              får köra vad – direkt i systemet.
+            </p>
+          </div>
+          <div className="lp-feature">
+            <h3>Säkerhet på riktigt</h3>
+            <p>
+              Hantera skyddsrond, utbildningar, certifikat och medicinska kontroller
+              i samma flöde som HR-processerna.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
