@@ -1,28 +1,41 @@
+LOGIN PAGE – app/login/page.tsx
+
+Create a new file: app/login/page.tsx
+
+This must be a client component.
+
+Requirements:
+
+“Email” + “Password” inputs.
+
+“Sign in” button.
+
+On submit:
+
+Calls signInWithEmail from services/auth.ts.
+
+On success: redirect to a sensible default route (for example: /hr/tasks or /tomorrows-gaps).
+
+On error: show a small error message.
+
+Use the existing Apple-like HR styling classes where possible:
+
+.hr-page, .hr-card, .hr-button, etc.
+
+Example structure (adapt styling to match existing CSS):
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmail, getSession } from '@/services/auth';
+import { signInWithEmail } from '@/services/auth';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@nadiplan.test');
+  const [email, setEmail] = useState('admin@nadiplan.test'); // default dummy
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [checkingSession, setCheckingSession] = useState(true);
-
-  useEffect(() => {
-    async function checkExistingSession() {
-      const session = await getSession();
-      if (session?.user) {
-        router.replace('/app/hr/tasks');
-      } else {
-        setCheckingSession(false);
-      }
-    }
-    checkExistingSession();
-  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,24 +44,16 @@ export default function LoginPage() {
 
     try {
       await signInWithEmail(email, password);
-      router.replace('/app/hr/tasks');
-    } catch (error: unknown) {
+      router.replace('/hr/tasks'); // or another main page route
+    } catch (error: any) {
       console.error(error);
-      setErrorMsg(error instanceof Error ? error.message : 'Failed to sign in.');
+      setErrorMsg(error.message ?? 'Failed to sign in.');
       setLoading(false);
     }
   }
 
-  if (checkingSession) {
-    return (
-      <main className="hr-page" style={{ maxWidth: 420, margin: '0 auto', paddingTop: 80 }}>
-        <p className="hr-page__subtitle">Loading...</p>
-      </main>
-    );
-  }
-
   return (
-    <main className="hr-page" style={{ maxWidth: 420, margin: '0 auto', paddingTop: 80 }}>
+    <main className="hr-page" style={{ maxWidth: 420 }}>
       <h1 className="hr-page__title">Sign in</h1>
       <p className="hr-page__subtitle">
         Use your Nadiplan account to access HR dashboards.
@@ -64,7 +69,6 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             required
-            data-testid="input-email"
           />
         </div>
 
@@ -77,22 +81,16 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
             required
-            data-testid="input-password"
           />
         </div>
 
-        {errorMsg && (
-          <p className="hr-error" style={{ marginTop: 8 }} data-testid="error-message">
-            {errorMsg}
-          </p>
-        )}
+        {errorMsg && <p className="hr-error" style={{ marginTop: 8 }}>{errorMsg}</p>}
 
         <button
           type="submit"
           className="hr-button hr-button--primary"
           disabled={loading}
           style={{ marginTop: 12, width: '100%' }}
-          data-testid="button-signin"
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>

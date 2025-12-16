@@ -337,6 +337,34 @@
   font-size: 0.9rem;
 }
 
+/* Form Styles */
+.hr-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.hr-form-label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.hr-input {
+  border-radius: 999px;
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.hr-input:focus {
+  border-color: rgba(129, 140, 248, 0.95);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.6);
+}
+
 /* Landing Page Styles */
 .lp {
   min-height: 100vh;
