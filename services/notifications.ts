@@ -30,7 +30,7 @@ export async function enqueueDueEventNotifications(referenceDate: Date): Promise
       .select("id")
       .eq("to_email", toEmail)
       .gte("created_at", oneDayAgo)
-      .filter("meta->>event_id", "eq", event.id)
+      .filter("meta->>event_id", "eq", String(event.id))
       .filter("meta->>type", "eq", "due_event")
       .in("status", ["pending", "sent"])
       .limit(1);
@@ -58,7 +58,7 @@ Industrial Competence Platform`;
       subject,
       body,
       status: "pending",
-      meta: { event_id: event.id, type: "due_event" },
+      meta: { event_id: String(event.id), type: "due_event" },
     });
 
     if (insertError) {
@@ -114,6 +114,7 @@ export async function enqueueManagerDigestNotifications(referenceDate: Date): Pr
       ? (employeeData[0] as { name: string } | undefined)
       : (employeeData as { name: string } | null);
 
+    if (!event.due_date) continue;
     const isOverdue = event.due_date < today;
     const isDueSoon = event.due_date >= today && event.due_date <= sevenDaysLater;
 
@@ -210,6 +211,7 @@ Industrial Competence Platform`;
 
 export async function enqueueUpcomingOneToOnes(referenceDate: Date): Promise<number> {
   const meetings = await getUpcomingMeetings(7);
+  const oneDayAgo = new Date(referenceDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
   let count = 0;
 
@@ -233,8 +235,19 @@ export async function enqueueUpcomingOneToOnes(referenceDate: Date): Promise<num
     });
 
     if (employeeData?.email) {
-      const subject = `Upcoming 1:1 Meeting on ${scheduledDate}`;
-      const body = `
+      const { data: existingEmp } = await supabase
+        .from("email_outbox")
+        .select("id")
+        .eq("to_email", employeeData.email)
+        .gte("created_at", oneDayAgo)
+        .filter("meta->>meeting_id", "eq", String(meeting.id))
+        .filter("meta->>type", "eq", "upcoming_1to1_employee")
+        .in("status", ["pending", "sent"])
+        .limit(1);
+
+      if (!existingEmp || existingEmp.length === 0) {
+        const subject = `Upcoming 1:1 Meeting on ${scheduledDate}`;
+        const body = `
 Hello ${meeting.employeeName || ""},
 
 You have an upcoming 1:1 meeting scheduled:
@@ -248,25 +261,37 @@ ${meeting.sharedAgenda ? `Agenda:\n${meeting.sharedAgenda}` : "Please prepare an
 
 Best regards,
 Industrial Competence Platform
-      `.trim();
+        `.trim();
 
-      const { error: insertError } = await supabase.from("email_outbox").insert({
-        to_email: employeeData.email,
-        subject,
-        body,
-        status: "pending",
-        meta: { meeting_id: meeting.id, type: "upcoming_1to1_employee" },
-      });
-      if (insertError) {
-        console.error("Error inserting employee meeting notification:", insertError);
-      } else {
-        count++;
+        const { error: insertError } = await supabase.from("email_outbox").insert({
+          to_email: employeeData.email,
+          subject,
+          body,
+          status: "pending",
+          meta: { meeting_id: String(meeting.id), type: "upcoming_1to1_employee" },
+        });
+        if (insertError) {
+          console.error("Error inserting employee meeting notification:", insertError);
+        } else {
+          count++;
+        }
       }
     }
 
     if (managerData?.email) {
-      const subject = `Upcoming 1:1 with ${meeting.employeeName} on ${scheduledDate}`;
-      const body = `
+      const { data: existingMgr } = await supabase
+        .from("email_outbox")
+        .select("id")
+        .eq("to_email", managerData.email)
+        .gte("created_at", oneDayAgo)
+        .filter("meta->>meeting_id", "eq", String(meeting.id))
+        .filter("meta->>type", "eq", "upcoming_1to1_manager")
+        .in("status", ["pending", "sent"])
+        .limit(1);
+
+      if (!existingMgr || existingMgr.length === 0) {
+        const subject = `Upcoming 1:1 with ${meeting.employeeName} on ${scheduledDate}`;
+        const body = `
 Hello ${meeting.managerName || ""},
 
 You have an upcoming 1:1 meeting with ${meeting.employeeName}:
@@ -280,19 +305,20 @@ ${meeting.sharedAgenda ? `Agenda:\n${meeting.sharedAgenda}` : ""}
 
 Best regards,
 Industrial Competence Platform
-      `.trim();
+        `.trim();
 
-      const { error: insertError } = await supabase.from("email_outbox").insert({
-        to_email: managerData.email,
-        subject,
-        body,
-        status: "pending",
-        meta: { meeting_id: meeting.id, type: "upcoming_1to1_manager" },
-      });
-      if (insertError) {
-        console.error("Error inserting manager meeting notification:", insertError);
-      } else {
-        count++;
+        const { error: insertError } = await supabase.from("email_outbox").insert({
+          to_email: managerData.email,
+          subject,
+          body,
+          status: "pending",
+          meta: { meeting_id: String(meeting.id), type: "upcoming_1to1_manager" },
+        });
+        if (insertError) {
+          console.error("Error inserting manager meeting notification:", insertError);
+        } else {
+          count++;
+        }
       }
     }
   }
@@ -302,6 +328,7 @@ Industrial Competence Platform
 
 export async function enqueueOverdueActions(referenceDate: Date): Promise<number> {
   const overdueActions = await getOverdueActions();
+  const oneDayAgo = new Date(referenceDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
   let count = 0;
 
@@ -311,6 +338,20 @@ export async function enqueueOverdueActions(referenceDate: Date): Promise<number
       : action.managerEmail;
 
     if (recipientEmail) {
+      const { data: existingAction } = await supabase
+        .from("email_outbox")
+        .select("id")
+        .eq("to_email", recipientEmail)
+        .gte("created_at", oneDayAgo)
+        .filter("meta->>action_id", "eq", String(action.id))
+        .filter("meta->>type", "eq", "overdue_action")
+        .in("status", ["pending", "sent"])
+        .limit(1);
+
+      if (existingAction && existingAction.length > 0) {
+        continue;
+      }
+
       const subject = `[Overdue Action] ${action.description.substring(0, 50)}...`;
       const body = `
 Hello,
@@ -331,7 +372,7 @@ Industrial Competence Platform
         subject,
         body,
         status: "pending",
-        meta: { action_id: action.id, type: "overdue_action" },
+        meta: { action_id: String(action.id), type: "overdue_action" },
       });
       if (insertError) {
         console.error("Error inserting overdue action notification:", insertError);

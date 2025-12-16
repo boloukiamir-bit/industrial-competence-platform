@@ -36,9 +36,10 @@ export function generateIcsForOneToOne(meeting: IcsEventInput): string {
   const dtstart = formatIcsDate(startDate);
   const dtend = formatIcsDate(endDate);
 
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://industrial-competence.replit.app";
   const summary = escapeIcsText(`1:1 meeting – ${meeting.employee_name} & ${meeting.manager_name}`);
   const description = escapeIcsText(
-    `1:1 meeting between ${meeting.employee_name} and ${meeting.manager_name}.\n\nView details: /app/one-to-ones/${meeting.id}`
+    `1:1 meeting between ${meeting.employee_name} and ${meeting.manager_name}.\n\nView details: ${baseUrl}/app/one-to-ones/${meeting.id}`
   );
   const location = meeting.location ? escapeIcsText(meeting.location) : "";
 
@@ -69,6 +70,21 @@ export function generateIcsForOneToOne(meeting: IcsEventInput): string {
 }
 
 export async function enqueueCalendarInviteEmails(meeting: IcsEventInput): Promise<number> {
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: existingInvite } = await supabase
+    .from("email_outbox")
+    .select("id")
+    .filter("meta->>meeting_id", "eq", String(meeting.id))
+    .filter("meta->>type", "eq", "one_to_one_invite")
+    .gte("created_at", oneDayAgo)
+    .in("status", ["pending", "sent"])
+    .limit(1);
+
+  if (existingInvite && existingInvite.length > 0) {
+    return 0;
+  }
+
   const icsContent = generateIcsForOneToOne(meeting);
   const scheduledDate = new Date(meeting.scheduled_at).toLocaleDateString("sv-SE");
   const scheduledTime = new Date(meeting.scheduled_at).toLocaleTimeString("sv-SE", {
@@ -100,7 +116,7 @@ Industrial Competence Platform`;
     status: "pending",
     meta: {
       type: "one_to_one_invite",
-      meeting_id: meeting.id,
+      meeting_id: String(meeting.id),
       recipient_role: "employee",
       ics: icsContent,
     },
@@ -130,7 +146,7 @@ Industrial Competence Platform`;
     status: "pending",
     meta: {
       type: "one_to_one_invite",
-      meeting_id: meeting.id,
+      meeting_id: String(meeting.id),
       recipient_role: "manager",
       ics: icsContent,
     },

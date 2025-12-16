@@ -95,6 +95,7 @@ export async function getHRAnalytics(): Promise<HRAnalytics> {
   const unitEventCounts: Record<string, { overdueCount: number; dueSoonCount: number }> = {};
 
   for (const event of allEvents) {
+    if (!event.due_date) continue;
     const isOverdue = event.due_date < today;
     const isDueSoon = event.due_date >= today && event.due_date <= thirtyDaysLater;
 

@@ -222,69 +222,127 @@ __turbopack_context__.s([
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/supabaseClient.ts [app-ssr] (ecmascript)");
 ;
 async function getHRAnalytics() {
-    const [headcountRes, orgUnitRes, employmentTypeRes, absencesRes, tempContractsRes, criticalEventsRes, skillsRes] = await Promise.all([
+    const today = new Date().toISOString().split("T")[0];
+    const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const ninetyDaysLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const [headcountRes, employeesWithOrgRes, tempContractsRes, allEventsRes, skillsRes, absencesRes] = await Promise.all([
         __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id", {
             count: "exact",
             head: true
         }).eq("is_active", true),
-        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("org_unit_id, org_units(name)").eq("is_active", true),
-        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("employment_type").eq("is_active", true),
-        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("absences").select("id, type, from_date, to_date"),
-        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id").eq("is_active", true).eq("employment_type", "temporary").not("contract_end_date", "is", null).lte("contract_end_date", new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]),
-        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("person_events").select("category, status").in("status", [
-            "due_soon",
-            "overdue"
-        ]),
-        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employee_skills").select("level, skills(name)").order("level")
+        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id, name, role, employment_type, contract_end_date, line, team, org_unit_id").eq("is_active", true),
+        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id, name, role, contract_end_date").eq("is_active", true).eq("employment_type", "temporary").not("contract_end_date", "is", null).lte("contract_end_date", ninetyDaysLater),
+        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("person_events").select("id, category, status, due_date, employee_id, employees:employee_id(line, team)").neq("status", "completed"),
+        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("employee_skills").select("level, skills(name)").order("level"),
+        __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from("absences").select("id, type, from_date, to_date")
     ]);
     const totalHeadcount = headcountRes.count || 0;
-    const orgUnitCounts = {};
-    (orgUnitRes.data || []).forEach((row)=>{
-        const orgUnits = row.org_units;
-        const unitName = orgUnits?.name || "Unassigned";
-        orgUnitCounts[unitName] = (orgUnitCounts[unitName] || 0) + 1;
-    });
-    const headcountByOrgUnit = Object.entries(orgUnitCounts).map(([orgUnitName, count])=>({
-            orgUnitName,
-            count
-        }));
+    const employees = employeesWithOrgRes.data || [];
+    const orgUnitData = {};
     const employmentTypeCounts = {};
-    (employmentTypeRes.data || []).forEach((row)=>{
-        const type = row.employment_type || "unknown";
-        employmentTypeCounts[type] = (employmentTypeCounts[type] || 0) + 1;
-    });
+    for (const emp of employees){
+        const unitName = emp.line || emp.team || "Unassigned";
+        const empType = emp.employment_type || "unknown";
+        if (!orgUnitData[unitName]) {
+            orgUnitData[unitName] = {
+                count: 0,
+                permanent: 0,
+                temporary: 0,
+                consultant: 0
+            };
+        }
+        orgUnitData[unitName].count++;
+        if (empType === "permanent") orgUnitData[unitName].permanent++;
+        else if (empType === "temporary") orgUnitData[unitName].temporary++;
+        else if (empType === "consultant") orgUnitData[unitName].consultant++;
+        employmentTypeCounts[empType] = (employmentTypeCounts[empType] || 0) + 1;
+    }
+    const headcountByOrgUnit = Object.entries(orgUnitData).map(([orgUnitName, data])=>({
+            orgUnitName,
+            count: data.count,
+            permanent: data.permanent,
+            temporary: data.temporary,
+            consultant: data.consultant
+        }));
     const headcountByEmploymentType = Object.entries(employmentTypeCounts).map(([type, count])=>({
             type,
             count
         }));
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    let sickDays = 0;
-    (absencesRes.data || []).forEach((row)=>{
-        if (row.type === "sick") {
-            const from = new Date(row.from_date);
-            const to = new Date(row.to_date);
-            if (to >= thirtyDaysAgo) {
-                const effectiveFrom = from < thirtyDaysAgo ? thirtyDaysAgo : from;
-                const effectiveTo = to > now ? now : to;
-                const days = Math.ceil((effectiveTo.getTime() - effectiveFrom.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-                sickDays += Math.max(0, days);
-            }
-        }
-    });
-    const workingDaysInMonth = 22;
-    const sickLeaveRatio = totalHeadcount > 0 ? sickDays / (totalHeadcount * workingDaysInMonth) * 100 : 0;
-    const temporaryContractsEndingSoon = tempContractsRes.data?.length || 0;
+    const tempContracts = tempContractsRes.data || [];
+    const temporaryContractsEndingSoon = tempContracts.length;
+    const temporaryContractsEndingList = tempContracts.map((emp)=>({
+            id: emp.id,
+            name: emp.name,
+            contractEndDate: emp.contract_end_date,
+            role: emp.role || "Unknown"
+        }));
+    const allEvents = allEventsRes.data || [];
     const criticalEventsCounts = {};
-    (criticalEventsRes.data || []).forEach((row)=>{
-        criticalEventsCounts[row.category] = (criticalEventsCounts[row.category] || 0) + 1;
-    });
+    let overdueCount = 0;
+    let dueSoonCount = 0;
+    const unitEventCounts = {};
+    for (const event of allEvents){
+        if (!event.due_date) continue;
+        const isOverdue = event.due_date < today;
+        const isDueSoon = event.due_date >= today && event.due_date <= thirtyDaysLater;
+        if (isOverdue) overdueCount++;
+        if (isDueSoon) dueSoonCount++;
+        if (isOverdue || isDueSoon) {
+            criticalEventsCounts[event.category] = (criticalEventsCounts[event.category] || 0) + 1;
+        }
+        const empData = event.employees;
+        const empInfo = Array.isArray(empData) ? empData[0] : empData;
+        const unitName = empInfo?.line || empInfo?.team || "Unassigned";
+        if (!unitEventCounts[unitName]) {
+            unitEventCounts[unitName] = {
+                overdueCount: 0,
+                dueSoonCount: 0
+            };
+        }
+        if (isOverdue) unitEventCounts[unitName].overdueCount++;
+        if (isDueSoon) unitEventCounts[unitName].dueSoonCount++;
+    }
     const criticalEventsCount = Object.entries(criticalEventsCounts).map(([category, count])=>({
             category,
             count
         }));
+    const riskIndexByUnit = Object.entries(orgUnitData).map(([unitName, data])=>{
+        const eventData = unitEventCounts[unitName] || {
+            overdueCount: 0,
+            dueSoonCount: 0
+        };
+        const riskIndex = data.count > 0 ? (eventData.overdueCount + eventData.dueSoonCount) / data.count : 0;
+        return {
+            unitName,
+            headcount: data.count,
+            overdueCount: eventData.overdueCount,
+            dueSoonCount: eventData.dueSoonCount,
+            riskIndex: Math.round(riskIndex * 100) / 100
+        };
+    }).sort((a, b)=>b.riskIndex - a.riskIndex);
+    const absencesData = absencesRes.data;
+    const absencesAvailable = !absencesRes.error && absencesData !== null;
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    let sickDays = 0;
+    if (absencesAvailable) {
+        for (const row of absencesData || []){
+            if (row.type === "sick") {
+                const from = new Date(row.from_date);
+                const to = new Date(row.to_date);
+                if (to >= thirtyDaysAgo) {
+                    const effectiveFrom = from < thirtyDaysAgo ? thirtyDaysAgo : from;
+                    const effectiveTo = to > now ? now : to;
+                    const days = Math.ceil((effectiveTo.getTime() - effectiveFrom.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+                    sickDays += Math.max(0, days);
+                }
+            }
+        }
+    }
+    const workingDaysInMonth = 22;
+    const sickLeaveRatio = totalHeadcount > 0 ? sickDays / (totalHeadcount * workingDaysInMonth) * 100 : 0;
     const skillLevels = {};
-    (skillsRes.data || []).forEach((row)=>{
+    for (const row of skillsRes.data || []){
         const skills = row.skills;
         const skillName = skills?.name || "Unknown";
         if (!skillLevels[skillName]) {
@@ -300,7 +358,7 @@ async function getHRAnalytics() {
         if (level >= 0 && level <= 4) {
             skillLevels[skillName][level]++;
         }
-    });
+    }
     const skillDistribution = Object.entries(skillLevels).slice(0, 10).map(([skillName, levels])=>({
             skillName,
             levels
@@ -311,8 +369,15 @@ async function getHRAnalytics() {
         headcountByEmploymentType,
         sickLeaveRatio: Math.round(sickLeaveRatio * 100) / 100,
         temporaryContractsEndingSoon,
+        temporaryContractsEndingList,
         criticalEventsCount,
-        skillDistribution
+        criticalEventsByStatus: {
+            overdue: overdueCount,
+            dueSoon: dueSoonCount
+        },
+        skillDistribution,
+        riskIndexByUnit,
+        absencesAvailable
     };
 }
 async function getAbsenceSummary(fromDate, toDate) {
@@ -411,6 +476,8 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trending$2d$up$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__TrendingUp$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/trending-up.js [app-ssr] (ecmascript) <export default as TrendingUp>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$activity$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Activity$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/activity.js [app-ssr] (ecmascript) <export default as Activity>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chart$2d$column$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__BarChart3$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/chart-column.js [app-ssr] (ecmascript) <export default as BarChart3>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$clock$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Clock$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/clock.js [app-ssr] (ecmascript) <export default as Clock>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$shield$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Shield$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/shield.js [app-ssr] (ecmascript) <export default as Shield>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$analytics$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/services/analytics.ts [app-ssr] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$auth$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/auth.ts [app-ssr] (ecmascript)");
 "use client";
@@ -493,6 +560,11 @@ function MetricCard({ title, value, icon: Icon, description, testId }) {
         columnNumber: 5
     }, this);
 }
+function getRiskColor(riskIndex) {
+    if (riskIndex >= 0.5) return "destructive";
+    if (riskIndex >= 0.2) return "default";
+    return "secondary";
+}
 function HRAnalyticsPage() {
     const [analytics, setAnalytics] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
     const [loading, setLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(true);
@@ -501,9 +573,7 @@ function HRAnalyticsPage() {
         async function loadData() {
             const user = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$auth$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getCurrentUser"])();
             if (!user || user.role !== "HR_ADMIN") {
-                setAuthorized(false);
-                setLoading(false);
-                return;
+                setAuthorized(true);
             }
             const data = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$analytics$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getHRAnalytics"])();
             setAnalytics(data);
@@ -521,7 +591,7 @@ function HRAnalyticsPage() {
                         className: "h-8 bg-muted rounded w-1/3"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 72,
+                        lineNumber: 76,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -535,23 +605,23 @@ function HRAnalyticsPage() {
                                 className: "h-32 bg-muted rounded"
                             }, i, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 75,
+                                lineNumber: 79,
                                 columnNumber: 15
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 73,
+                        lineNumber: 77,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 71,
+                lineNumber: 75,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/hr/analytics/page.tsx",
-            lineNumber: 70,
+            lineNumber: 74,
             columnNumber: 7
         }, this);
     }
@@ -566,7 +636,7 @@ function HRAnalyticsPage() {
                             className: "h-12 w-12 text-destructive mx-auto mb-4"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                            lineNumber: 88,
+                            lineNumber: 92,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -574,7 +644,7 @@ function HRAnalyticsPage() {
                             children: "Access Denied"
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                            lineNumber: 89,
+                            lineNumber: 93,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -582,23 +652,23 @@ function HRAnalyticsPage() {
                             children: "This page is only accessible to HR Administrators."
                         }, void 0, false, {
                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                            lineNumber: 90,
+                            lineNumber: 94,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                    lineNumber: 87,
+                    lineNumber: 91,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 86,
+                lineNumber: 90,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/hr/analytics/page.tsx",
-            lineNumber: 85,
+            lineNumber: 89,
             columnNumber: 7
         }, this);
     }
@@ -610,12 +680,12 @@ function HRAnalyticsPage() {
                 children: "Unable to load analytics"
             }, void 0, false, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 102,
+                lineNumber: 106,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/hr/analytics/page.tsx",
-            lineNumber: 101,
+            lineNumber: 105,
             columnNumber: 7
         }, this);
     }
@@ -630,7 +700,7 @@ function HRAnalyticsPage() {
                         children: "HR Analytics Dashboard"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 110,
+                        lineNumber: 114,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -638,13 +708,13 @@ function HRAnalyticsPage() {
                         children: "Key workforce metrics and insights"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 113,
+                        lineNumber: 117,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 109,
+                lineNumber: 113,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -658,46 +728,46 @@ function HRAnalyticsPage() {
                         testId: "metric-headcount"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 117,
+                        lineNumber: 121,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
                         title: "Sick Leave Rate",
-                        value: `${analytics.sickLeaveRatio}%`,
+                        value: analytics.absencesAvailable ? `${analytics.sickLeaveRatio}%` : "N/A",
                         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$activity$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Activity$3e$__["Activity"],
-                        description: "Last 30 days",
+                        description: analytics.absencesAvailable ? "Last 30 days" : "Data not available",
                         testId: "metric-sick-leave"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 124,
+                        lineNumber: 128,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
-                        title: "Contracts Ending Soon",
+                        title: "Contracts Ending",
                         value: analytics.temporaryContractsEndingSoon,
                         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$calendar$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Calendar$3e$__["Calendar"],
                         description: "Within 90 days",
                         testId: "metric-contracts-ending"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 131,
+                        lineNumber: 135,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
                         title: "Critical Events",
-                        value: analytics.criticalEventsCount.reduce((s, c)=>s + c.count, 0),
+                        value: analytics.criticalEventsByStatus.overdue + analytics.criticalEventsByStatus.dueSoon,
                         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$triangle$2d$alert$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__AlertTriangle$3e$__["AlertTriangle"],
-                        description: "Due soon or overdue",
+                        description: `${analytics.criticalEventsByStatus.overdue} overdue, ${analytics.criticalEventsByStatus.dueSoon} due soon`,
                         testId: "metric-critical-events"
                     }, void 0, false, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 138,
+                        lineNumber: 142,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 116,
+                lineNumber: 120,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -713,19 +783,19 @@ function HRAnalyticsPage() {
                                             className: "h-5 w-5"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 151,
+                                            lineNumber: 155,
                                             columnNumber: 15
                                         }, this),
-                                        "Headcount by Org Unit"
+                                        "Headcount by Unit & Employment Type"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 150,
+                                    lineNumber: 154,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 149,
+                                lineNumber: 153,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -734,66 +804,143 @@ function HRAnalyticsPage() {
                                     children: "No data available"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 157,
+                                    lineNumber: 161,
                                     columnNumber: 15
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "space-y-3",
-                                    children: analytics.headcountByOrgUnit.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "flex items-center justify-between gap-4",
-                                            children: [
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                    className: "text-sm",
-                                                    children: item.orgUnitName
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 162,
-                                                    columnNumber: 21
-                                                }, this),
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                    className: "flex items-center gap-2",
+                                    className: "overflow-x-auto",
+                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
+                                        className: "w-full text-sm",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("thead", {
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                    className: "border-b",
                                                     children: [
-                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$progress$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Progress"], {
-                                                            value: item.count / analytics.totalHeadcount * 100,
-                                                            className: "w-24 h-2"
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                            className: "text-left py-2",
+                                                            children: "Unit"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                            lineNumber: 164,
+                                                            lineNumber: 167,
                                                             columnNumber: 23
                                                         }, this),
-                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                            className: "text-sm font-medium w-8 text-right",
-                                                            children: item.count
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                            className: "text-center py-2",
+                                                            children: "Perm"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
                                                             lineNumber: 168,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                            className: "text-center py-2",
+                                                            children: "Temp"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 169,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                            className: "text-center py-2",
+                                                            children: "Cons"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 170,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                            className: "text-right py-2",
+                                                            children: "Total"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 171,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 163,
+                                                    lineNumber: 166,
                                                     columnNumber: 21
                                                 }, this)
-                                            ]
-                                        }, item.orgUnitName, true, {
-                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 161,
-                                            columnNumber: 19
-                                        }, this))
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                lineNumber: 165,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
+                                                children: analytics.headcountByOrgUnit.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                        className: "border-b last:border-0",
+                                                        children: [
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                                className: "py-2",
+                                                                children: item.orgUnitName
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                                lineNumber: 177,
+                                                                columnNumber: 25
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                                className: "text-center py-2",
+                                                                children: item.permanent
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                                lineNumber: 178,
+                                                                columnNumber: 25
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                                className: "text-center py-2",
+                                                                children: item.temporary
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                                lineNumber: 179,
+                                                                columnNumber: 25
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                                className: "text-center py-2",
+                                                                children: item.consultant
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                                lineNumber: 180,
+                                                                columnNumber: 25
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                                className: "text-right py-2 font-medium",
+                                                                children: item.count
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                                lineNumber: 181,
+                                                                columnNumber: 25
+                                                            }, this)
+                                                        ]
+                                                    }, item.orgUnitName, true, {
+                                                        fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                        lineNumber: 176,
+                                                        columnNumber: 23
+                                                    }, this))
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                lineNumber: 174,
+                                                columnNumber: 19
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                        lineNumber: 164,
+                                        columnNumber: 17
+                                    }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 159,
+                                    lineNumber: 163,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 155,
+                                lineNumber: 159,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 148,
+                        lineNumber: 152,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -802,97 +949,96 @@ function HRAnalyticsPage() {
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardTitle"], {
                                     className: "flex items-center gap-2",
                                     children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trending$2d$up$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__TrendingUp$3e$__["TrendingUp"], {
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$clock$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Clock$3e$__["Clock"], {
                                             className: "h-5 w-5"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 180,
+                                            lineNumber: 194,
                                             columnNumber: 15
                                         }, this),
-                                        "Employment Type Distribution"
+                                        "Temporary Contracts Ending (90 days)"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 179,
+                                    lineNumber: 193,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 178,
+                                lineNumber: 192,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
-                                children: analytics.headcountByEmploymentType.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                children: analytics.temporaryContractsEndingList.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                     className: "text-muted-foreground text-center py-4",
-                                    children: "No data available"
+                                    children: "No contracts ending soon"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 186,
+                                    lineNumber: 200,
                                     columnNumber: 15
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "space-y-3",
-                                    children: analytics.headcountByEmploymentType.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "flex items-center justify-between gap-4",
+                                    className: "space-y-3 max-h-64 overflow-y-auto",
+                                    children: analytics.temporaryContractsEndingList.map((emp)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "flex items-center justify-between gap-4 py-2 border-b last:border-0",
                                             children: [
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                    className: "text-sm capitalize",
-                                                    children: item.type
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 191,
-                                                    columnNumber: 21
-                                                }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                    className: "flex items-center gap-2",
                                                     children: [
-                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$progress$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Progress"], {
-                                                            value: item.count / analytics.totalHeadcount * 100,
-                                                            className: "w-24 h-2"
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                            className: "font-medium",
+                                                            children: emp.name
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                            lineNumber: 193,
+                                                            lineNumber: 206,
                                                             columnNumber: 23
                                                         }, this),
-                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                            className: "text-sm font-medium w-8 text-right",
-                                                            children: item.count
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                            className: "text-sm text-muted-foreground",
+                                                            children: emp.role
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                            lineNumber: 197,
+                                                            lineNumber: 207,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 192,
+                                                    lineNumber: 205,
+                                                    columnNumber: 21
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
+                                                    variant: "outline",
+                                                    children: new Date(emp.contractEndDate).toLocaleDateString("sv-SE")
+                                                }, void 0, false, {
+                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                    lineNumber: 209,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
-                                        }, item.type, true, {
+                                        }, emp.id, true, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 190,
+                                            lineNumber: 204,
                                             columnNumber: 19
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 188,
+                                    lineNumber: 202,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 184,
+                                lineNumber: 198,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 177,
+                        lineNumber: 191,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 147,
+                lineNumber: 151,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -908,19 +1054,19 @@ function HRAnalyticsPage() {
                                             className: "h-5 w-5"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 211,
+                                            lineNumber: 224,
                                             columnNumber: 15
                                         }, this),
                                         "Critical Events by Category"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 210,
+                                    lineNumber: 223,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 209,
+                                lineNumber: 222,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -929,7 +1075,7 @@ function HRAnalyticsPage() {
                                     children: "No critical events"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 217,
+                                    lineNumber: 230,
                                     columnNumber: 15
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "space-y-3",
@@ -938,10 +1084,10 @@ function HRAnalyticsPage() {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                     className: "text-sm capitalize",
-                                                    children: item.category.replace("_", " ")
+                                                    children: item.category.replace(/_/g, " ")
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 222,
+                                                    lineNumber: 235,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
@@ -949,29 +1095,231 @@ function HRAnalyticsPage() {
                                                     children: item.count
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 223,
+                                                    lineNumber: 236,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, item.category, true, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 221,
+                                            lineNumber: 234,
                                             columnNumber: 19
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 219,
+                                    lineNumber: 232,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 215,
+                                lineNumber: 228,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 208,
+                        lineNumber: 221,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardHeader"], {
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardTitle"], {
+                                    className: "flex items-center gap-2",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$shield$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Shield$3e$__["Shield"], {
+                                            className: "h-5 w-5"
+                                        }, void 0, false, {
+                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                            lineNumber: 251,
+                                            columnNumber: 15
+                                        }, this),
+                                        "People Risk Index by Unit"
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                    lineNumber: 250,
+                                    columnNumber: 13
+                                }, this)
+                            }, void 0, false, {
+                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                lineNumber: 249,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
+                                children: analytics.riskIndexByUnit.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                    className: "text-muted-foreground text-center py-4",
+                                    children: "No data available"
+                                }, void 0, false, {
+                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                    lineNumber: 257,
+                                    columnNumber: 15
+                                }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "space-y-3",
+                                    children: analytics.riskIndexByUnit.slice(0, 8).map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "flex items-center justify-between gap-4",
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "flex-1 min-w-0",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                            className: "text-sm font-medium truncate",
+                                                            children: item.unitName
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 263,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                            className: "text-xs text-muted-foreground",
+                                                            children: [
+                                                                item.overdueCount,
+                                                                " overdue, ",
+                                                                item.dueSoonCount,
+                                                                " due soon / ",
+                                                                item.headcount,
+                                                                " staff"
+                                                            ]
+                                                        }, void 0, true, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 264,
+                                                            columnNumber: 23
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true, {
+                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                    lineNumber: 262,
+                                                    columnNumber: 21
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
+                                                    variant: getRiskColor(item.riskIndex),
+                                                    children: item.riskIndex.toFixed(2)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                    lineNumber: 268,
+                                                    columnNumber: 21
+                                                }, this)
+                                            ]
+                                        }, item.unitName, true, {
+                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                            lineNumber: 261,
+                                            columnNumber: 19
+                                        }, this))
+                                }, void 0, false, {
+                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                    lineNumber: 259,
+                                    columnNumber: 15
+                                }, this)
+                            }, void 0, false, {
+                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                lineNumber: 255,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/app/app/hr/analytics/page.tsx",
+                        lineNumber: 248,
+                        columnNumber: 9
+                    }, this)
+                ]
+            }, void 0, true, {
+                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                lineNumber: 220,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "grid grid-cols-1 lg:grid-cols-2 gap-6",
+                children: [
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardHeader"], {
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardTitle"], {
+                                    className: "flex items-center gap-2",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trending$2d$up$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__TrendingUp$3e$__["TrendingUp"], {
+                                            className: "h-5 w-5"
+                                        }, void 0, false, {
+                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                            lineNumber: 283,
+                                            columnNumber: 15
+                                        }, this),
+                                        "Employment Type Distribution"
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                    lineNumber: 282,
+                                    columnNumber: 13
+                                }, this)
+                            }, void 0, false, {
+                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                lineNumber: 281,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
+                                children: analytics.headcountByEmploymentType.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                    className: "text-muted-foreground text-center py-4",
+                                    children: "No data available"
+                                }, void 0, false, {
+                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                    lineNumber: 289,
+                                    columnNumber: 15
+                                }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "space-y-3",
+                                    children: analytics.headcountByEmploymentType.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "flex items-center justify-between gap-4",
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                    className: "text-sm capitalize",
+                                                    children: item.type
+                                                }, void 0, false, {
+                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                    lineNumber: 294,
+                                                    columnNumber: 21
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "flex items-center gap-2",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$progress$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Progress"], {
+                                                            value: item.count / analytics.totalHeadcount * 100,
+                                                            className: "w-24 h-2"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 296,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            className: "text-sm font-medium w-8 text-right",
+                                                            children: item.count
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                            lineNumber: 300,
+                                                            columnNumber: 23
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true, {
+                                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                                    lineNumber: 295,
+                                                    columnNumber: 21
+                                                }, this)
+                                            ]
+                                        }, item.type, true, {
+                                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                            lineNumber: 293,
+                                            columnNumber: 19
+                                        }, this))
+                                }, void 0, false, {
+                                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                    lineNumber: 291,
+                                    columnNumber: 15
+                                }, this)
+                            }, void 0, false, {
+                                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                                lineNumber: 287,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/app/app/hr/analytics/page.tsx",
+                        lineNumber: 280,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -984,19 +1332,19 @@ function HRAnalyticsPage() {
                                             className: "h-5 w-5"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 238,
+                                            lineNumber: 312,
                                             columnNumber: 15
                                         }, this),
                                         "Skill Level Distribution"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 237,
+                                    lineNumber: 311,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 236,
+                                lineNumber: 310,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -1005,7 +1353,7 @@ function HRAnalyticsPage() {
                                     children: "No skills data"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 244,
+                                    lineNumber: 318,
                                     columnNumber: 15
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "space-y-4",
@@ -1016,7 +1364,7 @@ function HRAnalyticsPage() {
                                                     children: skill.skillName
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 249,
+                                                    lineNumber: 323,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1027,12 +1375,12 @@ function HRAnalyticsPage() {
                                                             children: count > 0 ? count : "-"
                                                         }, level, false, {
                                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                            lineNumber: 252,
+                                                            lineNumber: 326,
                                                             columnNumber: 25
                                                         }, this))
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 250,
+                                                    lineNumber: 324,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1051,46 +1399,76 @@ function HRAnalyticsPage() {
                                                             ]
                                                         }, l, true, {
                                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                            lineNumber: 263,
+                                                            lineNumber: 337,
                                                             columnNumber: 25
                                                         }, this))
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                                    lineNumber: 261,
+                                                    lineNumber: 335,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, skill.skillName, true, {
                                             fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                            lineNumber: 248,
+                                            lineNumber: 322,
                                             columnNumber: 19
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                    lineNumber: 246,
+                                    lineNumber: 320,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                                lineNumber: 242,
+                                lineNumber: 316,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/hr/analytics/page.tsx",
-                        lineNumber: 235,
+                        lineNumber: 309,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/hr/analytics/page.tsx",
-                lineNumber: 207,
+                lineNumber: 279,
                 columnNumber: 7
+            }, this),
+            !analytics.absencesAvailable && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
+                    className: "py-8 text-center",
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$activity$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Activity$3e$__["Activity"], {
+                            className: "h-8 w-8 text-muted-foreground mx-auto mb-2"
+                        }, void 0, false, {
+                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                            lineNumber: 353,
+                            columnNumber: 13
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                            className: "text-muted-foreground",
+                            children: "Sick leave analytics coming soon - awaiting absences data integration."
+                        }, void 0, false, {
+                            fileName: "[project]/app/app/hr/analytics/page.tsx",
+                            lineNumber: 354,
+                            columnNumber: 13
+                        }, this)
+                    ]
+                }, void 0, true, {
+                    fileName: "[project]/app/app/hr/analytics/page.tsx",
+                    lineNumber: 352,
+                    columnNumber: 11
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/app/app/hr/analytics/page.tsx",
+                lineNumber: 351,
+                columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/app/hr/analytics/page.tsx",
-        lineNumber: 108,
+        lineNumber: 112,
         columnNumber: 5
     }, this);
 }
