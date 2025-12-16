@@ -3,18 +3,26 @@ module.exports = [
 "use strict";
 
 __turbopack_context__.s([
+    "getSupabaseClient",
+    ()=>getSupabaseClient,
     "supabase",
     ()=>supabase
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$esm$2f$wrapper$2e$mjs__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/@supabase/supabase-js/dist/esm/wrapper.mjs [app-rsc] (ecmascript)");
 ;
-const supabaseUrl = ("TURBOPACK compile-time value", "https://bmvawfrnlpdvcmffqrzc.supabase.co");
-const supabaseAnonKey = ("TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtdmF3ZnJubHBkdmNtZmZxcnpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTEwOTAsImV4cCI6MjA4MTA4NzA5MH0.DHLJ4aMn1dORfbNPt1XrJtcdIjYN81YQbJ19Q89A_pM");
-if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
-;
-if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
-;
-const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$esm$2f$wrapper$2e$mjs__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createClient"])(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = ("TURBOPACK compile-time value", "https://bmvawfrnlpdvcmffqrzc.supabase.co") || "";
+const supabaseAnonKey = ("TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtdmF3ZnJubHBkdmNtZmZxcnpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTEwOTAsImV4cCI6MjA4MTA4NzA5MH0.DHLJ4aMn1dORfbNPt1XrJtcdIjYN81YQbJ19Q89A_pM") || "";
+function createSupabaseClient() {
+    if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+    ;
+    return (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$esm$2f$wrapper$2e$mjs__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createClient"])(supabaseUrl || "https://placeholder.supabase.co", supabaseAnonKey || "placeholder");
+}
+const supabase = createSupabaseClient();
+function getSupabaseClient() {
+    if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+    ;
+    return supabase;
+}
 }),
 "[externals]/stream [external] (stream, cjs)", ((__turbopack_context__, module, exports) => {
 
@@ -25,7 +33,7 @@ module.exports = mod;
 "[project]/app/app/import-employees/actions.ts [app-rsc] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
-/* __next_internal_action_entry_do_not_use__ [{"4052c50aaf280ea4b0910d47f1b5abe617bc58bbd4":"importEmployeesFromCsv"},"",""] */ __turbopack_context__.s([
+/* __next_internal_action_entry_do_not_use__ [{"408eb8ff223f8f8a3b3518584cb82f22312c1ca162":"importEmployeesFromCsv"},"",""] */ __turbopack_context__.s([
     "importEmployeesFromCsv",
     ()=>importEmployeesFromCsv
 ]);
@@ -118,7 +126,7 @@ async function importEmployeesFromCsv(formData) {
 (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$action$2d$validate$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["ensureServerEntryExports"])([
     importEmployeesFromCsv
 ]);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(importEmployeesFromCsv, "4052c50aaf280ea4b0910d47f1b5abe617bc58bbd4", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(importEmployeesFromCsv, "408eb8ff223f8f8a3b3518584cb82f22312c1ca162", null);
 }),
 "[project]/.next-internal/server/app/app/import-employees/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/app/import-employees/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript) <locals>", ((__turbopack_context__) => {
 "use strict";
@@ -131,7 +139,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$app$2f$app$2f$import$2d$empl
 "use strict";
 
 __turbopack_context__.s([
-    "4052c50aaf280ea4b0910d47f1b5abe617bc58bbd4",
+    "408eb8ff223f8f8a3b3518584cb82f22312c1ca162",
     ()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$app$2f$import$2d$employees$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["importEmployeesFromCsv"]
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$app$2f$import$2d$employees$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$app$2f$import$2d$employees$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/app/import-employees/page/actions.js { ACTIONS_MODULE0 => "[project]/app/app/import-employees/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <locals>');

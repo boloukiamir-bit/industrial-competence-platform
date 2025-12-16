@@ -1,6 +1,36 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { OneToOneMeeting, OneToOneAction, OneToOneMeetingStatus, OneToOneActionOwner } from "@/types/domain";
 
+export async function getAllMeetings(): Promise<OneToOneMeeting[]> {
+  const { data, error } = await supabase
+    .from("one_to_one_meetings")
+    .select("*, employee:employee_id(name), manager:manager_id(name)")
+    .order("scheduled_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching all meetings:", error);
+    return [];
+  }
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    employeeId: row.employee_id,
+    employeeName: row.employee?.name || undefined,
+    managerId: row.manager_id || undefined,
+    managerName: row.manager?.name || undefined,
+    scheduledAt: row.scheduled_at,
+    durationMinutes: row.duration_minutes || undefined,
+    location: row.location || undefined,
+    status: row.status as OneToOneMeetingStatus,
+    templateName: row.template_name || undefined,
+    sharedAgenda: row.shared_agenda || undefined,
+    employeeNotesPrivate: row.employee_notes_private || undefined,
+    managerNotesPrivate: row.manager_notes_private || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || undefined,
+  }));
+}
+
 export async function getMeetingsForEmployee(employeeId: string): Promise<OneToOneMeeting[]> {
   const { data, error } = await supabase
     .from("one_to_one_meetings")
