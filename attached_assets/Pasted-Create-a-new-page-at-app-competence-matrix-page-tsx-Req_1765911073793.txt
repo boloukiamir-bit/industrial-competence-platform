@@ -1,0 +1,130 @@
+Create a new page at:
+
+app/competence/matrix/page.tsx
+
+Requirements:
+
+This must be a client component:
+
+'use client';
+
+
+Import from services/competence.ts:
+
+import {
+  getAllPositions,
+  getEmployeesForPosition,
+  getEmployeeCompetenceProfile,
+  PositionSummary,
+  MatrixColumn,
+  MatrixRow,
+} from '@/services/competence';
+
+
+Behavior:
+
+On initial render:
+
+Load all positions via getAllPositions().
+
+Show a select dropdown at the top of the page so the user can choose a position.
+
+When a position is selected:
+
+Show a loading state.
+
+Use getEmployeesForPosition(selectedPositionId) to get employees in that position.
+
+For each employee, call getEmployeeCompetenceProfile(employee.id) to get their competence profile and summary.
+
+Derive the matrix:
+
+Columns:
+
+Use the mandatory competence items from ANY one profile for that position (e.g. the first profile).
+
+Build MatrixColumn[] from EmployeeCompetenceItem where mandatory === true:
+
+competenceId
+
+label = competenceName
+
+groupName
+
+requiredLevel
+
+Rows:
+
+For each employee profile:
+
+employeeId, employeeName
+
+riskLevel = profile.summary.riskLevel
+
+items: for each column, find the corresponding EmployeeCompetenceItem and map:
+
+competenceId = col.competenceId
+
+status = item.status (fall back to 'N/A' if not found)
+
+level = item.employeeLevel or null
+
+If there are no employees for a position:
+
+Show a pleasant empty state message instead of a matrix.
+
+Rendering:
+
+Use the existing .hr-page layout:
+
+Header with title: “Competence Matrix”
+
+Subtitle: “Compare all employees in a position against the required competences.”
+
+Below header:
+
+A row with:
+
+Position select dropdown
+
+Simple text like “X employees” when a position is chosen
+
+Matrix:
+
+Use a horizontally scrollable wrapper (e.g. a div with overflow-x: auto).
+
+Table layout:
+
+First column: Employee name
+
+Second column: Risk badge (LOW / MEDIUM / HIGH) per employee
+
+Remaining columns: one column per competence
+
+Header text: competence label (shortened if very long)
+
+Cells:
+
+Show level number (0–3 or “-”)
+
+Under or next to it, a small pill for status:
+
+OK = green-like
+
+RISK = red-like
+
+N/A = neutral
+
+Use the same visual language as .hr-competence-table and .hr-status-badge styles:
+
+Rounded corners, dark background, subtle borders, small font for labels.
+
+States:
+
+While loading positions: show a small “Loading positions…” text.
+
+While loading matrix for a selected position: show “Loading competence matrix…” inside the matrix section.
+
+Errors:
+
+If any data load fails, show a short error text at the top using .hr-error styling (same as other HR pages).
