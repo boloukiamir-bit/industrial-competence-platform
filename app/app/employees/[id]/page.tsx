@@ -514,8 +514,11 @@ export default function EmployeeDetailPage() {
 
         {activeTab === "competence" && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
               <CardTitle>Competence</CardTitle>
+              <Link href={`/app/employees/${id}/competence`} className="hr-link" data-testid="link-competence-profile">
+                Visa kompetensprofil →
+              </Link>
             </CardHeader>
             <CardContent>
               {skills.length === 0 ? (
