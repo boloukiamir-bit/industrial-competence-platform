@@ -1,0 +1,115 @@
+PAGE – app/tomorrows-gaps/page.tsx
+
+Create a new page:
+
+Path: app/tomorrows-gaps/page.tsx
+
+Requirements:
+
+It must be a client component:
+
+'use client';
+
+
+Import from services/competence.ts:
+
+import { useEffect, useState } from 'react';
+import { getPositionCoverageForDate, PositionCoverageSummary } from '@/services/competence';
+
+
+Compute tomorrow’s date string at runtime:
+
+function getTomorrowDateString(): string {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  return tomorrow.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+
+Behavior:
+
+On initial render:
+
+Set effectiveDate to tomorrow’s date string.
+
+Call getPositionCoverageForDate(effectiveDate) and store the result in state.
+
+Loading state:
+
+While fetching coverage, show “Calculating tomorrow’s gaps…” inside the main content.
+
+Error state:
+
+If service throws, show a short message using the .hr-error CSS class.
+
+Empty state:
+
+If there are no positions with min_headcount > 0, show a friendly message explaining:
+
+“No positions with minimum headcount defined. Add min_headcount to positions to see Tomorrow’s Gaps.”
+
+Rendering (use existing Apple-like HR styling):
+
+Wrap in <main className="hr-page">.
+
+Header:
+
+<header className="hr-page__header">
+  <div>
+    <h1 className="hr-page__title">Tomorrow’s Gaps</h1>
+    <p className="hr-page__subtitle">
+      Coverage and risk per position based on minimum headcount and competence.
+    </p>
+  </div>
+  <div className="tg-date-pill">
+    Analyzing: {effectiveDate}
+  </div>
+</header>
+
+
+Summary metrics row at top (below header):
+
+Total positions analyzed
+
+Positions at HIGH risk
+
+Positions at MEDIUM risk
+
+Total missing headcount (sum of gap across positions)
+
+Use a layout similar to .hr-kpi-grid and .hr-emp-summary-card.
+
+Main list:
+
+For each PositionCoverageSummary:
+
+Card or row style consistent with the rest of the HR UI.
+
+Show:
+
+Position name
+
+Site / department
+
+Min headcount
+
+Available fully competent employees
+
+Gap
+
+Risk level as a pill (LOW / MEDIUM / HIGH) – reuse the .hr-risk-pill styles (or add variants if needed).
+
+Sorting:
+
+Highest risk positions first (this is already done in the service).
+
+Optional interaction:
+
+Each row can include a small link:
+
+“View competence matrix”
+
+Link to /competence/matrix
+
+This does not need to pass filters; user can select the position from the matrix dropdown.

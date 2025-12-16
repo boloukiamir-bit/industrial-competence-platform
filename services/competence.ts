@@ -390,14 +390,29 @@ export type PositionCoverageSummary = {
 export async function getPositionCoverageForDate(
   effectiveDate: string
 ): Promise<PositionCoverageSummary[]> {
-  const { data: posData, error: posError } = await supabase
+  let positions: {
+    id: string;
+    name: string;
+    site: string | null;
+    department: string | null;
+    minHeadcount: number;
+  }[] = [];
+
+  const result = await supabase
     .from('positions')
     .select('id, name, site, department, min_headcount')
     .gt('min_headcount', 0);
 
-  if (posError) throw posError;
+  if (result.error) {
+    const errorCode = (result.error as any).code;
+    if (errorCode === '42703' || result.error.message?.includes('min_headcount')) {
+      console.warn('min_headcount column not found, returning empty positions list');
+      return [];
+    }
+    throw result.error;
+  }
 
-  const positions = (posData ?? []).map((p: any) => ({
+  positions = (result.data ?? []).map((p: any) => ({
     id: p.id as string,
     name: p.name as string,
     site: (p.site ?? null) as string | null,

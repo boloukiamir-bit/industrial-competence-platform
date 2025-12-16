@@ -718,6 +718,18 @@
   font-weight: 600;
 }
 
+.tg-date-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
 .hr-emp-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
