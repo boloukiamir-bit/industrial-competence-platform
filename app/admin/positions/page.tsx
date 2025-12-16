@@ -8,7 +8,7 @@ import {
   createPosition,
   PositionAdmin,
 } from "@/services/adminCompetence";
-import { Plus, Settings, Check, X } from "lucide-react";
+import { Plus, Settings, X } from "lucide-react";
 
 export default function PositionsAdminPage() {
   const { loading: authLoading } = useAuthGuard();
@@ -21,6 +21,7 @@ export default function PositionsAdminPage() {
     description: "",
     site: "",
     department: "",
+    min_headcount: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,8 +57,9 @@ export default function PositionsAdminPage() {
         description: form.description || undefined,
         site: form.site || undefined,
         department: form.department || undefined,
+        min_headcount: form.min_headcount ? parseInt(form.min_headcount) : undefined,
       });
-      setForm({ name: "", description: "", site: "", department: "" });
+      setForm({ name: "", description: "", site: "", department: "", min_headcount: "" });
       loadData();
     } catch (err) {
       console.error(err);
@@ -68,7 +70,7 @@ export default function PositionsAdminPage() {
   }
 
   function clearForm() {
-    setForm({ name: "", description: "", site: "", department: "" });
+    setForm({ name: "", description: "", site: "", department: "", min_headcount: "" });
   }
 
   if (authLoading || loading) {
@@ -119,6 +121,7 @@ export default function PositionsAdminPage() {
                     <th>Name</th>
                     <th>Site</th>
                     <th>Department</th>
+                    <th style={{ width: 100 }}>Min Headcount</th>
                     <th style={{ width: 100 }}>Requirements</th>
                   </tr>
                 </thead>
@@ -133,6 +136,7 @@ export default function PositionsAdminPage() {
                       </td>
                       <td>{pos.site || "-"}</td>
                       <td>{pos.department || "-"}</td>
+                      <td>{pos.min_headcount ?? "-"}</td>
                       <td>
                         <Link href={`/admin/positions/${pos.id}/requirements`}>
                           <button
@@ -198,6 +202,18 @@ export default function PositionsAdminPage() {
                 onChange={(e) => setForm({ ...form, department: e.target.value })}
                 placeholder="e.g., Production"
                 data-testid="input-position-department"
+              />
+            </div>
+            <div className="hr-form-field">
+              <label className="hr-form-label">Min Headcount</label>
+              <input
+                type="number"
+                className="hr-input"
+                value={form.min_headcount}
+                onChange={(e) => setForm({ ...form, min_headcount: e.target.value })}
+                placeholder="e.g., 2"
+                min="0"
+                data-testid="input-position-min-headcount"
               />
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>

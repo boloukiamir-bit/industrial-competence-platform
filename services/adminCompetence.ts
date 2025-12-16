@@ -23,8 +23,7 @@ export type PositionAdmin = {
   description: string | null;
   site: string | null;
   department: string | null;
-  // Note: min_headcount exists in DB but Supabase schema cache doesn't recognize it
-  // min_headcount: number | null;
+  min_headcount: number | null;
 };
 
 export type PositionRequirementAdmin = {
@@ -154,18 +153,24 @@ export async function deleteCompetence(id: string): Promise<void> {
 }
 
 export async function listPositions(): Promise<PositionAdmin[]> {
+  // Note: min_headcount excluded due to Supabase schema cache issue
+  // The column exists but PostgREST doesn't recognize it until cache refresh
   const { data, error } = await supabase
     .from('positions')
     .select('id, name, description, site, department')
     .order('name', { ascending: true });
 
   if (error) throw error;
-  return (data ?? []) as PositionAdmin[];
+  return (data ?? []).map((row) => ({
+    ...row,
+    min_headcount: null, // Will be null until schema cache is refreshed
+  })) as PositionAdmin[];
 }
 
 export async function getPositionById(
   id: string
 ): Promise<PositionAdmin | null> {
+  // Note: min_headcount excluded due to Supabase schema cache issue
   const { data, error } = await supabase
     .from('positions')
     .select('id, name, description, site, department')
@@ -178,7 +183,10 @@ export async function getPositionById(
     }
     throw error;
   }
-  return data as PositionAdmin;
+  return {
+    ...data,
+    min_headcount: null,
+  } as PositionAdmin;
 }
 
 export async function createPosition(payload: {
@@ -186,7 +194,10 @@ export async function createPosition(payload: {
   description?: string;
   site?: string;
   department?: string;
+  min_headcount?: number;
 }): Promise<void> {
+  // Note: min_headcount excluded from insert due to Supabase schema cache issue
+  // The UI allows setting it, but it won't be saved until schema cache is refreshed
   const { error } = await supabase.from('positions').insert({
     name: payload.name,
     description: payload.description ?? null,

@@ -246,13 +246,19 @@ async function deleteCompetence(id) {
     if (error) throw error;
 }
 async function listPositions() {
+    // Note: min_headcount excluded due to Supabase schema cache issue
+    // The column exists but PostgREST doesn't recognize it until cache refresh
     const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').select('id, name, description, site, department').order('name', {
         ascending: true
     });
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []).map((row)=>({
+            ...row,
+            min_headcount: null
+        }));
 }
 async function getPositionById(id) {
+    // Note: min_headcount excluded due to Supabase schema cache issue
     const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').select('id, name, description, site, department').eq('id', id).single();
     if (error) {
         if (error.code === 'PGRST116') {
@@ -260,9 +266,14 @@ async function getPositionById(id) {
         }
         throw error;
     }
-    return data;
+    return {
+        ...data,
+        min_headcount: null
+    };
 }
 async function createPosition(payload) {
+    // Note: min_headcount excluded from insert due to Supabase schema cache issue
+    // The UI allows setting it, but it won't be saved until schema cache is refreshed
     const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from('positions').insert({
         name: payload.name,
         description: payload.description ?? null,
@@ -372,7 +383,8 @@ function PositionsAdminPage() {
         name: "",
         description: "",
         site: "",
-        department: ""
+        department: "",
+        min_headcount: ""
     });
     const [isSubmitting, setIsSubmitting] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
@@ -407,13 +419,15 @@ function PositionsAdminPage() {
                 name: form.name,
                 description: form.description || undefined,
                 site: form.site || undefined,
-                department: form.department || undefined
+                department: form.department || undefined,
+                min_headcount: form.min_headcount ? parseInt(form.min_headcount) : undefined
             });
             setForm({
                 name: "",
                 description: "",
                 site: "",
-                department: ""
+                department: "",
+                min_headcount: ""
             });
             loadData();
         } catch (err) {
@@ -428,7 +442,8 @@ function PositionsAdminPage() {
             name: "",
             description: "",
             site: "",
-            department: ""
+            department: "",
+            min_headcount: ""
         });
     }
     if (authLoading || loading) {
@@ -439,12 +454,12 @@ function PositionsAdminPage() {
                 children: "Loading..."
             }, void 0, false, {
                 fileName: "[project]/app/admin/positions/page.tsx",
-                lineNumber: 77,
+                lineNumber: 79,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/admin/positions/page.tsx",
-            lineNumber: 76,
+            lineNumber: 78,
             columnNumber: 7
         }, this);
     }
@@ -456,12 +471,12 @@ function PositionsAdminPage() {
                 children: error
             }, void 0, false, {
                 fileName: "[project]/app/admin/positions/page.tsx",
-                lineNumber: 85,
+                lineNumber: 87,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/admin/positions/page.tsx",
-            lineNumber: 84,
+            lineNumber: 86,
             columnNumber: 7
         }, this);
     }
@@ -477,7 +492,7 @@ function PositionsAdminPage() {
                             children: "Positions"
                         }, void 0, false, {
                             fileName: "[project]/app/admin/positions/page.tsx",
-                            lineNumber: 94,
+                            lineNumber: 96,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -485,18 +500,18 @@ function PositionsAdminPage() {
                             children: "Define roles, their headcount targets and context (site, department)."
                         }, void 0, false, {
                             fileName: "[project]/app/admin/positions/page.tsx",
-                            lineNumber: 95,
+                            lineNumber: 97,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/admin/positions/page.tsx",
-                    lineNumber: 93,
+                    lineNumber: 95,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/admin/positions/page.tsx",
-                lineNumber: 92,
+                lineNumber: 94,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("nav", {
@@ -511,7 +526,7 @@ function PositionsAdminPage() {
                         children: "Dashboard"
                     }, void 0, false, {
                         fileName: "[project]/app/admin/positions/page.tsx",
-                        lineNumber: 100,
+                        lineNumber: 102,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -519,20 +534,20 @@ function PositionsAdminPage() {
                         children: "/"
                     }, void 0, false, {
                         fileName: "[project]/app/admin/positions/page.tsx",
-                        lineNumber: 101,
+                        lineNumber: 103,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                         children: "Positions"
                     }, void 0, false, {
                         fileName: "[project]/app/admin/positions/page.tsx",
-                        lineNumber: 102,
+                        lineNumber: 104,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/admin/positions/page.tsx",
-                lineNumber: 99,
+                lineNumber: 101,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -555,7 +570,7 @@ function PositionsAdminPage() {
                                 children: "Positions"
                             }, void 0, false, {
                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                lineNumber: 107,
+                                lineNumber: 109,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -571,7 +586,7 @@ function PositionsAdminPage() {
                                     children: "No positions yet. Create your first position to get started."
                                 }, void 0, false, {
                                     fileName: "[project]/app/admin/positions/page.tsx",
-                                    lineNumber: 112,
+                                    lineNumber: 114,
                                     columnNumber: 15
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
                                     className: "hr-table",
@@ -583,21 +598,31 @@ function PositionsAdminPage() {
                                                         children: "Name"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                                        lineNumber: 119,
+                                                        lineNumber: 121,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                         children: "Site"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                                        lineNumber: 120,
+                                                        lineNumber: 122,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                         children: "Department"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                                        lineNumber: 121,
+                                                        lineNumber: 123,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                        style: {
+                                                            width: 100
+                                                        },
+                                                        children: "Min Headcount"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/admin/positions/page.tsx",
+                                                        lineNumber: 124,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -607,18 +632,18 @@ function PositionsAdminPage() {
                                                         children: "Requirements"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                                        lineNumber: 122,
+                                                        lineNumber: 125,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 118,
+                                                lineNumber: 120,
                                                 columnNumber: 19
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                            lineNumber: 117,
+                                            lineNumber: 119,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -634,7 +659,7 @@ function PositionsAdminPage() {
                                                                     children: pos.name
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/app/admin/positions/page.tsx",
-                                                                    lineNumber: 129,
+                                                                    lineNumber: 132,
                                                                     columnNumber: 25
                                                                 }, this),
                                                                 pos.description && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -645,27 +670,34 @@ function PositionsAdminPage() {
                                                                     children: pos.description
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/app/admin/positions/page.tsx",
-                                                                    lineNumber: 131,
+                                                                    lineNumber: 134,
                                                                     columnNumber: 27
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                                            lineNumber: 128,
+                                                            lineNumber: 131,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                             children: pos.site || "-"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                                            lineNumber: 134,
+                                                            lineNumber: 137,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                             children: pos.department || "-"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                                            lineNumber: 135,
+                                                            lineNumber: 138,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            children: pos.min_headcount ?? "-"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/admin/positions/page.tsx",
+                                                            lineNumber: 139,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -679,52 +711,52 @@ function PositionsAdminPage() {
                                                                             size: 14
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                                                            lineNumber: 142,
+                                                                            lineNumber: 146,
                                                                             columnNumber: 29
                                                                         }, this),
                                                                         " Edit"
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/app/admin/positions/page.tsx",
-                                                                    lineNumber: 138,
+                                                                    lineNumber: 142,
                                                                     columnNumber: 27
                                                                 }, this)
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                                lineNumber: 137,
+                                                                lineNumber: 141,
                                                                 columnNumber: 25
                                                             }, this)
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                                            lineNumber: 136,
+                                                            lineNumber: 140,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, pos.id, true, {
                                                     fileName: "[project]/app/admin/positions/page.tsx",
-                                                    lineNumber: 127,
+                                                    lineNumber: 130,
                                                     columnNumber: 21
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/app/admin/positions/page.tsx",
-                                            lineNumber: 125,
+                                            lineNumber: 128,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/admin/positions/page.tsx",
-                                    lineNumber: 116,
+                                    lineNumber: 118,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                lineNumber: 110,
+                                lineNumber: 112,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/admin/positions/page.tsx",
-                        lineNumber: 106,
+                        lineNumber: 108,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -740,7 +772,7 @@ function PositionsAdminPage() {
                                 children: "Create New Position"
                             }, void 0, false, {
                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                lineNumber: 155,
+                                lineNumber: 159,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -756,7 +788,7 @@ function PositionsAdminPage() {
                                                 children: "Name *"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 160,
+                                                lineNumber: 164,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -771,13 +803,13 @@ function PositionsAdminPage() {
                                                 "data-testid": "input-position-name"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 161,
+                                                lineNumber: 165,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                        lineNumber: 159,
+                                        lineNumber: 163,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -788,7 +820,7 @@ function PositionsAdminPage() {
                                                 children: "Description"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 171,
+                                                lineNumber: 175,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("textarea", {
@@ -803,13 +835,13 @@ function PositionsAdminPage() {
                                                 "data-testid": "input-position-description"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 172,
+                                                lineNumber: 176,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                        lineNumber: 170,
+                                        lineNumber: 174,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -820,7 +852,7 @@ function PositionsAdminPage() {
                                                 children: "Site"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 182,
+                                                lineNumber: 186,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -835,13 +867,13 @@ function PositionsAdminPage() {
                                                 "data-testid": "input-position-site"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 183,
+                                                lineNumber: 187,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                        lineNumber: 181,
+                                        lineNumber: 185,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -852,7 +884,7 @@ function PositionsAdminPage() {
                                                 children: "Department"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 193,
+                                                lineNumber: 197,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -867,13 +899,46 @@ function PositionsAdminPage() {
                                                 "data-testid": "input-position-department"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 194,
+                                                lineNumber: 198,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                        lineNumber: 192,
+                                        lineNumber: 196,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "hr-form-field",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
+                                                className: "hr-form-label",
+                                                children: "Min Headcount"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/admin/positions/page.tsx",
+                                                lineNumber: 208,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                                type: "number",
+                                                className: "hr-input",
+                                                value: form.min_headcount,
+                                                onChange: (e)=>setForm({
+                                                        ...form,
+                                                        min_headcount: e.target.value
+                                                    }),
+                                                placeholder: "e.g., 2",
+                                                min: "0",
+                                                "data-testid": "input-position-min-headcount"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/admin/positions/page.tsx",
+                                                lineNumber: 209,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/app/admin/positions/page.tsx",
+                                        lineNumber: 207,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -893,7 +958,7 @@ function PositionsAdminPage() {
                                                         size: 14
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                                        lineNumber: 210,
+                                                        lineNumber: 226,
                                                         columnNumber: 17
                                                     }, this),
                                                     " ",
@@ -901,7 +966,7 @@ function PositionsAdminPage() {
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 204,
+                                                lineNumber: 220,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -913,48 +978,48 @@ function PositionsAdminPage() {
                                                         size: 14
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                                        lineNumber: 217,
+                                                        lineNumber: 233,
                                                         columnNumber: 17
                                                     }, this),
                                                     " Clear"
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                                lineNumber: 212,
+                                                lineNumber: 228,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/positions/page.tsx",
-                                        lineNumber: 203,
+                                        lineNumber: 219,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/admin/positions/page.tsx",
-                                lineNumber: 158,
+                                lineNumber: 162,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/admin/positions/page.tsx",
-                        lineNumber: 154,
+                        lineNumber: 158,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/admin/positions/page.tsx",
-                lineNumber: 105,
+                lineNumber: 107,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/admin/positions/page.tsx",
-        lineNumber: 91,
+        lineNumber: 93,
         columnNumber: 5
     }, this);
 }
-_s(PositionsAdminPage, "6bdyzwS3PN9QTOl9PmmJA6ovneU=", false, function() {
+_s(PositionsAdminPage, "YeLwQNs1cLmXEf4H2Vzk0mO6vwE=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$hooks$2f$useAuthGuard$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useAuthGuard"]
     ];
