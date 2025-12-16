@@ -391,85 +391,44 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$oneToOne$2e$ts__
 ;
 ;
 async function enqueueDueEventNotifications(referenceDate) {
-    const { data: events, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["supabase"].from("person_events").select("*, employee:employee_id(name, email), manager:owner_manager_id(name, email)").in("status", [
-        "due_soon",
-        "overdue"
-    ]);
+    const { data: events, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["supabase"].from("person_events").select("id, title, category, due_date, employee_id, employees:employee_id(name, email)").neq("status", "completed");
     if (error || !events) {
         console.error("Error fetching due events:", error);
         return 0;
     }
     let count = 0;
     for (const event of events){
-        const employeeEmail = event.employee?.email;
-        const managerEmail = event.manager?.email;
-        if (employeeEmail) {
-            const subject = event.status === "overdue" ? `[OVERDUE] ${event.title}` : `[Due Soon] ${event.title}`;
-            const body = `
-Hello ${event.employee?.name || ""},
+        const employeesData = event.employees;
+        const employee = Array.isArray(employeesData) ? employeesData[0] : employeesData;
+        const toEmail = employee?.email;
+        if (!toEmail) continue;
+        const subject = `Action required: ${event.title}`;
+        const body = `Hello ${employee?.name || ""},
 
-This is a reminder about the following task:
+You have an upcoming HR task that requires attention:
 
-Title: ${event.title}
 Category: ${event.category}
-Due Date: ${event.due_date}
-Status: ${event.status}
-${event.description ? `\nDescription: ${event.description}` : ""}
+Task: ${event.title}
+Due date: ${event.due_date}
 
-Please take action as soon as possible.
+This is an automated reminder.
 
 Best regards,
-Industrial Competence Platform
-      `.trim();
-            const { error: insertError } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["supabase"].from("email_outbox").insert({
-                to_email: employeeEmail,
-                subject,
-                body,
-                status: "pending",
-                meta: {
-                    event_id: event.id,
-                    type: "due_event_employee"
-                }
-            });
-            if (insertError) {
-                console.error("Error inserting employee notification:", insertError);
-            } else {
-                count++;
+Industrial Competence Platform`;
+        const { error: insertError } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["supabase"].from("email_outbox").insert({
+            to_email: toEmail,
+            subject,
+            body,
+            status: "pending",
+            meta: {
+                event_id: event.id,
+                type: "due_event"
             }
-        }
-        if (managerEmail && managerEmail !== employeeEmail) {
-            const subject = event.status === "overdue" ? `[OVERDUE] Action required for ${event.employee?.name}: ${event.title}` : `[Due Soon] Reminder for ${event.employee?.name}: ${event.title}`;
-            const body = `
-Hello ${event.manager?.name || ""},
-
-This is a reminder about a task for your team member ${event.employee?.name || ""}:
-
-Title: ${event.title}
-Category: ${event.category}
-Due Date: ${event.due_date}
-Status: ${event.status}
-${event.description ? `\nDescription: ${event.description}` : ""}
-
-Please ensure this is addressed.
-
-Best regards,
-Industrial Competence Platform
-      `.trim();
-            const { error: insertError } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["supabase"].from("email_outbox").insert({
-                to_email: managerEmail,
-                subject,
-                body,
-                status: "pending",
-                meta: {
-                    event_id: event.id,
-                    type: "due_event_manager"
-                }
-            });
-            if (insertError) {
-                console.error("Error inserting manager notification:", insertError);
-            } else {
-                count++;
-            }
+        });
+        if (insertError) {
+            console.error("Error inserting notification:", insertError);
+        } else {
+            count++;
         }
     }
     return count;
