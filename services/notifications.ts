@@ -14,6 +14,7 @@ export async function enqueueDueEventNotifications(referenceDate: Date): Promise
   }
 
   let count = 0;
+  const oneDayAgo = new Date(referenceDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
   for (const event of events) {
     const employeesData = event.employees as unknown;
@@ -23,6 +24,20 @@ export async function enqueueDueEventNotifications(referenceDate: Date): Promise
     const toEmail = employee?.email;
 
     if (!toEmail) continue;
+
+    const { data: existingNotification } = await supabase
+      .from("email_outbox")
+      .select("id")
+      .eq("to_email", toEmail)
+      .gte("created_at", oneDayAgo)
+      .filter("meta->>event_id", "eq", event.id)
+      .filter("meta->>type", "eq", "due_event")
+      .in("status", ["pending", "sent"])
+      .limit(1);
+
+    if (existingNotification && existingNotification.length > 0) {
+      continue;
+    }
 
     const subject = `Action required: ${event.title}`;
     const body = `Hello ${employee?.name || ""},
@@ -48,6 +63,143 @@ Industrial Competence Platform`;
 
     if (insertError) {
       console.error("Error inserting notification:", insertError);
+    } else {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+export async function enqueueManagerDigestNotifications(referenceDate: Date): Promise<number> {
+  const today = referenceDate.toISOString().split("T")[0];
+  const sevenDaysLater = new Date(referenceDate.getTime() + 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
+
+  const { data: events, error } = await supabase
+    .from("person_events")
+    .select(`
+      id, title, category, due_date, status,
+      owner_manager_id,
+      manager:owner_manager_id(id, name, email),
+      employees:employee_id(name)
+    `)
+    .neq("status", "completed");
+
+  if (error || !events) {
+    console.error("Error fetching events for manager digest:", error);
+    return 0;
+  }
+
+  const managerDigests: Record<string, {
+    managerId: string;
+    managerName: string;
+    managerEmail: string;
+    overdueByCategory: Record<string, number>;
+    dueSoonByCategory: Record<string, number>;
+    criticalItems: Array<{ title: string; employeeName: string; dueDate: string; isOverdue: boolean }>;
+  }> = {};
+
+  for (const event of events) {
+    const managerData = event.manager as unknown;
+    const manager = Array.isArray(managerData)
+      ? (managerData[0] as { id: string; name: string; email: string } | undefined)
+      : (managerData as { id: string; name: string; email: string } | null);
+
+    if (!manager?.id || !manager?.email) continue;
+
+    const employeeData = event.employees as unknown;
+    const employee = Array.isArray(employeeData)
+      ? (employeeData[0] as { name: string } | undefined)
+      : (employeeData as { name: string } | null);
+
+    const isOverdue = event.due_date < today;
+    const isDueSoon = event.due_date >= today && event.due_date <= sevenDaysLater;
+
+    if (!isOverdue && !isDueSoon) continue;
+
+    if (!managerDigests[manager.id]) {
+      managerDigests[manager.id] = {
+        managerId: manager.id,
+        managerName: manager.name || "Manager",
+        managerEmail: manager.email,
+        overdueByCategory: {},
+        dueSoonByCategory: {},
+        criticalItems: [],
+      };
+    }
+
+    const digest = managerDigests[manager.id];
+    const category = event.category || "other";
+
+    if (isOverdue) {
+      digest.overdueByCategory[category] = (digest.overdueByCategory[category] || 0) + 1;
+    } else if (isDueSoon) {
+      digest.dueSoonByCategory[category] = (digest.dueSoonByCategory[category] || 0) + 1;
+    }
+
+    digest.criticalItems.push({
+      title: event.title,
+      employeeName: employee?.name || "Unknown",
+      dueDate: event.due_date,
+      isOverdue,
+    });
+  }
+
+  let count = 0;
+
+  for (const digest of Object.values(managerDigests)) {
+    const overdueTotal = Object.values(digest.overdueByCategory).reduce((s, c) => s + c, 0);
+    const dueSoonTotal = Object.values(digest.dueSoonByCategory).reduce((s, c) => s + c, 0);
+
+    if (overdueTotal === 0 && dueSoonTotal === 0) continue;
+
+    const overdueLines = Object.entries(digest.overdueByCategory)
+      .map(([cat, cnt]) => `  - ${cat}: ${cnt}`)
+      .join("\n");
+
+    const dueSoonLines = Object.entries(digest.dueSoonByCategory)
+      .map(([cat, cnt]) => `  - ${cat}: ${cnt}`)
+      .join("\n");
+
+    const topItems = digest.criticalItems
+      .sort((a, b) => (a.isOverdue === b.isOverdue ? 0 : a.isOverdue ? -1 : 1))
+      .slice(0, 5);
+
+    const topItemsLines = topItems
+      .map((item) => `  - ${item.title} (${item.employeeName}) - Due: ${item.dueDate}${item.isOverdue ? " [OVERDUE]" : ""}`)
+      .join("\n");
+
+    const subject = "Weekly People Risk Digest";
+    const body = `Hello ${digest.managerName},
+
+Here is your weekly summary of people-related tasks requiring attention:
+
+OVERDUE (${overdueTotal} total):
+${overdueLines || "  None"}
+
+DUE SOON - Next 7 days (${dueSoonTotal} total):
+${dueSoonLines || "  None"}
+
+TOP 5 CRITICAL ITEMS:
+${topItemsLines || "  None"}
+
+Please log in to the platform to take action.
+
+Best regards,
+Industrial Competence Platform`;
+
+    const { error: insertError } = await supabase.from("email_outbox").insert({
+      to_email: digest.managerEmail,
+      subject,
+      body,
+      status: "pending",
+      meta: { type: "manager_digest", manager_id: digest.managerId },
+    });
+
+    if (insertError) {
+      console.error("Error inserting manager digest:", insertError);
     } else {
       count++;
     }

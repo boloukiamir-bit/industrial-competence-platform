@@ -1,0 +1,209 @@
+You are working in an existing Next.js + TypeScript + Supabase project.
+
+Context:
+- 1:1 meetings are working
+- HR Analytics page loads
+- Notification cron `/api/cron/daily-notifications` is working
+- `enqueueDueEventNotifications` now inserts rows into `email_outbox`
+- `person_events` and `email_outbox` tables exist and are used
+
+Now I want you to:
+
+1) Make notifications smarter (no duplicates, manager summary)
+2) Add calendar invite support for 1:1 meetings
+3) Upgrade the HR Analytics page with more relevant KPIs
+
+Do NOT break existing features.  
+Return COMPLETE, production-ready code only (no TODOs, no comments-only blocks).
+
+====================================================
+1. SMART NOTIFICATIONS – AVOID DUPLICATES + MANAGER DIGEST
+====================================================
+
+### 1.1 Avoid duplicate notifications
+
+Update `enqueueDueEventNotifications` in `services/notifications.ts`:
+
+- Before inserting into `email_outbox`, check if a notification for this `event_id` and `type = "due_event"` already exists with status in ("pending", "sent") within the last 24 hours.
+- If such a row exists, skip inserting a new one.
+- Otherwise, insert as you do now.
+
+Implementation hint:
+- Query `email_outbox` with `meta->>'event_id' = event.id::text` AND `meta->>'type' = 'due_event'` and `created_at >= NOW() - INTERVAL '1 day'`.
+
+Return the **number of newly created notifications**, as you do now.
+
+### 1.2 Manager digest notifications
+
+Add a new function in `services/notifications.ts`:
+
+```ts
+export async function enqueueManagerDigestNotifications(referenceDate: Date): Promise<number>;
+Logic:
+
+For each manager (owner_manager_id) that has at least one person_event:
+
+overdue OR due_soon (you can define due_soon as due_date <= referenceDate + 7 days and not completed)
+
+Build a single email per manager that includes:
+
+number of overdue events per category
+
+number of due_soon events per category
+
+list of top 5 critical items (title + employee name + due date)
+
+Insert one row per manager into email_outbox with:
+
+to_email = manager’s email (join via employees table or users table, whichever is present)
+
+subject like: Weekly People Risk Digest
+
+body: human-readable summary
+
+Update the cron handler at /api/cron/daily-notifications so it:
+
+Calls enqueueDueEventNotifications(referenceDate)
+
+Calls enqueueUpcomingOneToOnes(referenceDate) (if it exists already)
+
+Calls enqueueOverdueActions(referenceDate) (if it exists already)
+
+Calls enqueueManagerDigestNotifications(referenceDate)
+
+Returns a JSON object that includes the counts for each function.
+
+====================================================
+2. CALENDAR INVITES FOR 1:1 MEETINGS
+We already have one_to_one_meetings and one-to-ones pages.
+
+2.1 Add ICS text generation
+Create a helper in lib/calendar.ts:
+
+ts
+Kopiera kod
+export function generateIcsForOneToOne(meeting: {
+  id: string;
+  scheduled_at: string;  // ISO string
+  duration_minutes?: number;
+  employee_name: string;
+  manager_name: string;
+  employee_email: string;
+  manager_email: string;
+}): string;
+The function should return a valid text/calendar ICS string with:
+
+A single VEVENT
+
+DTSTART/DTEND based on scheduled_at + duration
+
+SUMMARY like: 1:1 meeting – {employee_name} & {manager_name}
+
+DESCRIPTION with a short text and a link back to the web app (e.g. /one-to-ones/{id})
+
+ORGANIZER set to manager_email
+
+ATTENDEE for both employee and manager
+
+2.2 Enqueue calendar invite mail when creating a 1:1
+Where you create new 1:1 meetings (in the service or API route that handles creation):
+
+After inserting into one_to_one_meetings, load:
+
+employee name + email
+
+manager name + email
+
+Call generateIcsForOneToOne(...)
+
+Insert two rows into email_outbox:
+
+To employee
+
+To manager
+
+Each email should have:
+
+subject: 1:1 meeting scheduled – {date/time}
+
+body: short explanation + mention “see attached calendar invite”
+
+meta: { type: "one_to_one_invite", meeting_id: ..., recipient_role: "employee" | "manager" }
+
+Store the ICS content in:
+
+meta.ics field, OR
+
+a new column in email_outbox such as ics_content TEXT (create column if not exists)
+
+We will later wire this to a real mail sender that attaches the ICS.
+
+====================================================
+3. HR ANALYTICS V2 – MORE RELEVANT KPIs
+Upgrade app/hr/analytics/page.tsx to show these KPIs:
+
+Headcount by org unit and employment_type
+
+Query employees grouped by org_unit (or line/team if org_units not fully set up yet).
+
+Show a table or simple chart: unit | permanent | temporary | consultant | total.
+
+Temporary contracts ending within 90 days
+
+From employees where employment_type = 'temporary' and contract_end_date <= CURRENT_DATE + 90 days.
+
+Show count and a small list of who they are.
+
+Critical person_events
+
+Count of events per category where:
+
+overdue: due_date < CURRENT_DATE and not completed
+
+due_soon: due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' and not completed.
+
+Display per category: training, medical_check, work_env_delegation, equipment, contract.
+
+People Risk Index per unit
+
+For each org unit (or line/team):
+
+risk_index = (number of overdue events + number of due_soon events) / headcount.
+
+Color code: green/yellow/red based on thresholds (e.g. <0.2, 0.2–0.5, >0.5).
+
+(Optional if absences table exists) Sick leave %
+
+If there is an absences table, compute % sick leave days over last 12 months per unit.
+
+If not available, leave out or add a placeholder card with “Coming soon”.
+
+The page should:
+
+Use server-side data fetching (Supabase) as you already do.
+
+Render metric cards and simple tables.
+
+Be accessible only to HR_ADMIN role (if RBAC is implemented; otherwise just leave it public for now).
+
+====================================================
+4. IMPLEMENTATION RULES
+Do NOT break existing notification functions.
+
+Do NOT break existing 1:1 pages.
+
+Use the existing Supabase client and existing TypeScript types where possible.
+
+Ensure TypeScript compiles and Next.js builds.
+
+Return full updated code for:
+
+services/notifications.ts
+
+lib/calendar.ts (new)
+
+any 1:1 creation route/service you modify
+
+app/hr/analytics/page.tsx (updated)
+
+No prose, no TODOs, only working code.
