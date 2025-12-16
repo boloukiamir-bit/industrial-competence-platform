@@ -175,3 +175,155 @@ export async function getSkillStats(): Promise<Record<string, SkillStats>> {
 
   return stats;
 }
+
+// ============================================================
+// Position-based Tomorrow's Gaps v1
+// ============================================================
+
+import { getEmployeesForPosition, getEmployeeCompetenceProfile } from "./competence";
+
+export type PositionGapRisk = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type PositionGapSummary = {
+  positionId: string;
+  positionName: string;
+  site: string | null;
+  department: string | null;
+  minHeadcount: number;
+  totalEmployees: number;
+  fullyCompetentCount: number;
+  gapCount: number;
+  coveragePercent: number;
+  riskLevel: PositionGapRisk;
+  riskReason: string | null;
+};
+
+export type TomorrowsGapsOverview = {
+  positions: PositionGapSummary[];
+  summary: {
+    totalPositions: number;
+    criticalPositions: number;
+    highRiskPositions: number;
+    mediumRiskPositions: number;
+    lowRiskPositions: number;
+    totalGapHeadcount: number;
+  };
+};
+
+type PositionRow = {
+  id: string;
+  name: string;
+  site: string | null;
+  department: string | null;
+  min_headcount: number | null;
+};
+
+export async function getTomorrowsGaps(): Promise<TomorrowsGapsOverview> {
+  const { data: posData, error: posError } = await supabase
+    .from("positions")
+    .select("id, name, site, department, min_headcount")
+    .order("name", { ascending: true });
+
+  if (posError) throw posError;
+
+  const positions = (posData ?? []) as PositionRow[];
+  const positionGaps: PositionGapSummary[] = [];
+
+  let criticalPositions = 0;
+  let highRiskPositions = 0;
+  let mediumRiskPositions = 0;
+  let lowRiskPositions = 0;
+  let totalGapHeadcount = 0;
+
+  for (const pos of positions) {
+    const minHeadcount = pos.min_headcount ?? 0;
+    
+    const employees = await getEmployeesForPosition(pos.id);
+    const totalEmployees = employees.length;
+    
+    let fullyCompetentCount = 0;
+    
+    for (const emp of employees) {
+      try {
+        const profile = await getEmployeeCompetenceProfile(emp.id);
+        if (profile.summary.gapCount === 0 && profile.summary.coveragePercent === 100) {
+          fullyCompetentCount++;
+        }
+      } catch (err) {
+        console.error(`Failed to get profile for employee ${emp.id}:`, err);
+      }
+    }
+
+    const gapCount = Math.max(0, minHeadcount - fullyCompetentCount);
+    const coveragePercent = minHeadcount === 0 
+      ? 100 
+      : Math.round((fullyCompetentCount / minHeadcount) * 100);
+
+    let riskLevel: PositionGapRisk;
+    let riskReason: string | null = null;
+
+    if (minHeadcount === 0) {
+      riskLevel = "LOW";
+      riskReason = "No minimum headcount defined";
+    } else if (fullyCompetentCount >= minHeadcount) {
+      riskLevel = "LOW";
+    } else if (fullyCompetentCount === 0) {
+      riskLevel = "CRITICAL";
+      riskReason = `No fully competent employees (need ${minHeadcount})`;
+    } else if (coveragePercent < 50) {
+      riskLevel = "HIGH";
+      riskReason = `Only ${fullyCompetentCount}/${minHeadcount} positions covered`;
+    } else {
+      riskLevel = "MEDIUM";
+      riskReason = `${gapCount} position(s) uncovered`;
+    }
+
+    switch (riskLevel) {
+      case "CRITICAL":
+        criticalPositions++;
+        break;
+      case "HIGH":
+        highRiskPositions++;
+        break;
+      case "MEDIUM":
+        mediumRiskPositions++;
+        break;
+      case "LOW":
+        lowRiskPositions++;
+        break;
+    }
+
+    totalGapHeadcount += gapCount;
+
+    positionGaps.push({
+      positionId: pos.id,
+      positionName: pos.name,
+      site: pos.site,
+      department: pos.department,
+      minHeadcount,
+      totalEmployees,
+      fullyCompetentCount,
+      gapCount,
+      coveragePercent,
+      riskLevel,
+      riskReason,
+    });
+  }
+
+  positionGaps.sort((a, b) => {
+    const riskOrder: Record<PositionGapRisk, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+    return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+  });
+
+  return {
+    positions: positionGaps,
+    summary: {
+      totalPositions: positions.length,
+      criticalPositions,
+      highRiskPositions,
+      mediumRiskPositions,
+      lowRiskPositions,
+      totalGapHeadcount,
+    },
+  };
+}
