@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
       employeeName: employee?.name,
       status: "active",
       startedAt: now.toISOString(),
-      currentStep: 0,
       steps,
     };
 
