@@ -14,10 +14,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     async function checkExistingSession() {
-      const session = await getSession();
-      if (session?.user) {
-        router.replace('/app/hr/tasks');
-      } else {
+      try {
+        const session = await getSession();
+        if (session?.user) {
+          router.replace('/app/hr/tasks');
+        } else {
+          setCheckingSession(false);
+        }
+      } catch (err) {
+        console.error('Session check failed:', err);
         setCheckingSession(false);
       }
     }
@@ -34,7 +39,15 @@ export default function LoginPage() {
       router.replace('/app/hr/tasks');
     } catch (error: unknown) {
       console.error(error);
-      setErrorMsg(error instanceof Error ? error.message : 'Failed to sign in.');
+      let message = 'Failed to sign in.';
+      if (error instanceof Error) {
+        if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
+          message = 'Network error. Please check your internet connection and try again.';
+        } else {
+          message = error.message;
+        }
+      }
+      setErrorMsg(message);
       setLoading(false);
     }
   }
