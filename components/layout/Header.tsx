@@ -42,12 +42,16 @@ export function Header() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="hidden sm:inline-flex" data-testid="button-login">
-              Log in
-            </Button>
-            <Button size="sm" data-testid="button-get-started">
-              Get Started
-            </Button>
+            <Link href="/login">
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex" data-testid="button-login">
+                Log in
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button size="sm" data-testid="button-get-started">
+                Get Started
+              </Button>
+            </Link>
             <Button
               variant="ghost"
               size="icon"
@@ -77,12 +81,16 @@ export function Header() {
               </a>
             ))}
             <div className="border-t border-border mt-2 pt-4">
-              <Button variant="outline" className="w-full mb-2" data-testid="button-mobile-login">
-                Log in
-              </Button>
-              <Button className="w-full" data-testid="button-mobile-get-started">
-                Get Started
-              </Button>
+              <Link href="/login">
+                <Button variant="outline" className="w-full mb-2" data-testid="button-mobile-login">
+                  Log in
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button className="w-full" data-testid="button-mobile-get-started">
+                  Get Started
+                </Button>
+              </Link>
             </div>
           </nav>
         </div>
