@@ -3395,6 +3395,35 @@ body {
   font-weight: 600;
 }
 
+.hr-toggle {
+  border: 1px solid var(--hr-border);
+  background: var(--hr-bg-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  justify-content: center;
+  align-items: center;
+  width: 28px;
+  height: 28px;
+  transition: all .15s;
+  display: inline-flex;
+}
+
+.hr-toggle--on {
+  color: #22c55e;
+  background: #22c55e33;
+  border-color: #22c55e80;
+}
+
+.hr-toggle--off {
+  color: #ef4444b3;
+  background: #ef44441a;
+  border-color: #ef44444d;
+}
+
+.hr-toggle:hover {
+  transform: scale(1.05);
+}
+
 .file\:mr-4::file-selector-button {
   margin-right: 1rem;
 }
