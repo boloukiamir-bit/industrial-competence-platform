@@ -365,6 +365,23 @@
   box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.6);
 }
 
+/* Top User Bar */
+.hr-topuser {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hr-topuser__email {
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.hr-button--dense {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
 /* Landing Page Styles */
 .lp {
   min-height: 100vh;
