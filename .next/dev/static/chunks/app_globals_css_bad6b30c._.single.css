@@ -702,10 +702,6 @@ body {
   width: 16rem;
 }
 
-.w-72 {
-  width: 18rem;
-}
-
 .w-8 {
   width: 2rem;
 }
@@ -2852,6 +2848,57 @@ body {
   color: #9ca3af;
   margin-bottom: 8px;
   font-size: .8rem;
+}
+
+.hr-matrix-controls {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  display: flex;
+}
+
+.hr-matrix-controls__select {
+  min-width: 280px;
+}
+
+.hr-matrix-controls__count {
+  color: #9ca3af;
+  font-size: .875rem;
+}
+
+.hr-matrix-wrapper {
+  background: #0f172ae6;
+  border: 1px solid #374151e6;
+  border-radius: 18px;
+  overflow-x: auto;
+}
+
+.hr-matrix-wrapper .hr-competence-table {
+  min-width: 800px;
+}
+
+.hr-matrix-wrapper .hr-competence-table th {
+  z-index: 10;
+  position: sticky;
+  top: 0;
+}
+
+.hr-matrix-wrapper .hr-competence-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.hr-matrix-cell {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  display: flex;
+}
+
+.hr-matrix-cell__level {
+  font-size: .9rem;
+  font-weight: 600;
 }
 
 .file\:mr-4::file-selector-button {

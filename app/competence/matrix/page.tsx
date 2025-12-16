@@ -127,10 +127,10 @@ export default function CompetenceMatrixPage() {
         </div>
       </header>
 
-      <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <div className="w-72">
+      <div className="hr-matrix-controls">
+        <div className="hr-matrix-controls__select">
           {loadingPositions ? (
-            <p className="text-sm text-muted-foreground">Loading positions...</p>
+            <p className="hr-matrix-controls__count">Loading positions...</p>
           ) : (
             <Select
               value={selectedPositionId ?? ''}
@@ -152,7 +152,7 @@ export default function CompetenceMatrixPage() {
         </div>
 
         {selectedPosition && !loadingMatrix && (
-          <span className="text-sm text-muted-foreground" data-testid="text-employee-count">
+          <span className="hr-matrix-controls__count" data-testid="text-employee-count">
             {rows.length} employee{rows.length !== 1 ? 's' : ''}
           </span>
         )}
@@ -177,7 +177,7 @@ export default function CompetenceMatrixPage() {
       )}
 
       {selectedPositionId && !loadingMatrix && rows.length > 0 && columns.length > 0 && (
-        <div className="hr-competence-table-wrapper" style={{ overflowX: 'auto' }}>
+        <div className="hr-matrix-wrapper">
           <table className="hr-competence-table" data-testid="matrix-table">
             <thead>
               <tr>
@@ -214,8 +214,8 @@ export default function CompetenceMatrixPage() {
                   </td>
                   {row.items.map((cell, idx) => (
                     <td key={columns[idx].competenceId}>
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="hr-level-chip hr-level-chip--owned">
+                      <div className="hr-matrix-cell">
+                        <span className="hr-matrix-cell__level">
                           {cell.level !== null ? cell.level : '-'}
                         </span>
                         <span
