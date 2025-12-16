@@ -3,10 +3,20 @@ import type { PersonEvent } from "@/types/domain";
 import { getUpcomingMeetings, getOverdueActions } from "./oneToOne";
 
 export async function enqueueDueEventNotifications(referenceDate: Date): Promise<number> {
+  const startDate = new Date(referenceDate);
+  startDate.setDate(startDate.getDate() - 7);
+  const endDate = new Date(referenceDate);
+  endDate.setDate(endDate.getDate() + 7);
+
+  const startDateStr = startDate.toISOString().split("T")[0];
+  const endDateStr = endDate.toISOString().split("T")[0];
+
   const { data: events, error } = await supabase
     .from("person_events")
-    .select("*, employee:employee_id(name, email), manager:owner_manager_id(name, email)")
-    .in("status", ["due_soon", "overdue"]);
+    .select("id, title, category, due_date, employee_id, employees:employee_id(name, email)")
+    .gte("due_date", startDateStr)
+    .lte("due_date", endDateStr)
+    .neq("status", "completed");
 
   if (error || !events) {
     console.error("Error fetching due events:", error);
@@ -16,79 +26,37 @@ export async function enqueueDueEventNotifications(referenceDate: Date): Promise
   let count = 0;
 
   for (const event of events) {
-    const employeeEmail = event.employee?.email;
-    const managerEmail = event.manager?.email;
+    const employee = event.employees as { name: string; email: string } | null;
+    const toEmail = employee?.email;
 
-    if (employeeEmail) {
-      const subject = event.status === "overdue"
-        ? `[OVERDUE] ${event.title}`
-        : `[Due Soon] ${event.title}`;
+    if (!toEmail) continue;
 
-      const body = `
-Hello ${event.employee?.name || ""},
+    const subject = `Åtgärda: ${event.title}`;
+    const body = `Hej ${employee?.name || ""},
 
-This is a reminder about the following task:
+Du har en uppgift som behöver åtgärdas:
 
-Title: ${event.title}
-Category: ${event.category}
-Due Date: ${event.due_date}
-Status: ${event.status}
-${event.description ? `\nDescription: ${event.description}` : ""}
+Kategori: ${event.category}
+Uppgift: ${event.title}
+Förfallodatum: ${event.due_date}
 
-Please take action as soon as possible.
+Vänligen vidta åtgärd.
 
-Best regards,
-Industrial Competence Platform
-      `.trim();
+Med vänliga hälsningar,
+Industrial Competence Platform`;
 
-      const { error: insertError } = await supabase.from("email_outbox").insert({
-        to_email: employeeEmail,
-        subject,
-        body,
-        status: "pending",
-        meta: { event_id: event.id, type: "due_event_employee" },
-      });
-      if (insertError) {
-        console.error("Error inserting employee notification:", insertError);
-      } else {
-        count++;
-      }
-    }
+    const { error: insertError } = await supabase.from("email_outbox").insert({
+      to_email: toEmail,
+      subject,
+      body,
+      status: "pending",
+      meta: { event_id: event.id, type: "due_event" },
+    });
 
-    if (managerEmail && managerEmail !== employeeEmail) {
-      const subject = event.status === "overdue"
-        ? `[OVERDUE] Action required for ${event.employee?.name}: ${event.title}`
-        : `[Due Soon] Reminder for ${event.employee?.name}: ${event.title}`;
-
-      const body = `
-Hello ${event.manager?.name || ""},
-
-This is a reminder about a task for your team member ${event.employee?.name || ""}:
-
-Title: ${event.title}
-Category: ${event.category}
-Due Date: ${event.due_date}
-Status: ${event.status}
-${event.description ? `\nDescription: ${event.description}` : ""}
-
-Please ensure this is addressed.
-
-Best regards,
-Industrial Competence Platform
-      `.trim();
-
-      const { error: insertError } = await supabase.from("email_outbox").insert({
-        to_email: managerEmail,
-        subject,
-        body,
-        status: "pending",
-        meta: { event_id: event.id, type: "due_event_manager" },
-      });
-      if (insertError) {
-        console.error("Error inserting manager notification:", insertError);
-      } else {
-        count++;
-      }
+    if (insertError) {
+      console.error("Error inserting notification:", insertError);
+    } else {
+      count++;
     }
   }
 
