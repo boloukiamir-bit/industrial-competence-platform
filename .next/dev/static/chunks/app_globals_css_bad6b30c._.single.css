@@ -1424,6 +1424,10 @@ body {
   padding: .25rem;
 }
 
+.p-12 {
+  padding: 3rem;
+}
+
 .p-2 {
   padding: .5rem;
 }
@@ -2710,6 +2714,13 @@ body {
   color: #fee2e2;
   background: #b91c1c40;
   border-color: #f87171f2;
+}
+
+.hr-risk-pill--critical {
+  color: #fca5a5;
+  background: #7f1d1d66;
+  border-color: #dc2626;
+  font-weight: 600;
 }
 
 .hr-emp-summary-grid {
