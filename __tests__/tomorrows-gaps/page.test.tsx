@@ -5,6 +5,10 @@ import * as competenceService from '@/services/competence';
 
 jest.mock('@/services/competence');
 
+jest.mock('@/hooks/useAuthGuard', () => ({
+  useAuthGuard: () => ({ loading: false }),
+}));
+
 jest.mock('@/components/ui/progress', () => ({
   Progress: ({ value, className }: { value: number; className?: string }) => (
     <div data-testid="progress-bar" data-value={value} className={className}>

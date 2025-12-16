@@ -5,6 +5,10 @@ import * as competenceService from '@/services/competence';
 
 jest.mock('@/services/competence');
 
+jest.mock('@/hooks/useAuthGuard', () => ({
+  useAuthGuard: () => ({ loading: false }),
+}));
+
 jest.mock('@/components/ui/select', () => ({
   Select: ({ children, onValueChange, value }: any) => (
     <div data-testid="mock-select" data-value={value}>
