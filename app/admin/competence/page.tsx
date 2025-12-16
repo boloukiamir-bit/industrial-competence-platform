@@ -149,7 +149,15 @@ export default function CompetenceAdminPage() {
     }
   }
 
-  if (authLoading || loading) {
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access…</p>
+      </main>
+    );
+  }
+
+  if (loading) {
     return (
       <main className="hr-page">
         <p className="hr-page__subtitle">Loading...</p>
