@@ -20,7 +20,7 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - **Core Functionality:** Includes modules for Competence Management (matrix, gap analysis, certifications), HR Core (employee data, performance reviews, salary, digital handbooks), and Operations (manager risk dashboard, equipment tracking, person events).
 - **GDPR Support:** Implements access logging, data export, and anonymization utilities to ensure compliance.
 - **API Routes:** Dedicated API routes for GDPR functionalities like employee data export.
-- **Authentication/Authorization:** Role-Based Access Control (RBAC) helpers are implemented for user management and role-based content visibility.
+- **Authentication/Authorization:** Supabase Auth with email/password login. Protected routes under `/app/*` redirect unauthenticated users to `/login`. Role-Based Access Control (RBAC) helpers are implemented for user management and role-based content visibility.
 - **HR Workflow Engine:** Manages standardized processes (e.g., sick leave, parental leave, onboarding) with templates, step tracking, due dates, and completion statuses.
 - **Gap Analysis Engine:** Identifies critical skill gaps, training priorities, and overstaffed skills. "Tomorrow's Gaps v1" provides position-based risk/coverage analysis, calculating fully competent employee counts against minimum headcount requirements.
 - **Notification Engine:** Features an email outbox and a cron endpoint for daily notifications.

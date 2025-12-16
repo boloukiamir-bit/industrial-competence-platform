@@ -1,0 +1,67 @@
+You are working in a Next.js 13+ app router project with Supabase.
+
+Context:
+- Supabase client is already used in service files like services/hrWorkflows.ts:
+  - It uses NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY with createClient from '@supabase/supabase-js'.
+- The app has multiple client-side pages:
+  - app/hr/workflows/...
+  - app/hr/tasks/page.tsx
+  - app/employees/[id]/competence/page.tsx
+  - app/competence/matrix/page.tsx
+  - app/tomorrows-gaps/page.tsx
+- Styling:
+  - Apple-like HR styling defined in app/globals.css (.hr-page, .hr-card, .hr-button, etc.).
+
+Goal:
+Implement a **minimal but real authentication flow** using Supabase Auth with email/password, plus a simple “auth guard” for protected pages.
+
+We want:
+
+1. A reusable auth service (sign in, sign out, get current user).
+2. A /login page with email/password form.
+3. A simple hook that redirects unauthenticated users to /login.
+4. Key HR pages guarded behind login.
+5. Optional: a small “Logged in as … / Sign out” indicator in a shared layout or header.
+
+Do NOT introduce complex role-based access yet. One logged-in user with full access is fine.
+
+==================================================
+1) AUTH SERVICE – services/auth.ts
+==================================================
+
+Create a new file: services/auth.ts
+
+Use the SAME Supabase client pattern as existing services. Either reuse an existing exported supabase client, or create a new one in this file using NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
+
+Example structure (adjust if there is already a shared client):
+
+```ts
+// services/auth.ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+// If you already have a shared client in another service file, reuse it instead:
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export async function signInWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function getCurrentUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user;
+}

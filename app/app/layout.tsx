@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
@@ -19,9 +19,12 @@ import {
   Shield,
   Building2,
   BarChart3,
-  Workflow
+  Workflow,
+  LogOut
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
+import { useAuth } from "@/hooks/useAuth";
+import { signOut } from "@/services/auth";
 
 type NavItem = {
   name: string;
@@ -51,11 +54,36 @@ const navItems: NavItem[] = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user: authUser, loading: authLoading, isAuthenticated } = useAuth(true);
   const [user, setUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
-    getCurrentUser().then(setUser);
-  }, []);
+    if (isAuthenticated) {
+      getCurrentUser().then(setUser);
+    }
+  }, [isAuthenticated]);
+
+  async function handleSignOut() {
+    try {
+      await signOut();
+      router.push("/login");
+    } catch (err) {
+      console.error("Sign out failed:", err);
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-gray-500 dark:text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const visibleNavItems = navItems.filter((item) => {
     if (item.hrAdminOnly && user?.role !== "HR_ADMIN") return false;
@@ -108,11 +136,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email || "User"}</span>
-            <div
-              className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600"
-              data-testid="user-avatar-placeholder"
-            />
+            <span className="text-sm text-gray-600 dark:text-gray-300" data-testid="text-user-email">
+              {authUser?.email || user?.email || "User"}
+            </span>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+              data-testid="button-signout"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
           </div>
         </header>
 
