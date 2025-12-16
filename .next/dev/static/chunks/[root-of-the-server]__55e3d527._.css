@@ -931,6 +931,10 @@ body {
   height: 100vh;
 }
 
+.max-h-64 {
+  max-height: 16rem;
+}
+
 .max-h-96 {
   max-height: 24rem;
 }
@@ -2444,6 +2448,10 @@ body {
 .placeholder\:text-muted-foreground::placeholder {
   --tw-text-opacity: 1;
   color: hsl(var(--muted-foreground) / var(--tw-text-opacity, 1));
+}
+
+.last\:border-0:last-child {
+  border-width: 0;
 }
 
 .hover\:border-blue-300:hover {

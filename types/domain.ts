@@ -312,10 +312,14 @@ export type AppUser = {
 
 export type HRAnalytics = {
   totalHeadcount: number;
-  headcountByOrgUnit: { orgUnitName: string; count: number }[];
+  headcountByOrgUnit: { orgUnitName: string; count: number; permanent: number; temporary: number; consultant: number }[];
   headcountByEmploymentType: { type: string; count: number }[];
   sickLeaveRatio: number;
   temporaryContractsEndingSoon: number;
+  temporaryContractsEndingList: { id: string; name: string; contractEndDate: string; role: string }[];
   criticalEventsCount: { category: string; count: number }[];
+  criticalEventsByStatus: { overdue: number; dueSoon: number };
   skillDistribution: { skillName: string; levels: number[] }[];
+  riskIndexByUnit: { unitName: string; headcount: number; overdueCount: number; dueSoonCount: number; riskIndex: number }[];
+  absencesAvailable: boolean;
 };

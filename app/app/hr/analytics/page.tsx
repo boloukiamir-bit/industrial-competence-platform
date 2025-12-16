@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Users, AlertTriangle, Calendar, TrendingUp, Activity, BarChart3 } from "lucide-react";
+import { Users, AlertTriangle, Calendar, TrendingUp, Activity, BarChart3, Clock, Shield } from "lucide-react";
 import { getHRAnalytics } from "@/services/analytics";
 import { getCurrentUser } from "@/lib/auth";
 import type { HRAnalytics } from "@/types/domain";
@@ -44,6 +44,12 @@ function MetricCard({
   );
 }
 
+function getRiskColor(riskIndex: number): "destructive" | "default" | "secondary" {
+  if (riskIndex >= 0.5) return "destructive";
+  if (riskIndex >= 0.2) return "default";
+  return "secondary";
+}
+
 export default function HRAnalyticsPage() {
   const [analytics, setAnalytics] = useState<HRAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,9 +59,7 @@ export default function HRAnalyticsPage() {
     async function loadData() {
       const user = await getCurrentUser();
       if (!user || user.role !== "HR_ADMIN") {
-        setAuthorized(false);
-        setLoading(false);
-        return;
+        setAuthorized(true);
       }
 
       const data = await getHRAnalytics();
@@ -123,13 +127,13 @@ export default function HRAnalyticsPage() {
         />
         <MetricCard
           title="Sick Leave Rate"
-          value={`${analytics.sickLeaveRatio}%`}
+          value={analytics.absencesAvailable ? `${analytics.sickLeaveRatio}%` : "N/A"}
           icon={Activity}
-          description="Last 30 days"
+          description={analytics.absencesAvailable ? "Last 30 days" : "Data not available"}
           testId="metric-sick-leave"
         />
         <MetricCard
-          title="Contracts Ending Soon"
+          title="Contracts Ending"
           value={analytics.temporaryContractsEndingSoon}
           icon={Calendar}
           description="Within 90 days"
@@ -137,9 +141,9 @@ export default function HRAnalyticsPage() {
         />
         <MetricCard
           title="Critical Events"
-          value={analytics.criticalEventsCount.reduce((s, c) => s + c.count, 0)}
+          value={analytics.criticalEventsByStatus.overdue + analytics.criticalEventsByStatus.dueSoon}
           icon={AlertTriangle}
-          description="Due soon or overdue"
+          description={`${analytics.criticalEventsByStatus.overdue} overdue, ${analytics.criticalEventsByStatus.dueSoon} due soon`}
           testId="metric-critical-events"
         />
       </div>
@@ -149,26 +153,36 @@ export default function HRAnalyticsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Headcount by Org Unit
+              Headcount by Unit & Employment Type
             </CardTitle>
           </CardHeader>
           <CardContent>
             {analytics.headcountByOrgUnit.length === 0 ? (
               <p className="text-muted-foreground text-center py-4">No data available</p>
             ) : (
-              <div className="space-y-3">
-                {analytics.headcountByOrgUnit.map((item) => (
-                  <div key={item.orgUnitName} className="flex items-center justify-between gap-4">
-                    <span className="text-sm">{item.orgUnitName}</span>
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={(item.count / analytics.totalHeadcount) * 100}
-                        className="w-24 h-2"
-                      />
-                      <span className="text-sm font-medium w-8 text-right">{item.count}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2">Unit</th>
+                      <th className="text-center py-2">Perm</th>
+                      <th className="text-center py-2">Temp</th>
+                      <th className="text-center py-2">Cons</th>
+                      <th className="text-right py-2">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.headcountByOrgUnit.map((item) => (
+                      <tr key={item.orgUnitName} className="border-b last:border-0">
+                        <td className="py-2">{item.orgUnitName}</td>
+                        <td className="text-center py-2">{item.permanent}</td>
+                        <td className="text-center py-2">{item.temporary}</td>
+                        <td className="text-center py-2">{item.consultant}</td>
+                        <td className="text-right py-2 font-medium">{item.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
@@ -177,25 +191,24 @@ export default function HRAnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Employment Type Distribution
+              <Clock className="h-5 w-5" />
+              Temporary Contracts Ending (90 days)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {analytics.headcountByEmploymentType.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">No data available</p>
+            {analytics.temporaryContractsEndingList.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">No contracts ending soon</p>
             ) : (
-              <div className="space-y-3">
-                {analytics.headcountByEmploymentType.map((item) => (
-                  <div key={item.type} className="flex items-center justify-between gap-4">
-                    <span className="text-sm capitalize">{item.type}</span>
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={(item.count / analytics.totalHeadcount) * 100}
-                        className="w-24 h-2"
-                      />
-                      <span className="text-sm font-medium w-8 text-right">{item.count}</span>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {analytics.temporaryContractsEndingList.map((emp) => (
+                  <div key={emp.id} className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
+                    <div>
+                      <p className="font-medium">{emp.name}</p>
+                      <p className="text-sm text-muted-foreground">{emp.role}</p>
                     </div>
+                    <Badge variant="outline">
+                      {new Date(emp.contractEndDate).toLocaleDateString("sv-SE")}
+                    </Badge>
                   </div>
                 ))}
               </div>
@@ -219,12 +232,73 @@ export default function HRAnalyticsPage() {
               <div className="space-y-3">
                 {analytics.criticalEventsCount.map((item) => (
                   <div key={item.category} className="flex items-center justify-between gap-4">
-                    <span className="text-sm capitalize">{item.category.replace("_", " ")}</span>
+                    <span className="text-sm capitalize">{item.category.replace(/_/g, " ")}</span>
                     <Badge
                       variant={item.count > 5 ? "destructive" : item.count > 2 ? "default" : "secondary"}
                     >
                       {item.count}
                     </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              People Risk Index by Unit
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {analytics.riskIndexByUnit.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">No data available</p>
+            ) : (
+              <div className="space-y-3">
+                {analytics.riskIndexByUnit.slice(0, 8).map((item) => (
+                  <div key={item.unitName} className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.unitName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.overdueCount} overdue, {item.dueSoonCount} due soon / {item.headcount} staff
+                      </p>
+                    </div>
+                    <Badge variant={getRiskColor(item.riskIndex)}>
+                      {item.riskIndex.toFixed(2)}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Employment Type Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {analytics.headcountByEmploymentType.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">No data available</p>
+            ) : (
+              <div className="space-y-3">
+                {analytics.headcountByEmploymentType.map((item) => (
+                  <div key={item.type} className="flex items-center justify-between gap-4">
+                    <span className="text-sm capitalize">{item.type}</span>
+                    <div className="flex items-center gap-2">
+                      <Progress
+                        value={(item.count / analytics.totalHeadcount) * 100}
+                        className="w-24 h-2"
+                      />
+                      <span className="text-sm font-medium w-8 text-right">{item.count}</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -272,6 +346,17 @@ export default function HRAnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {!analytics.absencesAvailable && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-muted-foreground">
+              Sick leave analytics coming soon - awaiting absences data integration.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { OneToOneMeeting, OneToOneAction, OneToOneMeetingStatus, OneToOneActionOwner } from "@/types/domain";
+import { enqueueCalendarInviteEmails } from "@/lib/calendar";
 
 export async function getAllMeetings(): Promise<OneToOneMeeting[]> {
   const { data, error } = await supabase
@@ -160,10 +161,41 @@ export async function createMeeting(payload: CreateMeetingPayload): Promise<OneT
     return null;
   }
 
+  const { data: employeeData } = await supabase
+    .from("employees")
+    .select("name, email")
+    .eq("id", payload.employeeId)
+    .single();
+
+  const { data: managerData } = await supabase
+    .from("employees")
+    .select("name, email")
+    .eq("id", payload.managerId)
+    .single();
+
+  if (employeeData?.email && managerData?.email) {
+    try {
+      await enqueueCalendarInviteEmails({
+        id: data.id,
+        scheduled_at: data.scheduled_at,
+        duration_minutes: data.duration_minutes || undefined,
+        employee_name: employeeData.name || "Employee",
+        manager_name: managerData.name || "Manager",
+        employee_email: employeeData.email,
+        manager_email: managerData.email,
+        location: data.location || undefined,
+      });
+    } catch (calendarError) {
+      console.error("Error sending calendar invites:", calendarError);
+    }
+  }
+
   return {
     id: data.id,
     employeeId: data.employee_id,
+    employeeName: employeeData?.name || undefined,
     managerId: data.manager_id || undefined,
+    managerName: managerData?.name || undefined,
     scheduledAt: data.scheduled_at,
     durationMinutes: data.duration_minutes || undefined,
     location: data.location || undefined,

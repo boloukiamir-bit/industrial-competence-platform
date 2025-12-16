@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabaseClient";
+
 export interface IcsEventInput {
   id: string;
   scheduled_at: string;
@@ -66,10 +68,7 @@ export function generateIcsForOneToOne(meeting: IcsEventInput): string {
   return lines.join("\r\n");
 }
 
-export async function enqueueCalendarInviteEmails(
-  supabase: { from: (table: string) => { insert: (data: Record<string, unknown>) => Promise<{ error: Error | null }> } },
-  meeting: IcsEventInput
-): Promise<number> {
+export async function enqueueCalendarInviteEmails(meeting: IcsEventInput): Promise<number> {
   const icsContent = generateIcsForOneToOne(meeting);
   const scheduledDate = new Date(meeting.scheduled_at).toLocaleDateString("sv-SE");
   const scheduledTime = new Date(meeting.scheduled_at).toLocaleTimeString("sv-SE", {
