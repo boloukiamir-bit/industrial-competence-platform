@@ -45,6 +45,55 @@ export type PositionSummary = {
   department: string | null;
 };
 
+export type SimpleEmployee = {
+  id: string;
+  name: string;
+};
+
+export type MatrixColumn = {
+  competenceId: string;
+  label: string;
+  groupName: string | null;
+  requiredLevel: number | null;
+};
+
+export type MatrixCellStatus = 'OK' | 'RISK' | 'N/A';
+
+export type MatrixRow = {
+  employeeId: string;
+  employeeName: string;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  items: {
+    competenceId: string;
+    status: MatrixCellStatus;
+    level: number | null;
+  }[];
+};
+
+export async function getAllPositions(): Promise<PositionSummary[]> {
+  const { data, error } = await supabase
+    .from('positions')
+    .select('id, name, site, department')
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as PositionSummary[];
+}
+
+export async function getEmployeesForPosition(positionId: string): Promise<SimpleEmployee[]> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, full_name, name')
+    .eq('position_id', positionId);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    name: row.full_name ?? row.name ?? 'Employee',
+  }));
+}
+
 type EmployeeRow = {
   id: string;
   full_name?: string | null;
