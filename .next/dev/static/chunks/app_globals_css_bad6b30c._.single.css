@@ -3083,6 +3083,44 @@ body {
   transform: scale(1.05);
 }
 
+.admin-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr);
+  gap: 16px;
+  display: grid;
+}
+
+@media (max-width: 900px) {
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-card-header {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  display: flex;
+}
+
+.admin-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: .85rem;
+}
+
+.admin-table th, .admin-table td {
+  text-align: left;
+  border-bottom: 1px solid #1f2937e6;
+  padding: 6px 8px;
+}
+
+.admin-table th {
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #9ca3af;
+  font-size: .75rem;
+}
+
 .file\:mr-4::file-selector-button {
   margin-right: 1rem;
 }

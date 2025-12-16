@@ -249,13 +249,19 @@ async function deleteCompetence(id) {
     if (error) throw error;
 }
 async function listPositions() {
+    // Note: min_headcount excluded due to Supabase schema cache issue
+    // The column exists but PostgREST doesn't recognize it until cache refresh
     const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from('positions').select('id, name, description, site, department').order('name', {
         ascending: true
     });
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []).map((row)=>({
+            ...row,
+            min_headcount: null
+        }));
 }
 async function getPositionById(id) {
+    // Note: min_headcount excluded due to Supabase schema cache issue
     const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from('positions').select('id, name, description, site, department').eq('id', id).single();
     if (error) {
         if (error.code === 'PGRST116') {
@@ -263,9 +269,14 @@ async function getPositionById(id) {
         }
         throw error;
     }
-    return data;
+    return {
+        ...data,
+        min_headcount: null
+    };
 }
 async function createPosition(payload) {
+    // Note: min_headcount excluded from insert due to Supabase schema cache issue
+    // The UI allows setting it, but it won't be saved until schema cache is refreshed
     const { error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["supabase"].from('positions').insert({
         name: payload.name,
         description: payload.description ?? null,
@@ -512,12 +523,11 @@ function CompetenceAdminPage() {
             alert("Failed to update competence");
         }
     }
-    if (authLoading || loading) {
+    if (authLoading) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
             className: "hr-page",
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                className: "hr-page__subtitle",
-                children: "Loading..."
+                children: "Checking access…"
             }, void 0, false, {
                 fileName: "[project]/app/admin/competence/page.tsx",
                 lineNumber: 155,
@@ -529,12 +539,12 @@ function CompetenceAdminPage() {
             columnNumber: 7
         }, this);
     }
-    if (error) {
+    if (loading) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
             className: "hr-page",
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                className: "hr-error",
-                children: error
+                className: "hr-page__subtitle",
+                children: "Loading..."
             }, void 0, false, {
                 fileName: "[project]/app/admin/competence/page.tsx",
                 lineNumber: 163,
@@ -543,6 +553,23 @@ function CompetenceAdminPage() {
         }, void 0, false, {
             fileName: "[project]/app/admin/competence/page.tsx",
             lineNumber: 162,
+            columnNumber: 7
+        }, this);
+    }
+    if (error) {
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
+            className: "hr-page",
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                className: "hr-error",
+                children: error
+            }, void 0, false, {
+                fileName: "[project]/app/admin/competence/page.tsx",
+                lineNumber: 171,
+                columnNumber: 9
+            }, this)
+        }, void 0, false, {
+            fileName: "[project]/app/admin/competence/page.tsx",
+            lineNumber: 170,
             columnNumber: 7
         }, this);
     }
@@ -564,7 +591,7 @@ function CompetenceAdminPage() {
                             children: "Competence Admin"
                         }, void 0, false, {
                             fileName: "[project]/app/admin/competence/page.tsx",
-                            lineNumber: 184,
+                            lineNumber: 192,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -572,18 +599,18 @@ function CompetenceAdminPage() {
                             children: "Manage competence groups and competences used in matrices and gaps."
                         }, void 0, false, {
                             fileName: "[project]/app/admin/competence/page.tsx",
-                            lineNumber: 185,
+                            lineNumber: 193,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/admin/competence/page.tsx",
-                    lineNumber: 183,
+                    lineNumber: 191,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/admin/competence/page.tsx",
-                lineNumber: 182,
+                lineNumber: 190,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("nav", {
@@ -598,7 +625,7 @@ function CompetenceAdminPage() {
                         children: "Dashboard"
                     }, void 0, false, {
                         fileName: "[project]/app/admin/competence/page.tsx",
-                        lineNumber: 190,
+                        lineNumber: 198,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -606,28 +633,24 @@ function CompetenceAdminPage() {
                         children: "/"
                     }, void 0, false, {
                         fileName: "[project]/app/admin/competence/page.tsx",
-                        lineNumber: 191,
+                        lineNumber: 199,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                         children: "Competence Admin"
                     }, void 0, false, {
                         fileName: "[project]/app/admin/competence/page.tsx",
-                        lineNumber: 192,
+                        lineNumber: 200,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/admin/competence/page.tsx",
-                lineNumber: 189,
+                lineNumber: 197,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                style: {
-                    display: "grid",
-                    gridTemplateColumns: "1fr 2fr",
-                    gap: 16
-                },
+                className: "admin-grid",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "hr-card",
@@ -642,7 +665,7 @@ function CompetenceAdminPage() {
                                 children: "Groups"
                             }, void 0, false, {
                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                lineNumber: 197,
+                                lineNumber: 205,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -674,12 +697,12 @@ function CompetenceAdminPage() {
                                                             "data-testid": "input-edit-group-name"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 206,
+                                                            lineNumber: 214,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 205,
+                                                        lineNumber: 213,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -696,12 +719,12 @@ function CompetenceAdminPage() {
                                                             "data-testid": "input-edit-group-description"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 216,
+                                                            lineNumber: 224,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 215,
+                                                        lineNumber: 223,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -719,14 +742,14 @@ function CompetenceAdminPage() {
                                                                         size: 14
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 227,
+                                                                        lineNumber: 235,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     " Save"
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 226,
+                                                                lineNumber: 234,
                                                                 columnNumber: 23
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -737,26 +760,26 @@ function CompetenceAdminPage() {
                                                                         size: 14
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 230,
+                                                                        lineNumber: 238,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     " Cancel"
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 229,
+                                                                lineNumber: 237,
                                                                 columnNumber: 23
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 225,
+                                                        lineNumber: 233,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 204,
+                                                lineNumber: 212,
                                                 columnNumber: 19
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 style: {
@@ -779,7 +802,7 @@ function CompetenceAdminPage() {
                                                                 children: group.name
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 239,
+                                                                lineNumber: 247,
                                                                 columnNumber: 23
                                                             }, this),
                                                             group.description && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -790,13 +813,13 @@ function CompetenceAdminPage() {
                                                                 children: group.description
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 240,
+                                                                lineNumber: 248,
                                                                 columnNumber: 45
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 238,
+                                                        lineNumber: 246,
                                                         columnNumber: 21
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -807,23 +830,23 @@ function CompetenceAdminPage() {
                                                             size: 14
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 247,
+                                                            lineNumber: 255,
                                                             columnNumber: 23
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 242,
+                                                        lineNumber: 250,
                                                         columnNumber: 21
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 235,
+                                                lineNumber: 243,
                                                 columnNumber: 19
                                             }, this)
                                         }, group.id, false, {
                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                            lineNumber: 202,
+                                            lineNumber: 210,
                                             columnNumber: 15
                                         }, this)),
                                     groups.length === 0 && !showAddGroup && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -834,7 +857,7 @@ function CompetenceAdminPage() {
                                         children: "No groups yet."
                                     }, void 0, false, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 255,
+                                        lineNumber: 263,
                                         columnNumber: 15
                                     }, this),
                                     showAddGroup ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -859,12 +882,12 @@ function CompetenceAdminPage() {
                                                     "data-testid": "input-new-group-name"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                    lineNumber: 261,
+                                                    lineNumber: 269,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 260,
+                                                lineNumber: 268,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -881,12 +904,12 @@ function CompetenceAdminPage() {
                                                     "data-testid": "input-new-group-description"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                    lineNumber: 271,
+                                                    lineNumber: 279,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 270,
+                                                lineNumber: 278,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -904,14 +927,14 @@ function CompetenceAdminPage() {
                                                                 size: 14
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 282,
+                                                                lineNumber: 290,
                                                                 columnNumber: 21
                                                             }, this),
                                                             " Add"
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 281,
+                                                        lineNumber: 289,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -928,26 +951,26 @@ function CompetenceAdminPage() {
                                                                 size: 14
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 285,
+                                                                lineNumber: 293,
                                                                 columnNumber: 21
                                                             }, this),
                                                             " Cancel"
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 284,
+                                                        lineNumber: 292,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 280,
+                                                lineNumber: 288,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 259,
+                                        lineNumber: 267,
                                         columnNumber: 15
                                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                         className: "hr-button hr-button--secondary hr-button--sm",
@@ -961,26 +984,26 @@ function CompetenceAdminPage() {
                                                 size: 14
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 296,
+                                                lineNumber: 304,
                                                 columnNumber: 17
                                             }, this),
                                             " Add Group"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 290,
+                                        lineNumber: 298,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                lineNumber: 200,
+                                lineNumber: 208,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/admin/competence/page.tsx",
-                        lineNumber: 196,
+                        lineNumber: 204,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1002,7 +1025,7 @@ function CompetenceAdminPage() {
                                         children: "Competences"
                                     }, void 0, false, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 304,
+                                        lineNumber: 312,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -1020,7 +1043,7 @@ function CompetenceAdminPage() {
                                                 children: "All Groups"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 312,
+                                                lineNumber: 320,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -1028,7 +1051,7 @@ function CompetenceAdminPage() {
                                                 children: "Ungrouped"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 313,
+                                                lineNumber: 321,
                                                 columnNumber: 15
                                             }, this),
                                             groups.map((g)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -1036,19 +1059,19 @@ function CompetenceAdminPage() {
                                                     children: g.name
                                                 }, g.id, false, {
                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                    lineNumber: 315,
+                                                    lineNumber: 323,
                                                     columnNumber: 17
                                                 }, this))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 305,
+                                        lineNumber: 313,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                lineNumber: 303,
+                                lineNumber: 311,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1066,35 +1089,35 @@ function CompetenceAdminPage() {
                                                             children: "Name"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 323,
+                                                            lineNumber: 331,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                             children: "Code"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 324,
+                                                            lineNumber: 332,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                             children: "Group"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 325,
+                                                            lineNumber: 333,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                             children: "Safety"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 326,
+                                                            lineNumber: 334,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                             children: "Active"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 327,
+                                                            lineNumber: 335,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1104,18 +1127,18 @@ function CompetenceAdminPage() {
                                                             children: "Edit"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 328,
+                                                            lineNumber: 336,
                                                             columnNumber: 19
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                    lineNumber: 322,
+                                                    lineNumber: 330,
                                                     columnNumber: 17
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 321,
+                                                lineNumber: 329,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -1140,7 +1163,7 @@ function CompetenceAdminPage() {
                                                                                     children: "Name"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 338,
+                                                                                    lineNumber: 346,
                                                                                     columnNumber: 29
                                                                                 }, this),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1154,13 +1177,13 @@ function CompetenceAdminPage() {
                                                                                     "data-testid": "input-edit-competence-name"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 339,
+                                                                                    lineNumber: 347,
                                                                                     columnNumber: 29
                                                                                 }, this)
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 337,
+                                                                            lineNumber: 345,
                                                                             columnNumber: 27
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1171,7 +1194,7 @@ function CompetenceAdminPage() {
                                                                                     children: "Code"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 348,
+                                                                                    lineNumber: 356,
                                                                                     columnNumber: 29
                                                                                 }, this),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1185,13 +1208,13 @@ function CompetenceAdminPage() {
                                                                                     "data-testid": "input-edit-competence-code"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 349,
+                                                                                    lineNumber: 357,
                                                                                     columnNumber: 29
                                                                                 }, this)
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 347,
+                                                                            lineNumber: 355,
                                                                             columnNumber: 27
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1202,7 +1225,7 @@ function CompetenceAdminPage() {
                                                                                     children: "Group"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 358,
+                                                                                    lineNumber: 366,
                                                                                     columnNumber: 29
                                                                                 }, this),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -1219,7 +1242,7 @@ function CompetenceAdminPage() {
                                                                                             children: "No Group"
                                                                                         }, void 0, false, {
                                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                            lineNumber: 365,
+                                                                                            lineNumber: 373,
                                                                                             columnNumber: 31
                                                                                         }, this),
                                                                                         groups.map((g)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -1227,19 +1250,19 @@ function CompetenceAdminPage() {
                                                                                                 children: g.name
                                                                                             }, g.id, false, {
                                                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                                lineNumber: 367,
+                                                                                                lineNumber: 375,
                                                                                                 columnNumber: 33
                                                                                             }, this))
                                                                                     ]
                                                                                 }, void 0, true, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 359,
+                                                                                    lineNumber: 367,
                                                                                     columnNumber: 29
                                                                                 }, this)
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 357,
+                                                                            lineNumber: 365,
                                                                             columnNumber: 27
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1250,7 +1273,7 @@ function CompetenceAdminPage() {
                                                                                     children: "Description"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 372,
+                                                                                    lineNumber: 380,
                                                                                     columnNumber: 29
                                                                                 }, this),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1264,13 +1287,13 @@ function CompetenceAdminPage() {
                                                                                     "data-testid": "input-edit-competence-description"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 373,
+                                                                                    lineNumber: 381,
                                                                                     columnNumber: 29
                                                                                 }, this)
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 371,
+                                                                            lineNumber: 379,
                                                                             columnNumber: 27
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1287,7 +1310,7 @@ function CompetenceAdminPage() {
                                                                                     "data-testid": "checkbox-edit-safety-critical"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 382,
+                                                                                    lineNumber: 390,
                                                                                     columnNumber: 29
                                                                                 }, this),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -1296,13 +1319,13 @@ function CompetenceAdminPage() {
                                                                                     children: "Safety Critical"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 389,
+                                                                                    lineNumber: 397,
                                                                                     columnNumber: 29
                                                                                 }, this)
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 381,
+                                                                            lineNumber: 389,
                                                                             columnNumber: 27
                                                                         }, this),
                                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1321,14 +1344,14 @@ function CompetenceAdminPage() {
                                                                                             size: 14
                                                                                         }, void 0, false, {
                                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                            lineNumber: 393,
+                                                                                            lineNumber: 401,
                                                                                             columnNumber: 31
                                                                                         }, this),
                                                                                         " Save"
                                                                                     ]
                                                                                 }, void 0, true, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 392,
+                                                                                    lineNumber: 400,
                                                                                     columnNumber: 29
                                                                                 }, this),
                                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1339,31 +1362,31 @@ function CompetenceAdminPage() {
                                                                                             size: 14
                                                                                         }, void 0, false, {
                                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                            lineNumber: 396,
+                                                                                            lineNumber: 404,
                                                                                             columnNumber: 31
                                                                                         }, this),
                                                                                         " Cancel"
                                                                                     ]
                                                                                 }, void 0, true, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 395,
+                                                                                    lineNumber: 403,
                                                                                     columnNumber: 29
                                                                                 }, this)
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 391,
+                                                                            lineNumber: 399,
                                                                             columnNumber: 27
                                                                         }, this)
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                    lineNumber: 336,
+                                                                    lineNumber: 344,
                                                                     columnNumber: 25
                                                                 }, this)
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 335,
+                                                                lineNumber: 343,
                                                                 columnNumber: 23
                                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
                                                                 children: [
@@ -1380,40 +1403,40 @@ function CompetenceAdminPage() {
                                                                                     className: "hr-icon--warning"
                                                                                 }, void 0, false, {
                                                                                     fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                    lineNumber: 405,
+                                                                                    lineNumber: 413,
                                                                                     columnNumber: 57
                                                                                 }, this),
                                                                                 comp.name
                                                                             ]
                                                                         }, void 0, true, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 404,
+                                                                            lineNumber: 412,
                                                                             columnNumber: 27
                                                                         }, this)
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 403,
+                                                                        lineNumber: 411,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                                         children: comp.code || "-"
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 409,
+                                                                        lineNumber: 417,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                                         children: getGroupName(comp.group_id)
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 410,
+                                                                        lineNumber: 418,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                                         children: comp.is_safety_critical ? "Yes" : "No"
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 411,
+                                                                        lineNumber: 419,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1426,23 +1449,23 @@ function CompetenceAdminPage() {
                                                                                 size: 12
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                lineNumber: 419,
+                                                                                lineNumber: 427,
                                                                                 columnNumber: 44
                                                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$x$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__X$3e$__["X"], {
                                                                                 size: 12
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                lineNumber: 419,
+                                                                                lineNumber: 427,
                                                                                 columnNumber: 66
                                                                             }, this)
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 413,
+                                                                            lineNumber: 421,
                                                                             columnNumber: 27
                                                                         }, this)
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 412,
+                                                                        lineNumber: 420,
                                                                         columnNumber: 25
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1454,24 +1477,24 @@ function CompetenceAdminPage() {
                                                                                 size: 14
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                                lineNumber: 428,
+                                                                                lineNumber: 436,
                                                                                 columnNumber: 29
                                                                             }, this)
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 423,
+                                                                            lineNumber: 431,
                                                                             columnNumber: 27
                                                                         }, this)
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 422,
+                                                                        lineNumber: 430,
                                                                         columnNumber: 25
                                                                     }, this)
                                                                 ]
                                                             }, void 0, true)
                                                         }, comp.id, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 333,
+                                                            lineNumber: 341,
                                                             columnNumber: 19
                                                         }, this)),
                                                     filteredCompetences.length === 0 && !showAddCompetence && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
@@ -1485,24 +1508,24 @@ function CompetenceAdminPage() {
                                                             children: "No competences found."
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                            lineNumber: 437,
+                                                            lineNumber: 445,
                                                             columnNumber: 21
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 436,
+                                                        lineNumber: 444,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 331,
+                                                lineNumber: 339,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 320,
+                                        lineNumber: 328,
                                         columnNumber: 13
                                     }, this),
                                     showAddCompetence ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1521,7 +1544,7 @@ function CompetenceAdminPage() {
                                                 children: "Add Competence"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 447,
+                                                lineNumber: 455,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1539,7 +1562,7 @@ function CompetenceAdminPage() {
                                                                 children: "Name *"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 450,
+                                                                lineNumber: 458,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1553,13 +1576,13 @@ function CompetenceAdminPage() {
                                                                 "data-testid": "input-new-competence-name"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 451,
+                                                                lineNumber: 459,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 449,
+                                                        lineNumber: 457,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1570,7 +1593,7 @@ function CompetenceAdminPage() {
                                                                 children: "Code"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 460,
+                                                                lineNumber: 468,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1585,13 +1608,13 @@ function CompetenceAdminPage() {
                                                                 "data-testid": "input-new-competence-code"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 461,
+                                                                lineNumber: 469,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 459,
+                                                        lineNumber: 467,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1602,7 +1625,7 @@ function CompetenceAdminPage() {
                                                                 children: "Group"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 471,
+                                                                lineNumber: 479,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -1619,7 +1642,7 @@ function CompetenceAdminPage() {
                                                                         children: "No Group"
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 478,
+                                                                        lineNumber: 486,
                                                                         columnNumber: 23
                                                                     }, this),
                                                                     groups.map((g)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -1627,19 +1650,19 @@ function CompetenceAdminPage() {
                                                                             children: g.name
                                                                         }, g.id, false, {
                                                                             fileName: "[project]/app/admin/competence/page.tsx",
-                                                                            lineNumber: 480,
+                                                                            lineNumber: 488,
                                                                             columnNumber: 25
                                                                         }, this))
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 472,
+                                                                lineNumber: 480,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 470,
+                                                        lineNumber: 478,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1650,7 +1673,7 @@ function CompetenceAdminPage() {
                                                                 children: "Description"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 485,
+                                                                lineNumber: 493,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -1664,13 +1687,13 @@ function CompetenceAdminPage() {
                                                                 "data-testid": "input-new-competence-description"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 486,
+                                                                lineNumber: 494,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 484,
+                                                        lineNumber: 492,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1687,7 +1710,7 @@ function CompetenceAdminPage() {
                                                                 "data-testid": "checkbox-new-safety-critical"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 495,
+                                                                lineNumber: 503,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -1696,13 +1719,13 @@ function CompetenceAdminPage() {
                                                                 children: "Safety Critical"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 502,
+                                                                lineNumber: 510,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 494,
+                                                        lineNumber: 502,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1721,14 +1744,14 @@ function CompetenceAdminPage() {
                                                                         size: 14
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 506,
+                                                                        lineNumber: 514,
                                                                         columnNumber: 23
                                                                     }, this),
                                                                     " Add"
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 505,
+                                                                lineNumber: 513,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1748,32 +1771,32 @@ function CompetenceAdminPage() {
                                                                         size: 14
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                                        lineNumber: 509,
+                                                                        lineNumber: 517,
                                                                         columnNumber: 23
                                                                     }, this),
                                                                     " Cancel"
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                                lineNumber: 508,
+                                                                lineNumber: 516,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                                        lineNumber: 504,
+                                                        lineNumber: 512,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 448,
+                                                lineNumber: 456,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 446,
+                                        lineNumber: 454,
                                         columnNumber: 15
                                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                         className: "hr-button hr-button--primary hr-button--sm",
@@ -1787,38 +1810,38 @@ function CompetenceAdminPage() {
                                                 size: 14
                                             }, void 0, false, {
                                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                                lineNumber: 521,
+                                                lineNumber: 529,
                                                 columnNumber: 17
                                             }, this),
                                             " Add Competence"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/admin/competence/page.tsx",
-                                        lineNumber: 515,
+                                        lineNumber: 523,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/admin/competence/page.tsx",
-                                lineNumber: 319,
+                                lineNumber: 327,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/admin/competence/page.tsx",
-                        lineNumber: 302,
+                        lineNumber: 310,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/admin/competence/page.tsx",
-                lineNumber: 195,
+                lineNumber: 203,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/admin/competence/page.tsx",
-        lineNumber: 181,
+        lineNumber: 189,
         columnNumber: 5
     }, this);
 }
