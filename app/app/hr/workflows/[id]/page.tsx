@@ -17,17 +17,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { WORKFLOW_TEMPLATES } from "@/services/hrWorkflows";
-import type { HRWorkflowInstance, HRWorkflowStatus } from "@/types/domain";
-
-type TemplateStep = {
-  id: string;
-  title: string;
-  description: string | null;
-  daysFromStart: number;
-  responsibleRole: string;
-  isCompleted?: boolean;
-  completedAt?: string;
-};
+import type { HRWorkflowInstance, HRWorkflowStatus, HRWorkflowStep } from "@/types/domain";
 
 export default function WorkflowDetailPage() {
   const router = useRouter();
@@ -127,7 +117,7 @@ export default function WorkflowDetailPage() {
     );
   }
 
-  const steps: TemplateStep[] = instance.steps || [];
+  const steps: HRWorkflowStep[] = instance.steps || [];
 
   return (
     <main className="hr-page" data-testid="workflow-detail-page">
