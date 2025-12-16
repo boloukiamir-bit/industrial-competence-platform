@@ -16,24 +16,26 @@ export async function enqueueDueEventNotifications(referenceDate: Date): Promise
   let count = 0;
 
   for (const event of events) {
-    const employeesArr = event.employees as { name: string; email: string }[] | null;
-    const employee = employeesArr?.[0] ?? null;
+    const employeesData = event.employees as unknown;
+    const employee = Array.isArray(employeesData) 
+      ? (employeesData[0] as { name: string; email: string } | undefined) 
+      : (employeesData as { name: string; email: string } | null);
     const toEmail = employee?.email;
 
     if (!toEmail) continue;
 
-    const subject = `Åtgärda: ${event.title}`;
-    const body = `Hej ${employee?.name || ""},
+    const subject = `Action required: ${event.title}`;
+    const body = `Hello ${employee?.name || ""},
 
-Du har en uppgift som behöver åtgärdas:
+You have an upcoming HR task that requires attention:
 
-Kategori: ${event.category}
-Uppgift: ${event.title}
-Förfallodatum: ${event.due_date}
+Category: ${event.category}
+Task: ${event.title}
+Due date: ${event.due_date}
 
-Vänligen vidta åtgärd.
+This is an automated reminder.
 
-Med vänliga hälsningar,
+Best regards,
 Industrial Competence Platform`;
 
     const { error: insertError } = await supabase.from("email_outbox").insert({
