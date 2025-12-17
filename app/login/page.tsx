@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmail, getSession } from '@/services/auth';
+import { isSupabaseReady } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,8 +12,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [supabaseConfigured, setSupabaseConfigured] = useState(true);
 
   useEffect(() => {
+    // Check if Supabase is configured
+    const configured = isSupabaseReady();
+    setSupabaseConfigured(configured);
+    
+    if (!configured) {
+      console.error('Supabase not configured - env vars missing');
+      setCheckingSession(false);
+      return;
+    }
+
     async function checkExistingSession() {
       try {
         const session = await getSession();
@@ -32,19 +44,27 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
+    
+    if (!supabaseConfigured) {
+      setErrorMsg('Authentication service is not configured. Environment variables are missing.');
+      return;
+    }
+    
     setLoading(true);
 
     try {
       await signInWithEmail(email, password);
       router.replace('/app/hr/tasks');
     } catch (error: unknown) {
-      console.error(error);
+      console.error('Sign in error:', error);
       let message = 'Failed to sign in.';
       if (error instanceof Error) {
         if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
-          message = 'Unable to connect to authentication service. Please try again in a moment.';
+          message = 'Unable to connect to authentication service. Please check your internet connection.';
         } else if (error.message.includes('placeholder')) {
           message = 'Authentication service is not configured. Please contact support.';
+        } else if (error.message.includes('Invalid login credentials')) {
+          message = 'Invalid email or password. Please try again.';
         } else {
           message = error.message;
         }
