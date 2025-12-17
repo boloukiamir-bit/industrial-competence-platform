@@ -138,14 +138,16 @@ export default function OrgOverviewPage() {
           id: u.id,
           name: u.name,
           code: u.code,
-          type: u.type,
+          type: u.type as OrgUnit['type'],
           employeeCount: u.employeeCount,
+          createdAt: new Date().toISOString(),
           children: DEMO_ORG_UNITS.filter(c => c.parentId === u.id).map(c => ({
             id: c.id,
             name: c.name,
             code: c.code,
-            type: c.type,
+            type: c.type as OrgUnit['type'],
             employeeCount: c.employeeCount,
+            createdAt: new Date().toISOString(),
           })),
         }));
         setOrgTree(demoUnits);
