@@ -1,10 +1,1 @@
-{
-  "/api/health/route": "app/api/health/route.js",
-  "/app/competence-matrix/page": "app/app/competence-matrix/page.js",
-  "/app/gaps/page": "app/app/gaps/page.js",
-  "/competence/matrix/page": "app/competence/matrix/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js",
-  "/pricing/page": "app/pricing/page.js",
-  "/signup/page": "app/signup/page.js"
-}
+{}

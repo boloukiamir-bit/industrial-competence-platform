@@ -2,11 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Search, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Users, Search, ChevronRight, Upload, UserPlus } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { COPY } from "@/lib/copy";
+import { isDemoMode, DEMO_EMPLOYEES } from "@/lib/demoData";
 import type { Employee } from "@/types/domain";
 
 export default function EmployeesPage() {
+  const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -14,6 +20,28 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     async function loadEmployees() {
+      if (isDemoMode()) {
+        setEmployees(
+          DEMO_EMPLOYEES.map((e) => ({
+            id: e.id,
+            name: e.name,
+            firstName: e.firstName,
+            lastName: e.lastName,
+            employeeNumber: e.employeeNumber,
+            email: e.email,
+            role: e.role,
+            line: e.line,
+            team: e.team,
+            startDate: e.startDate,
+            isActive: e.isActive,
+            country: "Sweden",
+            employmentType: "permanent",
+          }))
+        );
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("employees")
         .select("*, manager:manager_id(name)")
@@ -76,18 +104,75 @@ export default function EmployeesPage() {
     );
   }
 
+  if (employees.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Users className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Employees
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => router.push("/app/import-employees")} data-testid="button-import-csv">
+              <Upload className="h-4 w-4 mr-2" />
+              {COPY.actions.importCsv}
+            </Button>
+            <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee">
+              <UserPlus className="h-4 w-4 mr-2" />
+              {COPY.actions.addEmployee}
+            </Button>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              {COPY.emptyStates.employees.title}
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
+              {COPY.emptyStates.employees.description}
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button onClick={() => router.push("/app/import-employees")} data-testid="button-import-csv-empty">
+                <Upload className="h-4 w-4 mr-2" />
+                {COPY.actions.importCsv}
+              </Button>
+              <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee-empty">
+                <UserPlus className="h-4 w-4 mr-2" />
+                {COPY.actions.addEmployee}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <Users className="h-6 w-6 text-gray-600 dark:text-gray-400" />
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
             Employees
           </h1>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            ({filteredEmployees.length})
+          </span>
         </div>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {filteredEmployees.length} employees
-        </span>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => router.push("/app/import-employees")} data-testid="button-import-csv">
+            <Upload className="h-4 w-4 mr-2" />
+            {COPY.actions.importCsv}
+          </Button>
+          <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee">
+            <UserPlus className="h-4 w-4 mr-2" />
+            {COPY.actions.addEmployee}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-6">
@@ -136,64 +221,47 @@ export default function EmployeesPage() {
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Role
               </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Manager
-              </th>
               <th className="w-10" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredEmployees.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
-                >
-                  No employees found
+            {filteredEmployees.map((employee) => (
+              <tr
+                key={employee.id}
+                className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                data-testid={`row-employee-${employee.id}`}
+              >
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/app/employees/${employee.id}`}
+                    className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                    data-testid={`link-employee-${employee.id}`}
+                  >
+                    {employee.name}
+                  </Link>
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                  {employee.employeeNumber}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                  {employee.line || "-"}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                  {employee.team || "-"}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                  {employee.role || "-"}
+                </td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/app/employees/${employee.id}`}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </td>
               </tr>
-            ) : (
-              filteredEmployees.map((employee) => (
-                <tr
-                  key={employee.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  data-testid={`row-employee-${employee.id}`}
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/app/employees/${employee.id}`}
-                      className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
-                      data-testid={`link-employee-${employee.id}`}
-                    >
-                      {employee.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                    {employee.employeeNumber}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                    {employee.line || "-"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                    {employee.team || "-"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                    {employee.role || "-"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                    {employee.managerName || "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/app/employees/${employee.id}`}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
       </div>

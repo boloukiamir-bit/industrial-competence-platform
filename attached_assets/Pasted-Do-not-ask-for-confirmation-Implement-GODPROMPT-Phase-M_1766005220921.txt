@@ -1,0 +1,134 @@
+Do not ask for confirmation. Implement.
+
+GODPROMPT — Phase: “Make the app understandable in 30 seconds”
+
+You are the Product Engineer. Your goal is to remove dead ends and make the platform feel alive and sellable. Implement a guided onboarding flow, add missing CTAs, fix demo/prod data coherence, and clean up navigation.
+
+1) Guided Setup Wizard (core deliverable)
+
+Create /app/setup with a “Setup Progress” checklist card visible on /app/dashboard until completed.
+
+Checklist items (each has status + button):
+
+Create at least 1 Organization Unit → button “Create Unit”
+
+Add employees (≥ 1) → buttons “Import CSV” + “Add Employee”
+
+Create skills (≥ 3) → button “Add Skills”
+
+Create position + requirements → button “Define Requirements”
+
+Generate Tomorrow’s Gaps once → button “Generate Gaps”
+
+Completion logic:
+
+Persist completion in DB (org_settings table) OR in local storage for DEMO_MODE.
+
+Dashboard shows “Setup complete ✅” once all steps pass.
+
+2) Add “Missing Buttons” (no more dead ends)
+2.1 Employees page
+
+Add top-right actions:
+
+Primary: “Import CSV”
+
+Secondary: “Add Employee”
+If empty:
+
+Show an empty state card with those buttons + short guidance text.
+
+2.2 Organization Overview page
+
+Add top-right actions:
+
+Primary: “Create Unit”
+
+Secondary: “Import Org Structure (CSV)” (can be stubbed to show modal “Coming soon”)
+If empty:
+
+Show empty state with Create Unit button.
+
+2.3 Competence Matrix page
+
+Add top-right actions:
+
+“Edit Requirements” (links to positions/requirements admin)
+
+“Export Matrix CSV”
+If requirements missing:
+
+Show blocking banner: “No requirements defined yet → Define requirements to calculate risk.”
+
+2.4 Tomorrow’s Gaps page
+
+If no requirements OR no employees:
+
+Show a blocking banner with one CTA:
+
+“Go to Setup” OR “Define Requirements”
+Never show “No gaps” unless it’s truly computed from valid data.
+
+3) Navigation Clean-up (reduce confusion)
+
+The left menu must be split into:
+
+CORE (always usable): Dashboard, Employees, Organization, Competence Matrix, Tomorrow’s Gaps, Admin
+
+COMING SOON (disabled/locked with tooltip): Equipment, Handbooks, Documents, News, etc.
+
+If a page has no backend functionality, it must be in Coming soon and visually disabled.
+
+4) Data Coherence Fix (trust killer)
+
+In DEMO_MODE:
+
+All pages must use the SAME demo dataset source:
+
+same employees count everywhere
+
+same org units everywhere
+
+same skills/requirements everywhere
+Create lib/demoData.ts and make Dashboard metrics, Employees list, Matrix, and Gaps read from it.
+
+In production mode:
+
+Ensure all queries are org-scoped consistently.
+
+Fix mismatch where dashboard shows 10 but employees show 0.
+
+5) Language Consistency
+
+Replace Swedish text on Manager Risks page with English.
+Create a single copy.ts constants file for empty-state messages to avoid mixed language.
+
+6) Verification (must be executed)
+
+Add a simple smoke test checklist in code comments AND run:
+
+Navigate: dashboard → employees → organization → matrix → gaps
+
+Verify empty states show CTAs
+
+Verify Setup checklist updates when actions are completed
+
+Verify DEMO_MODE shows consistent numbers on dashboard and employees page
+
+Deliverables
+
+/app/setup page + dashboard setup card
+
+Buttons/CTAs added to Employees/Organization/Matrix/Gaps
+
+Coming-soon nav grouping and disabled items
+
+DEMO_MODE coherence via lib/demoData.ts
+
+Language fixed (no Swedish in UI)
+
+After implementation:
+
+Provide screenshots of: Dashboard (with Setup card), Employees empty state (with buttons), Organization empty state (with Create Unit), Setup page.
+
+Do not ask questions. Ship.
