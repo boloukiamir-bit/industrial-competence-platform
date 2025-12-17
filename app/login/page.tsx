@@ -53,7 +53,7 @@ export default function LoginPage() {
     checkExistingSession();
   }, [router]);
 
-  async function checkBootstrapNeeded(userId: string) {
+  async function checkBootstrapStatus(userId: string): Promise<{ needsBootstrap: boolean; role: string | null }> {
     try {
       // Check if profiles table has any entries
       const { data: profiles, error } = await supabase
@@ -62,15 +62,13 @@ export default function LoginPage() {
         .limit(1);
 
       if (error) {
-        // Table might not exist - show bootstrap
-        setShowBootstrap(true);
-        return null;
+        // Table might not exist - needs bootstrap
+        return { needsBootstrap: true, role: null };
       }
 
       if (!profiles || profiles.length === 0) {
         // No profiles exist - this user can bootstrap
-        setShowBootstrap(true);
-        return null;
+        return { needsBootstrap: true, role: null };
       }
 
       // Check if current user has a profile
@@ -80,9 +78,9 @@ export default function LoginPage() {
         .eq('id', userId)
         .single();
 
-      return userProfile?.role || null;
+      return { needsBootstrap: false, role: userProfile?.role || null };
     } catch {
-      return null;
+      return { needsBootstrap: false, role: null };
     }
   }
 
@@ -102,10 +100,11 @@ export default function LoginPage() {
       
       if (session?.user) {
         // Check if bootstrap is needed or get role
-        const role = await checkBootstrapNeeded(session.user.id);
+        const { needsBootstrap, role } = await checkBootstrapStatus(session.user.id);
         
-        if (showBootstrap) {
+        if (needsBootstrap) {
           // Stay on login page to show bootstrap option
+          setShowBootstrap(true);
           setLoading(false);
           return;
         }
