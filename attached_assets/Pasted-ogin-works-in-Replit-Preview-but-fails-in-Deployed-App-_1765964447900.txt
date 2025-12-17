@@ -1,0 +1,115 @@
+ogin works in Replit Preview but fails in Deployed App
+
+Error:
+
+Unable to connect to authentication service. Please try again in a moment.
+
+This is not random downtime.
+This is almost always a Preview vs Deploy environment mismatch (URLs, env vars, or Supabase Auth config).
+
+1) Fast Diagnosis (5 minutes)
+A. Verify Supabase environment variables in Deployment
+
+In Replit → Secrets, the deployment environment must contain:
+
+NEXT_PUBLIC_SUPABASE_URL
+
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+Common root cause:
+They exist in Preview but not in Deploy.
+
+Quick browser test (on the deployed app):
+
+console.log(process.env.NEXT_PUBLIC_SUPABASE_URL)
+
+
+If it prints undefined in the deployed app → this is the problem.
+
+Fix:
+Add the secrets to the deployment scope and redeploy.
+
+B. Check Supabase Auth → Site URL & Redirect URLs
+
+Supabase must explicitly allow the deployed domain.
+
+Supabase Dashboard → Authentication → URL Configuration
+
+Set:
+
+Site URL
+
+https://industrial-competence-platform--boloukiamir.replit.app
+
+
+Redirect URLs
+
+https://industrial-competence-platform--boloukiamir.replit.app/**
+
+
+(Optional) also add your Preview URL if you use both.
+
+Common mistake:
+Site URL still points to Preview, localhost, or an old domain.
+
+C. Confirm Supabase Auth endpoint is reachable
+
+Open in browser:
+
+https://<your-project-ref>.supabase.co/auth/v1/health
+
+
+Expected: 200 / OK
+
+If this fails:
+
+Wrong Supabase URL
+
+Env vars not injected in deployment
+
+2) Hard Proof Test (Replit Shell – 60 seconds)
+
+Run this in Replit Shell:
+
+echo $NEXT_PUBLIC_SUPABASE_URL
+echo $NEXT_PUBLIC_SUPABASE_ANON_KEY | head -c 10 && echo
+curl -i "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/health"
+
+Interpretation
+Result	Meaning	Action
+URL empty	Deploy env missing	Add secrets to deployment + redeploy
+curl returns 200/401	Endpoint OK	Fix Redirect/Site URL
+curl fails	Wrong Supabase URL	Correct env var
+3) Required Client Setup (Next.js / Deploy-safe)
+
+Make sure your Supabase client is created for the browser, not server-only:
+
+import { createClient } from "@supabase/supabase-js";
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
+
+
+Common failure pattern:
+Server-side client used in browser → works in preview, breaks in deploy.
+
+4) Replit-Specific Reality Check
+
+Replit treats:
+
+Preview
+
+Deployment
+
+as separate environments.
+
+Secrets must exist in both, or login will fail only after deploy.
