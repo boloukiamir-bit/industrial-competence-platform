@@ -6,7 +6,6 @@ import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Grid3X3, 
-  AlertTriangle, 
   Upload, 
   Users, 
   Settings,
@@ -22,7 +21,6 @@ import {
   LogOut,
   Wrench,
   TrendingUp,
-  Lock,
   Clipboard
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
@@ -31,19 +29,12 @@ import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { COPY } from "@/lib/copy";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 type NavItem = {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   hrAdminOnly?: boolean;
-  comingSoon?: boolean;
 };
 
 const coreNavItems: NavItem[] = [
@@ -63,12 +54,12 @@ const hrNavItems: NavItem[] = [
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
 ];
 
-const comingSoonNavItems: NavItem[] = [
-  { name: "Safety / Certificates", href: "/app/safety/certificates", icon: Shield, comingSoon: true },
-  { name: "Equipment", href: "/app/equipment", icon: Package, comingSoon: true },
-  { name: "Handbooks", href: "/app/handbooks", icon: BookOpen, comingSoon: true },
-  { name: "Documents", href: "/app/documents", icon: FileText, comingSoon: true },
-  { name: "News", href: "/app/news", icon: Newspaper, comingSoon: true },
+const moreNavItems: NavItem[] = [
+  { name: "Safety / Certificates", href: "/app/safety/certificates", icon: Shield },
+  { name: "Equipment", href: "/app/equipment", icon: Package },
+  { name: "Handbooks", href: "/app/handbooks", icon: BookOpen },
+  { name: "Documents", href: "/app/documents", icon: FileText },
+  { name: "News", href: "/app/news", icon: Newspaper },
 ];
 
 const settingsNavItems: NavItem[] = [
@@ -122,28 +113,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
     const Icon = item.icon;
 
-    if (item.comingSoon) {
-      return (
-        <li key={item.name}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                <Icon className="h-4 w-4" />
-                {item.name}
-                <Lock className="h-3 w-3 ml-auto" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Coming soon</p>
-            </TooltipContent>
-          </Tooltip>
-        </li>
-      );
-    }
-
     return (
       <li key={item.name}>
         <Link
@@ -164,9 +133,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <OrgProvider>
-      <TooltipProvider>
-        <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
-          <DemoModeBanner />
+      <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
+        <DemoModeBanner />
           <div className="flex flex-1 overflow-hidden">
           <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -198,10 +166,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <div className="mb-4">
                 <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  {COPY.nav.comingSoon}
+                  More
                 </p>
                 <ul className="space-y-1">
-                  {comingSoonNavItems.map(renderNavItem)}
+                  {moreNavItems.map(renderNavItem)}
                 </ul>
               </div>
 
@@ -244,7 +212,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-      </TooltipProvider>
     </OrgProvider>
   );
 }
