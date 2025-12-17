@@ -1,0 +1,198 @@
+ROLE: You are a Staff Engineer + Product Designer. Your job is to make the Competence Matrix visually premium, readable, accessible, and to implement a full automated test suite that runs in Replit with one command.
+
+A) Fix the Design (must be sellable)
+1) Visual goals
+
+Clean “enterprise SaaS” look (Linear / Stripe-lite vibes).
+
+High readability: no dark-on-dark text. All key text must be AA contrast compliant.
+
+Strong hierarchy: title → filters → summary → matrix.
+
+Consistent spacing, typography, and component styling.
+
+2) Implement a real theme system (tokens)
+
+Create a theme token file (CSS variables) and refactor components to use it:
+
+--bg, --surface, --surface-2, --border, --text, --muted
+
+--success, --warning, --danger, --info (and their soft backgrounds)
+
+Ensure default theme is light (sellable), optional dark mode is fine.
+
+Hard rule: text must never be “faded” on dark backgrounds like in the screenshot. If a surface is dark, text must be light. If surface is light, text must be dark. No exceptions.
+
+3) Redesign the Competence Matrix component (replace current table styling)
+
+Upgrade the matrix to be a premium component:
+
+Layout
+
+Top row: page title + subtitle
+
+Filter bar card: Position dropdown + employee count + “Export CSV” button
+
+Summary strip: 3–4 KPI cards (e.g., Employees at risk, Top gap skill, Avg readiness)
+
+Matrix card: sticky header + sticky first column, horizontal scroll if needed
+
+Matrix behavior
+
+Sticky header row
+
+Sticky left “Employee” column
+
+Zebra rows for readability
+
+Hover row highlight
+
+Tooltips for competency headers (show required level + description)
+
+Each competency cell shows:
+
+current level + required level (example: 2 / 3)
+
+status badge: OK / GAP / RISK based on defined logic
+
+Status style rules (accessible)
+
+OK: soft green background + dark green text in light theme
+
+GAP: soft amber background + dark amber text
+
+RISK: soft red background + dark red text
+
+Avoid neon. Avoid pure saturated red/green on dark surfaces.
+
+Replace the current “pills” with a consistent Badge component and a small Progress/Indicator if useful.
+
+4) Add “Demo-Ready Data” mode
+
+Right now your UI looks empty/weak because it has no richness.
+Implement a DEMO_MODE flag:
+
+If no real data OR demo mode enabled: show a seeded dataset (10 employees, 8 competencies).
+
+This is only for demo/dev; production uses real data.
+
+Deliverable: A single toggle env var so you can always show a sexy demo.
+
+B) Add a Full Test Pipeline (Replit must run it)
+
+Implement a CI-grade verification suite:
+
+1) Add scripts
+
+In package.json add:
+
+lint (eslint)
+
+format:check (prettier check)
+
+typecheck (tsc --noEmit)
+
+test (unit tests: vitest/jest)
+
+test:e2e (playwright)
+
+test:a11y (axe checks via Playwright)
+
+build (next build)
+
+ci runs ALL in strict order:
+
+lint
+
+format:check
+
+typecheck
+
+test
+
+build
+
+test:e2e
+
+test:a11y
+
+Hard rule: npm run ci must exit non-zero if anything fails.
+
+2) Unit tests (minimum set)
+
+Use React Testing Library (or equivalent) and write tests for:
+
+CompetenceMatrix renders rows/columns correctly from data
+
+Correct status computation (OK/GAP/RISK)
+
+Sticky header/column presence via classnames (at least structural checks)
+
+Empty state + demo mode behavior
+
+3) E2E tests (Playwright)
+
+Create Playwright tests:
+
+/health loads and shows green checks when env is present
+
+Matrix page loads without console errors
+
+Demo mode: verifies at least 10 employees render
+
+Basic interaction: changing position filter updates the matrix
+
+4) Accessibility gate (THIS fixes your readability complaint permanently)
+
+Add @axe-core/playwright and run Axe against:
+
+Competence Matrix page
+
+Admin users page (if present)
+Fail the pipeline if serious violations occur (especially color contrast).
+
+C) Replit Execution (“force it to run”)
+
+Create a single command workflow:
+
+Ensure npm run ci works in Replit Shell.
+
+If Playwright needs install step, add:
+
+npx playwright install --with-deps (only if required in this environment)
+
+Deliverable: a README_TESTING.md with exactly:
+
+How to run: npm run ci
+
+How to run only unit tests
+
+How to run only e2e tests
+
+How to enable demo mode
+
+D) Output Requirement
+
+After implementation:
+
+Run npm run ci and paste the results summary.
+
+Provide 2–3 screenshots of the new matrix UI (light theme).
+
+Briefly list what changed (design + tests).
+
+Do not refactor unrelated features.
+
+Replit Shell commands (what YOU run after it updates)
+
+Copy/paste:
+
+npm install
+npm run ci
+
+
+If Playwright complains about browsers:
+
+npx playwright install --with-deps
+npm run test:e2e
+npm run test:a11y

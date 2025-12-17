@@ -10,7 +10,7 @@ export type EmployeeCompetenceItem = {
   mandatory: boolean;
   employeeLevel: number | null;
   validTo: string | null;
-  status: "OK" | "RISK" | "N/A";
+  status: "OK" | "GAP" | "RISK" | "N/A";
   riskReason: string | null;
   isSafetyCritical: boolean;
 };
@@ -52,7 +52,7 @@ export type MatrixColumn = {
   requiredLevel: number | null;
 };
 
-export type MatrixCellStatus = 'OK' | 'RISK' | 'N/A';
+export type MatrixCellStatus = 'OK' | 'GAP' | 'RISK' | 'N/A';
 
 export type MatrixRow = {
   employeeId: string;
@@ -62,6 +62,7 @@ export type MatrixRow = {
     competenceId: string;
     status: MatrixCellStatus;
     level: number | null;
+    requiredLevel?: number | null;
   }[];
 };
 
@@ -269,7 +270,7 @@ export async function getEmployeeCompetenceProfile(
 
     const empComp = empCompByCompetenceId.get(req.competence_id) ?? null;
 
-    let status: "OK" | "RISK" | "N/A" = "N/A";
+    let status: "OK" | "GAP" | "RISK" | "N/A" = "N/A";
     let riskReason: string | null = null;
     let empLevel: number | null = empComp ? empComp.level : null;
     const validTo = empComp?.valid_to ?? null;
@@ -287,9 +288,15 @@ export async function getEmployeeCompetenceProfile(
         gapCount += 1;
         expiredCount += 1;
       } else if (empLevel! < req.required_level) {
-        status = "RISK";
-        riskReason = "För låg nivå";
-        gapCount += 1;
+        if (empLevel! >= req.required_level - 1) {
+          status = "GAP";
+          riskReason = "En nivå under krav";
+          gapCount += 1;
+        } else {
+          status = "RISK";
+          riskReason = "För låg nivå";
+          gapCount += 1;
+        }
       } else {
         status = "OK";
       }

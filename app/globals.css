@@ -44,6 +44,25 @@
   --muted-border: hsl(var(--muted));
   --accent-border: hsl(var(--accent));
   --destructive-border: hsl(var(--destructive));
+
+  /* Accessible status colors - AA compliant */
+  --status-ok-bg: 142 76% 94%;
+  --status-ok-text: 142 76% 22%;
+  --status-ok-border: 142 76% 36%;
+  --status-gap-bg: 38 92% 92%;
+  --status-gap-text: 38 92% 25%;
+  --status-gap-border: 38 92% 50%;
+  --status-risk-bg: 0 84% 94%;
+  --status-risk-text: 0 84% 28%;
+  --status-risk-border: 0 84% 50%;
+  --status-na-bg: 220 14% 94%;
+  --status-na-text: 220 14% 40%;
+  --status-na-border: 220 14% 70%;
+
+  /* Surface hierarchy */
+  --surface: 0 0% 100%;
+  --surface-2: 220 14% 97%;
+  --surface-3: 220 14% 94%;
 }
 
 .dark {
@@ -78,6 +97,25 @@
   --chart-3: 173 80% 55%;
   --chart-4: 43 96% 62%;
   --chart-5: 27 87% 65%;
+
+  /* Dark mode accessible status colors */
+  --status-ok-bg: 142 76% 12%;
+  --status-ok-text: 142 76% 75%;
+  --status-ok-border: 142 76% 36%;
+  --status-gap-bg: 38 92% 12%;
+  --status-gap-text: 38 92% 72%;
+  --status-gap-border: 38 92% 50%;
+  --status-risk-bg: 0 84% 14%;
+  --status-risk-text: 0 84% 75%;
+  --status-risk-border: 0 84% 50%;
+  --status-na-bg: 220 14% 16%;
+  --status-na-text: 220 14% 70%;
+  --status-na-border: 220 14% 35%;
+
+  /* Surface hierarchy */
+  --surface: 222 15% 8%;
+  --surface-2: 222 15% 12%;
+  --surface-3: 222 15% 16%;
 }
 
 @layer base {
@@ -733,33 +771,34 @@
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 0.75rem;
-  border: 1px solid rgba(148, 163, 184, 0.8);
+  font-weight: 500;
+  border: 1px solid transparent;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .hr-risk-pill--low {
-  background: rgba(22, 163, 74, 0.25);
-  color: #bbf7d0;
-  border-color: rgba(34, 197, 94, 0.9);
+  background: hsl(var(--status-ok-bg));
+  color: hsl(var(--status-ok-text));
+  border-color: hsl(var(--status-ok-border));
 }
 
 .hr-risk-pill--medium {
-  background: rgba(202, 138, 4, 0.25);
-  color: #fef3c7;
-  border-color: rgba(245, 158, 11, 0.9);
+  background: hsl(var(--status-gap-bg));
+  color: hsl(var(--status-gap-text));
+  border-color: hsl(var(--status-gap-border));
 }
 
 .hr-risk-pill--high {
-  background: rgba(185, 28, 28, 0.25);
-  color: #fee2e2;
-  border-color: rgba(248, 113, 113, 0.95);
+  background: hsl(var(--status-risk-bg));
+  color: hsl(var(--status-risk-text));
+  border-color: hsl(var(--status-risk-border));
 }
 
 .hr-risk-pill--critical {
-  background: rgba(127, 29, 29, 0.4);
-  color: #fca5a5;
-  border-color: rgba(220, 38, 38, 1);
+  background: hsl(var(--status-risk-bg));
+  color: hsl(var(--status-risk-text));
+  border-color: hsl(var(--status-risk-border));
   font-weight: 600;
 }
 
@@ -894,10 +933,10 @@
 
 .hr-competence-table-wrapper {
   margin-top: 10px;
-  border-radius: 18px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgba(55, 65, 81, 0.9);
-  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
 }
 
 .hr-competence-table {
@@ -908,25 +947,30 @@
 
 .hr-competence-table th,
 .hr-competence-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+  padding: 10px 12px;
+  border-bottom: 1px solid hsl(var(--border));
   text-align: left;
 }
 
 .hr-competence-table th {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #9ca3af;
-  background: rgba(15, 23, 42, 1);
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--surface-2));
 }
 
 .hr-competence-table tr:last-child td {
   border-bottom: none;
 }
 
-.hr-competence-table tr:hover td {
-  background: rgba(15, 23, 42, 0.9);
+.hr-competence-table tbody tr:nth-child(even) {
+  background: hsl(var(--surface-2) / 0.5);
+}
+
+.hr-competence-table tbody tr:hover td {
+  background: hsl(var(--accent));
 }
 
 .hr-competence-name {
@@ -964,25 +1008,33 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 0.75rem;
+  font-weight: 500;
   border: 1px solid transparent;
 }
 
 .hr-status-badge--ok {
-  background: rgba(21, 128, 61, 0.35);
-  border-color: rgba(34, 197, 94, 0.9);
-  color: #bbf7d0;
+  background: hsl(var(--status-ok-bg));
+  border-color: hsl(var(--status-ok-border));
+  color: hsl(var(--status-ok-text));
+}
+
+.hr-status-badge--gap {
+  background: hsl(var(--status-gap-bg));
+  border-color: hsl(var(--status-gap-border));
+  color: hsl(var(--status-gap-text));
 }
 
 .hr-status-badge--risk {
-  background: rgba(185, 28, 28, 0.35);
-  border-color: rgba(248, 113, 113, 0.95);
-  color: #fecaca;
+  background: hsl(var(--status-risk-bg));
+  border-color: hsl(var(--status-risk-border));
+  color: hsl(var(--status-risk-text));
 }
 
-.hr-status-badge--na {
-  background: rgba(31, 41, 55, 0.9);
-  border-color: rgba(75, 85, 99, 0.9);
-  color: #9ca3af;
+.hr-status-badge--na,
+.hr-status-badge--n\/a {
+  background: hsl(var(--status-na-bg));
+  border-color: hsl(var(--status-na-border));
+  color: hsl(var(--status-na-text));
 }
 
 .hr-status-reason {
@@ -1023,9 +1075,9 @@
 
 .hr-matrix-wrapper {
   overflow-x: auto;
-  border-radius: 18px;
-  border: 1px solid rgba(55, 65, 81, 0.9);
-  background: rgba(15, 23, 42, 0.9);
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
 }
 
 .hr-matrix-wrapper .hr-competence-table {
@@ -1036,6 +1088,29 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  background: hsl(var(--surface-2));
+}
+
+.hr-matrix-wrapper .hr-competence-table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: hsl(var(--surface-2));
+}
+
+.hr-matrix-wrapper .hr-competence-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: hsl(var(--card));
+}
+
+.hr-matrix-wrapper .hr-competence-table tbody tr:nth-child(even) td:first-child {
+  background: hsl(var(--surface-2));
+}
+
+.hr-matrix-wrapper .hr-competence-table tbody tr:hover td:first-child {
+  background: hsl(var(--accent));
 }
 
 .hr-matrix-wrapper .hr-competence-table td {
@@ -1051,8 +1126,22 @@
 }
 
 .hr-matrix-cell__level {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.hr-matrix-cell__levels {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.hr-matrix-cell__levels strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
 }
 
 .hr-toggle {
