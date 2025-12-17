@@ -1,0 +1,116 @@
+You are the senior engineer. Implement the following, end-to-end, production-grade.
+
+1) Add a Health Check Page (UI)
+
+Create /app/health/page.tsx that shows a simple status dashboard:
+
+Supabase env present: ✅/❌
+
+Supabase reachable (run a trivial query): ✅/❌
+
+Auth status (session exists): ✅/❌
+
+Current user email + role (if logged in)
+
+Rules
+
+If env vars missing → show big red error + exact missing keys.
+
+If Supabase query fails → show error message string (safe, no secrets).
+
+Use clean Apple-ish UI consistent with existing styles.
+
+2) Add a Global “Env Gate” (Fail Fast)
+
+Implement a shared helper lib/env.ts:
+
+getPublicEnv() returns NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+If missing, throw an error with a clear message:
+“Supabase env missing: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY”
+
+Update Supabase client initialization to import from lib/env.ts and never silently continue if missing.
+
+3) Admin Bootstrap (One-Time)
+
+Goal: first real user becomes admin automatically, then bootstrap is permanently disabled.
+
+Implement:
+
+Add profiles table if not present:
+
+id uuid primary key references auth.users(id)
+
+email text
+
+role text default 'user' (values: admin, hr, manager, user)
+
+created_at timestamp default now()
+
+Create server-side logic (Next.js route handler) at:
+/app/api/bootstrap/route.ts
+
+Behavior:
+
+If profiles has zero rows → set current signed-in user as admin
+
+Otherwise → return “bootstrap disabled”
+
+Must be secure:
+
+Requires authenticated user
+
+Uses Supabase server client (service role) ONLY on server route
+
+Never exposes service role key to client
+
+Add a UI button on dashboard for admins only:
+“Run Admin Bootstrap”
+
+Visible only if profile role is not yet set OR profiles empty
+
+After success, button disappears.
+
+4) Role-Based Routing
+
+After login:
+
+admin → /app/admin
+
+hr → /app/hr
+
+manager → /app/manager
+
+user → /app/app (or your main workspace)
+
+Implement a single redirect decision point after auth success.
+
+5) “Known Good” Test Plan (must pass)
+
+Add a checklist in the PR description / comments:
+
+ /health shows env ✅
+
+ /health shows Supabase reachable ✅
+
+ login works
+
+ first user can bootstrap admin
+
+ second user cannot bootstrap
+
+ role routes correctly after login
+
+ app never silently runs with missing env vars
+
+Deliverables:
+
+New files: lib/env.ts, /app/health/page.tsx, /app/api/bootstrap/route.ts
+
+Updated Supabase client init
+
+Updated login redirect logic
+
+SQL migration for profiles table if needed
+
+Do not change unrelated styling or features.
