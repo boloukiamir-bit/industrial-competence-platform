@@ -10,4 +10,14 @@ module.exports = {
     }],
   },
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  modulePathIgnorePatterns: [
+    '<rootDir>/.cache/',
+    '<rootDir>/node_modules/',
+  ],
+  haste: {
+    enableSymlinks: false,
+  },
+  watchPathIgnorePatterns: [
+    '<rootDir>/.cache/',
+  ],
 };

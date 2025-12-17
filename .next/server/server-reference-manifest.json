@@ -1,0 +1,21 @@
+{
+  "node": {
+    "403a0dc0fa60fd77ec8e7fcbb6028e8611e7f2c677": {
+      "workers": {
+        "app/app/import-employees/page": {
+          "moduleId": 82451,
+          "async": false,
+          "exportedName": "importEmployeesFromCsv",
+          "filename": "app/app/import-employees/actions.ts"
+        }
+      },
+      "layer": {
+        "app/app/import-employees/page": "action-browser"
+      },
+      "filename": "app/app/import-employees/actions.ts",
+      "exportedName": "importEmployeesFromCsv"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "GiCPg+Tts1Z3Ek6cneBo9kguJNhfm80Edji3y7pFzmM="
+}

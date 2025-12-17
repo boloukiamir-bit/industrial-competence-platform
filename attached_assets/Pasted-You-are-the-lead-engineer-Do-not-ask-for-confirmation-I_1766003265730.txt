@@ -1,0 +1,185 @@
+You are the lead engineer. Do not ask for confirmation. Implement the missing MVP items and run verification. Follow the priority order below and deliver everything in one pass.
+
+Priority 0 — Remove blockers (must be done first)
+0.1 Create /signup (public)
+
+Route: /signup
+
+UI: same premium style as /login
+
+Functionality: Supabase signUp with email + password
+
+After signup:
+
+If invite exists → user will be attached by trigger (already built)
+
+Redirect to /app/org/select or /app/dashboard depending on org selection logic
+
+Show clear error messages (email already registered, weak password, etc.)
+
+0.2 Create /api/health endpoint
+
+Route: /app/api/health/route.ts
+
+Method: GET
+
+Return JSON: { "status": "OK" }
+
+This is used for uptime checks and for /health page to optionally call.
+
+Priority 1 — Fix public pricing (must be public)
+1.1 Create /pricing (public)
+
+Move or replicate pricing content from /app/pricing to /pricing
+
+Ensure /app/pricing is removed or redirected to /pricing
+
+Logged-in users must never see pricing inside the app navigation
+
+Priority 2 — Tomorrow’s Gaps (make it a true one-button demo)
+
+Update /app/gaps to match this exact flow:
+
+Inputs (top bar)
+
+Date (default tomorrow)
+
+Position/Line dropdown (required)
+
+Shift dropdown (optional)
+
+Button: Generate Gaps (primary)
+
+Outputs (after click)
+
+A) “What to fix” summary card (above table)
+
+Employees at risk (count)
+
+Top 3 missing skills (by frequency/severity)
+
+“Fastest fix” suggestion (simple heuristic ok):
+
+if someone is OK on missing skill → suggest swap
+
+else suggest training / buddy
+
+B) Gaps Table
+Columns:
+
+Employee
+
+Skill
+
+Required level
+
+Current level
+
+Severity badge (OK / GAP / RISK)
+
+Suggested action (Swap / Train / Buddy / No action)
+
+C) Export CSV
+
+Button: Export CSV
+
+Export exactly the table rows currently displayed
+
+File name: gaps-YYYY-MM-DD.csv
+
+DEMO_MODE requirement
+
+If NEXT_PUBLIC_DEMO_MODE=true:
+
+Page must work without Supabase reads
+
+Use seeded demo dataset
+
+Make it visually rich enough to present to a customer
+
+Priority 3 — Demo Mode Banner (make it obvious)
+
+If DEMO_MODE is enabled:
+
+Show a subtle banner at top of app: “Demo Mode: using sample data”
+
+Add a link to a “Demo Script” page (see below)
+
+Priority 4 — Testing: make Replit run a real CI command
+
+Add scripts to package.json:
+
+lint
+
+typecheck
+
+test (unit tests; minimal ok)
+
+test:e2e (Playwright smoke)
+
+build
+
+ci runs: lint → typecheck → test → build → test:e2e
+
+Minimum tests required:
+
+Unit test: gaps severity logic returns correct status
+
+E2E smoke:
+
+/ loads
+
+/login loads
+
+/signup loads
+
+In DEMO_MODE: /app/gaps generates table after clicking Generate
+
+CSV export button exists and triggers download event (basic assertion)
+
+Priority 5 — Create a “Demo Script” page (so Amir can sell)
+
+Create /app/demo
+Show 5-step script:
+
+Login
+
+Select org
+
+Open Competence Matrix
+
+Open Tomorrow’s Gaps → click Generate
+
+Export CSV → show action plan
+
+Final Output Requirements (must do)
+
+After implementing everything:
+
+Print a checklist with ✅/❌ for:
+
+/signup works
+
+/api/health returns OK
+
+/pricing is public and removed from app
+
+/app/gaps one-button flow + summary + export
+
+DEMO banner appears
+
+npm run ci passes
+
+Run and paste:
+
+npm run ci output
+
+Provide 3 screenshots:
+
+Landing /
+
+Gaps page with summary + table
+
+Pricing page
+
+Do not ask “should I proceed”. Just do it.

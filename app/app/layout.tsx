@@ -14,19 +14,20 @@ import {
   Package,
   Newspaper,
   FileText,
-  CreditCard,
   BookOpen,
   Shield,
   Building2,
   BarChart3,
   Workflow,
   LogOut,
-  Wrench
+  Wrench,
+  TrendingUp
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
+import { DemoModeBanner } from "@/components/DemoModeBanner";
 
 type NavItem = {
   name: string;
@@ -39,8 +40,8 @@ const navItems: NavItem[] = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
-  { name: "Competence Matrix", href: "/competence/matrix", icon: Grid3X3 },
-  { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: AlertTriangle },
+  { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
+  { name: "Tomorrow's Gaps", href: "/app/gaps", icon: TrendingUp },
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
   { name: "Safety / Certificates", href: "/app/safety/certificates", icon: Shield },
   { name: "Equipment", href: "/app/equipment", icon: Package },
@@ -50,7 +51,6 @@ const navItems: NavItem[] = [
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
   { name: "HR Workflows", href: "/app/hr/workflows", icon: Workflow, hrAdminOnly: true },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
-  { name: "Billing", href: "/app/billing", icon: CreditCard, hrAdminOnly: true },
   { name: "Admin", href: "/app/admin", icon: Wrench, hrAdminOnly: true },
   { name: "Settings", href: "/app/settings", icon: Settings },
 ];
@@ -95,7 +95,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <OrgProvider>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
+        <DemoModeBanner />
+        <div className="flex flex-1 overflow-hidden">
         <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -157,6 +159,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="flex-1 overflow-auto">
             {children}
           </main>
+          </div>
         </div>
       </div>
     </OrgProvider>

@@ -277,7 +277,14 @@ export default function LoginPage() {
         </div>
       )}
 
-      <p style={{ marginTop: 16, fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
+      <p style={{ marginTop: 16, fontSize: 13, color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+        Don&apos;t have an account?{' '}
+        <a href="/signup" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }} data-testid="link-signup">
+          Sign up
+        </a>
+      </p>
+
+      <p style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
         <a href="/health" style={{ textDecoration: 'underline' }} data-testid="link-health">
           System Health Check
         </a>

@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/app/layout,_N_T_/app/one-to-ones/layout,_N_T_/app/one-to-ones/page,_N_T_/app/one-to-ones"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/app/one-to-ones/__PAGE__",
+    "/app/one-to-ones",
+    "/app",
+    "/_index",
+    "/_head"
+  ]
+}

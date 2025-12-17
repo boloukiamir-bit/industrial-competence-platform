@@ -1,0 +1,3 @@
+{
+  "/api/gdpr/export-employee-data/route": "app/api/gdpr/export-employee-data/route.js"
+}

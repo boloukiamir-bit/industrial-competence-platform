@@ -56,7 +56,7 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6" data-testid="heading-competence-matrix">
         Competence Matrix
       </h1>
 
