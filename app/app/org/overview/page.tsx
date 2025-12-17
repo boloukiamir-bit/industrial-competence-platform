@@ -130,6 +130,7 @@ export default function OrgOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [showEmployees, setShowEmployees] = useState(false);
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
+  const [showCreateUnitModal, setShowCreateUnitModal] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -188,7 +189,7 @@ export default function OrgOverviewPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => router.push("/admin/org-units/new")} data-testid="button-create-unit">
+            <Button onClick={() => setShowCreateUnitModal(true)} data-testid="button-create-unit">
               <Plus className="h-4 w-4 mr-2" />
               {COPY.actions.createUnit}
             </Button>
@@ -212,12 +213,31 @@ export default function OrgOverviewPage() {
             <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
               {COPY.emptyStates.organization.description}
             </p>
-            <Button onClick={() => router.push("/admin/org-units/new")} data-testid="button-create-unit-empty">
+            <Button onClick={() => setShowCreateUnitModal(true)} data-testid="button-create-unit-empty">
               <Plus className="h-4 w-4 mr-2" />
               {COPY.actions.createUnit}
             </Button>
           </CardContent>
         </Card>
+
+        {showCreateUnitModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className="max-w-md mx-4">
+              <CardHeader>
+                <CardTitle>Coming Soon</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-4">
+                  Organization unit management is coming soon. For now, you can explore the demo data or import employees to get started.
+                </p>
+                <div className="flex gap-2">
+                  <Button onClick={() => setShowCreateUnitModal(false)}>Close</Button>
+                  <Button variant="outline" onClick={() => router.push("/app/setup")}>Go to Setup</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {showComingSoonModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -227,7 +247,7 @@ export default function OrgOverviewPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground mb-4">
-                  CSV import for organization structure is coming soon. For now, please create units manually.
+                  CSV import for organization structure is coming soon.
                 </p>
                 <Button onClick={() => setShowComingSoonModal(false)}>Close</Button>
               </CardContent>
@@ -259,7 +279,7 @@ export default function OrgOverviewPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => router.push("/admin/org-units/new")} data-testid="button-create-unit">
+            <Button onClick={() => setShowCreateUnitModal(true)} data-testid="button-create-unit">
               <Plus className="h-4 w-4 mr-2" />
               {COPY.actions.createUnit}
             </Button>
@@ -281,6 +301,25 @@ export default function OrgOverviewPage() {
         ))}
       </div>
 
+      {showCreateUnitModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>Coming Soon</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground mb-4">
+                Organization unit management is coming soon. For now, you can explore the demo data or import employees to get started.
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={() => setShowCreateUnitModal(false)}>Close</Button>
+                <Button variant="outline" onClick={() => router.push("/app/setup")}>Go to Setup</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {showComingSoonModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="max-w-md mx-4">
@@ -289,7 +328,7 @@ export default function OrgOverviewPage() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-4">
-                CSV import for organization structure is coming soon. For now, please create units manually.
+                CSV import for organization structure is coming soon.
               </p>
               <Button onClick={() => setShowComingSoonModal(false)}>Close</Button>
             </CardContent>
