@@ -9,7 +9,9 @@ import {
   Shield, 
   Settings,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  ClipboardList
 } from "lucide-react";
 
 interface AdminCard {
@@ -21,6 +23,24 @@ interface AdminCard {
 
 const adminCards: AdminCard[] = [
   {
+    title: "Organizations",
+    description: "Create and manage organizations. Switch between organizations.",
+    href: "/app/org/select",
+    icon: Building2,
+  },
+  {
+    title: "User Management",
+    description: "Invite users, manage roles, and control team access.",
+    href: "/app/admin/users",
+    icon: Users,
+  },
+  {
+    title: "Audit Log",
+    description: "View activity history and track admin actions.",
+    href: "/app/admin/audit",
+    icon: ClipboardList,
+  },
+  {
     title: "Competence Admin",
     description: "Manage competence groups and competences used in matrices and gap analysis.",
     href: "/admin/competence",
@@ -31,12 +51,6 @@ const adminCards: AdminCard[] = [
     description: "Configure positions and their competence requirements.",
     href: "/admin/positions",
     icon: Briefcase,
-  },
-  {
-    title: "User Management",
-    description: "Manage user accounts, roles, and permissions.",
-    href: "/app/admin/users",
-    icon: Users,
   },
   {
     title: "Security Settings",

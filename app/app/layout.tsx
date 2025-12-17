@@ -21,8 +21,7 @@ import {
   BarChart3,
   Workflow,
   LogOut,
-  Wrench,
-  Briefcase
+  Wrench
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,8 +50,7 @@ const navItems: NavItem[] = [
   { name: "HR Workflows", href: "/app/hr/workflows", icon: Workflow, hrAdminOnly: true },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
   { name: "Billing", href: "/app/billing", icon: CreditCard, hrAdminOnly: true },
-  { name: "Admin → Competence", href: "/admin/competence", icon: Wrench, hrAdminOnly: true },
-  { name: "Admin → Positions", href: "/admin/positions", icon: Briefcase, hrAdminOnly: true },
+  { name: "Admin", href: "/app/admin", icon: Wrench, hrAdminOnly: true },
   { name: "Settings", href: "/app/settings", icon: Settings },
 ];
 
