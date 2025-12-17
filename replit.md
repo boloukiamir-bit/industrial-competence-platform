@@ -63,6 +63,21 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - `sql/create_profiles_table.sql` - User profiles table
 - `sql/002_multi_tenant_rls.sql` - Organizations, memberships, invites, audit_logs with RLS
 
+## Testing Infrastructure
+- **Unit Tests:** Jest with ts-jest for TypeScript support (jest.config.cjs)
+- **E2E Tests:** Playwright (playwright.config.ts) for browser testing
+- **Accessibility Tests:** axe-core integration with Playwright for WCAG 2.0 AA compliance
+- **Linting:** ESLint (eslint.config.mjs) for code quality
+- **Formatting:** Prettier (.prettierrc) for consistent code style
+- **Demo Mode:** Enabled via NEXT_PUBLIC_DEMO_MODE=true env var OR ?demo=true query param
+- **Documentation:** See README_TESTING.md for full testing guide
+
+## Competence Matrix Features
+- **KPI Cards:** Total employees, at-risk count, top gap skill, average readiness percentage
+- **Status Types:** OK (meets requirement), GAP (1 level below), RISK (2+ levels below or missing), N/A
+- **Accessible Colors:** Theme tokens for status colors with AA contrast compliance
+- **Premium Styling:** Sticky headers, zebra rows, hover effects, CSV export
+
 ## Known Limitations
 - **Supabase Schema Cache:** The `min_headcount` column exists in the `positions` table but Supabase's PostgREST schema cache doesn't recognize it. This requires refreshing the schema cache through the Supabase dashboard (Database > API > Reload). The admin console currently excludes this field as a workaround.
 - **Supabase Schema Cache for other columns:** Same issue may affect `sort_order` on competence_groups and `active` on competences if the schema cache is stale.
