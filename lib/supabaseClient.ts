@@ -1,33 +1,15 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-function getEnvVar(name: string): string {
-  if (typeof window !== 'undefined') {
-    // Client-side: access from window or process.env (inlined at build)
-    return (process.env as Record<string, string | undefined>)[name] || "";
-  }
-  // Server-side
-  return process.env[name] || "";
-}
+// Hardcoded fallback values for production builds where env vars may not be available
+const FALLBACK_SUPABASE_URL = "https://bmvawfrnlpdvcmffqrzc.supabase.co";
+const FALLBACK_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtdmF3ZnJubHBkdmNtZmZxcnpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTEwOTAsImV4cCI6MjA4MTA4NzA5MH0.DHLJ4aMn1dORfbNPt1XrJtcdIjYN81YQbJ19Q89A_pM";
 
-const supabaseUrl = getEnvVar("NEXT_PUBLIC_SUPABASE_URL");
-const supabaseAnonKey = getEnvVar("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
 
 function createSupabaseClient(): SupabaseClient {
-  const hasCredentials = supabaseUrl && supabaseAnonKey;
-  
-  if (!hasCredentials && typeof window !== 'undefined') {
-    console.error(
-      "Supabase environment variables not set. " +
-      "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be configured.",
-      { url: supabaseUrl ? "set" : "missing", key: supabaseAnonKey ? "set" : "missing" }
-    );
-  }
-  
-  // Use actual values - fail early if not configured
-  const url = supabaseUrl || "https://placeholder.supabase.co";
-  const key = supabaseAnonKey || "placeholder-key";
-  
-  return createClient(url, key, {
+  // With fallbacks, we should always have valid credentials
+  return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -49,5 +31,6 @@ export function getSupabaseClient(): SupabaseClient {
 }
 
 export function isSupabaseReady(): boolean {
-  return Boolean(supabaseUrl && supabaseAnonKey);
+  // With hardcoded fallbacks, this should always return true
+  return Boolean(supabaseUrl && supabaseAnonKey && !supabaseUrl.includes('placeholder'));
 }
