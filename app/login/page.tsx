@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmail, getSession } from '@/services/auth';
-import { isSupabaseReady } from '@/lib/supabaseClient';
+import { isSupabaseReady, supabase } from '@/lib/supabaseClient';
+import { getRoleRedirectPath } from '@/hooks/useProfile';
+import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,9 +15,11 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [supabaseConfigured, setSupabaseConfigured] = useState(true);
+  const [bootstrapStatus, setBootstrapStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [bootstrapMessage, setBootstrapMessage] = useState<string | null>(null);
+  const [showBootstrap, setShowBootstrap] = useState(false);
 
   useEffect(() => {
-    // Check if Supabase is configured
     const configured = isSupabaseReady();
     setSupabaseConfigured(configured);
     
@@ -29,7 +33,15 @@ export default function LoginPage() {
       try {
         const session = await getSession();
         if (session?.user) {
-          router.replace('/app/hr/tasks');
+          // Get user role and redirect accordingly
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          
+          const redirectPath = getRoleRedirectPath(profile?.role || null);
+          router.replace(redirectPath);
         } else {
           setCheckingSession(false);
         }
@@ -40,6 +52,39 @@ export default function LoginPage() {
     }
     checkExistingSession();
   }, [router]);
+
+  async function checkBootstrapNeeded(userId: string) {
+    try {
+      // Check if profiles table has any entries
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+
+      if (error) {
+        // Table might not exist - show bootstrap
+        setShowBootstrap(true);
+        return null;
+      }
+
+      if (!profiles || profiles.length === 0) {
+        // No profiles exist - this user can bootstrap
+        setShowBootstrap(true);
+        return null;
+      }
+
+      // Check if current user has a profile
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      return userProfile?.role || null;
+    } catch {
+      return null;
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,8 +98,22 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signInWithEmail(email, password);
-      router.replace('/app/hr/tasks');
+      const session = await signInWithEmail(email, password);
+      
+      if (session?.user) {
+        // Check if bootstrap is needed or get role
+        const role = await checkBootstrapNeeded(session.user.id);
+        
+        if (showBootstrap) {
+          // Stay on login page to show bootstrap option
+          setLoading(false);
+          return;
+        }
+
+        // Redirect based on role
+        const redirectPath = getRoleRedirectPath(role);
+        router.replace(redirectPath);
+      }
     } catch (error: unknown) {
       console.error('Sign in error:', error);
       let message = 'Failed to sign in.';
@@ -74,10 +133,56 @@ export default function LoginPage() {
     }
   }
 
+  async function handleBootstrap() {
+    setBootstrapStatus('loading');
+    setBootstrapMessage(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        setBootstrapStatus('error');
+        setBootstrapMessage('Not authenticated');
+        return;
+      }
+
+      const response = await fetch('/api/bootstrap', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setBootstrapStatus('error');
+        setBootstrapMessage(data.error || 'Bootstrap failed');
+        return;
+      }
+
+      setBootstrapStatus('success');
+      setBootstrapMessage(data.message);
+      setShowBootstrap(false);
+
+      // Redirect to admin dashboard
+      setTimeout(() => {
+        router.replace('/app/admin');
+      }, 1500);
+    } catch (err) {
+      setBootstrapStatus('error');
+      setBootstrapMessage(err instanceof Error ? err.message : 'Bootstrap failed');
+    }
+  }
+
   if (checkingSession) {
     return (
       <main className="hr-page" style={{ maxWidth: 420, margin: '0 auto', paddingTop: 80 }}>
-        <p className="hr-page__subtitle">Loading...</p>
+        <div className="flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <p className="hr-page__subtitle">Loading...</p>
+        </div>
       </main>
     );
   }
@@ -132,6 +237,52 @@ export default function LoginPage() {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+
+      {showBootstrap && (
+        <div className="hr-card" style={{ marginTop: 16, padding: 16 }} data-testid="bootstrap-section">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+            Admin Setup Required
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+            No admin user exists. Click below to become the first admin.
+          </p>
+          
+          {bootstrapMessage && (
+            <p 
+              className={bootstrapStatus === 'error' ? 'hr-error' : 'hr-success'}
+              style={{ marginBottom: 8, fontSize: 13 }}
+              data-testid="bootstrap-message"
+            >
+              {bootstrapMessage}
+            </p>
+          )}
+          
+          <button
+            onClick={handleBootstrap}
+            disabled={bootstrapStatus === 'loading' || bootstrapStatus === 'success'}
+            className="hr-button hr-button--secondary"
+            style={{ width: '100%' }}
+            data-testid="button-bootstrap"
+          >
+            {bootstrapStatus === 'loading' ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Running Bootstrap...
+              </span>
+            ) : bootstrapStatus === 'success' ? (
+              'Bootstrap Complete!'
+            ) : (
+              'Run Admin Bootstrap'
+            )}
+          </button>
+        </div>
+      )}
+
+      <p style={{ marginTop: 16, fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
+        <a href="/health" style={{ textDecoration: 'underline' }} data-testid="link-health">
+          System Health Check
+        </a>
+      </p>
     </main>
   );
 }
