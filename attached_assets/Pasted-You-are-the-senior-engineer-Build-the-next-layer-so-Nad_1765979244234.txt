@@ -1,0 +1,300 @@
+You are the senior engineer. Build the next layer so Nadiplan becomes multi-tenant, role-secure, and auditable. No “trust the client”. All access control must be enforced in Postgres via RLS (Row Level Security).
+
+Non‑negotiables
+
+All data tables must have RLS enabled.
+
+Policies must use auth.uid() and membership checks.
+
+Service role key must NEVER touch the client.
+
+Every admin action writes an audit log row.
+
+Deliver clean UI pages for admins to manage users safely.
+
+1) Database Model (SQL Migration Required)
+
+Create these tables (in public schema):
+
+organizations
+
+id uuid primary key default gen_random_uuid()
+
+name text not null
+
+slug text not null unique
+
+created_by uuid not null
+
+created_at timestamptz not null default now()
+
+memberships
+
+org_id uuid not null references organizations(id) on delete cascade
+
+user_id uuid not null references auth.users(id) on delete cascade
+
+role text not null check (role in ('admin','hr','manager','user'))
+
+status text not null default 'active' check (status in ('active','disabled'))
+
+created_at timestamptz not null default now()
+
+primary key (org_id, user_id)
+
+indexes on (user_id), (org_id), (org_id, role)
+
+invites
+
+id uuid primary key default gen_random_uuid()
+
+org_id uuid not null references organizations(id) on delete cascade
+
+email text not null
+
+role text not null check (role in ('admin','hr','manager','user'))
+
+invited_by uuid not null
+
+created_at timestamptz not null default now()
+
+expires_at timestamptz not null default (now() + interval '7 days')
+
+accepted_at timestamptz
+
+accepted_user_id uuid references auth.users(id)
+
+unique constraint on (org_id, lower(email)) where accepted_at is null
+
+audit_logs
+
+id bigserial primary key
+
+org_id uuid references organizations(id) on delete cascade
+
+actor_user_id uuid references auth.users(id)
+
+action text not null
+
+target_type text
+
+target_id text
+
+metadata jsonb not null default '{}'::jsonb
+
+created_at timestamptz not null default now()
+
+index on (org_id, created_at desc)
+
+2) Automatic Profile + Invite Claiming (DB Trigger)
+profiles hardening
+
+Ensure profiles exists (from Phase 1). Keep it global per user:
+
+id uuid pk references auth.users(id)
+
+email text
+
+created_at timestamptz default now()
+
+Trigger on auth.users insert
+
+Create a security definer function + trigger that:
+
+Upserts into public.profiles (id, email)
+
+Checks public.invites where lower(invites.email) = lower(new.email) and accepted_at is null and expires_at > now()
+
+For each match:
+
+Inserts into public.memberships (org_id, user_id, role, status='active')
+
+Marks invite accepted: accepted_at=now(), accepted_user_id=new.id
+
+This makes invites “just work” the moment a user signs in for the first time.
+
+3) RLS Policies (This Is The Real Security)
+
+Enable RLS on:
+
+organizations
+
+memberships
+
+invites
+
+audit_logs
+
+profiles
+
+Create helper functions:
+
+is_org_member(org_id uuid)
+
+Returns true if memberships has row for auth.uid() and status='active'.
+
+is_org_admin(org_id uuid)
+
+Returns true if memberships has row for auth.uid() with role='admin' and status='active'.
+
+Policies:
+
+organizations: select only if is_org_member(id); insert allowed for authenticated users only (creator becomes admin via server route)
+
+memberships:
+
+user can select own memberships
+
+org admin can select all memberships in org
+
+only org admin can update roles/status for org
+
+invites:
+
+only org admin can select/insert/delete invites in org
+
+audit_logs:
+
+org admin can select logs in org
+
+inserts happen from server routes (service role) or via RLS allowing org admins to insert
+
+profiles:
+
+user can select/update only their own row
+
+(optional) org admin can select profiles of users in their org via a secure view; do NOT open profiles globally to provide “admin convenience”
+
+If anything is ambiguous: default to least privilege.
+
+4) Server Routes (Service Role Only on Server)
+
+Add server-only env var (Replit Secrets):
+
+SUPABASE_SERVICE_ROLE_KEY (NOT public)
+
+Implement route handlers:
+
+POST /app/api/org/create
+
+Input: { name, slug }
+
+Requires auth
+
+Creates org
+
+Creates membership for creator as admin
+
+Writes audit log: org.created
+
+POST /app/api/admin/invite
+
+Input: { orgId, email, role }
+
+Requires auth AND actor must be org admin (verify via DB)
+
+Inserts invite
+
+Writes audit log: user.invited
+
+POST /app/api/admin/membership/role
+
+Input: { orgId, userId, role }
+
+Requires org admin
+
+Updates membership role
+
+Writes audit log: membership.role_updated
+
+POST /app/api/admin/membership/disable
+
+Input: { orgId, userId }
+
+Requires org admin
+
+Sets membership status = disabled
+
+Writes audit log: membership.disabled
+
+All server routes must:
+
+Validate inputs (zod)
+
+Never leak service role key
+
+Return explicit errors (no silent fail)
+
+5) UI: Admin Console That Actually Runs the Company
+
+Create:
+
+/app/org/select
+
+Lists orgs user belongs to
+
+Stores selected orgId in a secure cookie (or session storage) via a server action
+
+If user has only one org, auto-select
+
+/app/admin/users
+
+Shows table: Email, Role, Status, Created
+
+Actions:
+
+Invite user
+
+Change role
+
+Disable user
+
+Only visible to org admins
+
+/app/admin/audit
+
+Shows audit log feed (latest first)
+
+Filter by action/user (basic)
+
+UX rule: keep it boring and clear. Admin tools are not a nightclub.
+
+6) App-Wide Org Context + Guard
+
+Implement a single “OrgGuard” mechanism:
+
+If authenticated but no org selected → redirect to /app/org/select
+
+All org-scoped pages require an orgId
+
+All queries must be scoped by orgId at the DB level (RLS enforces it)
+
+7) Definition of Done (Must Pass)
+
+ RLS enabled on all tables above
+
+ User cannot read any org data without membership (verify by testing with two users)
+
+ Admin can invite a user by email
+
+ Invited user signs in and automatically gets membership (trigger works)
+
+ Non-admin cannot call admin routes (403)
+
+ Audit log records: org create, invite, role change, disable
+
+ Admin UI pages function and are protected
+
+ No service role key in client bundle (confirm by searching build output / repo)
+
+Deliverables:
+
+SQL migration file(s)
+
+New server routes
+
+New admin UI pages
+
+Updated auth/org guard logic
+
+Do not refactor unrelated parts.

@@ -21,6 +21,8 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - **GDPR Support:** Implements access logging, data export, and anonymization utilities to ensure compliance.
 - **API Routes:** Dedicated API routes for GDPR functionalities like employee data export.
 - **Authentication/Authorization:** Supabase Auth with email/password login. Protected routes under `/app/*` redirect unauthenticated users to `/login`. Role-Based Access Control (RBAC) helpers are implemented for user management and role-based content visibility.
+- **Multi-Tenant Architecture:** Organizations, memberships, and invites with full RLS (Row Level Security) enforcement. All data access is scoped by organization membership and enforced at the database level.
+- **Org Context:** `useOrg` hook and `OrgProvider` manage current organization selection. `OrgGuard` component protects org-scoped pages.
 - **HR Workflow Engine:** Manages standardized processes (e.g., sick leave, parental leave, onboarding) with templates, step tracking, due dates, and completion statuses.
 - **Gap Analysis Engine:** Identifies critical skill gaps, training priorities, and overstaffed skills. "Tomorrow's Gaps v1" provides position-based risk/coverage analysis, calculating fully competent employee counts against minimum headcount requirements.
 - **Notification Engine:** Features an email outbox and a cron endpoint for daily notifications.
@@ -41,6 +43,25 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - **Competence Admin (/admin/competence):** CRUD for competence groups and competences
 - **Positions Admin (/admin/positions):** CRUD for positions
 - **Position Requirements (/admin/positions/[id]/requirements):** Manage competence requirements per position
+- **User Management (/app/admin/users):** Invite users, change roles, disable members (org admin only)
+- **Audit Log (/app/admin/audit):** View organization activity history (org admin only)
+
+## Multi-Tenant System
+- **Organizations:** Each organization has a unique slug and is created by authenticated users
+- **Memberships:** Users can belong to multiple orgs with roles: admin, hr, manager, user
+- **Invites:** Pending invites auto-claimed when user signs up with matching email (via DB trigger)
+- **RLS Policies:** All data tables enforce access via `is_org_member()` and `is_org_admin()` helper functions
+- **Audit Logging:** All admin actions (org create, invite, role change, disable) are logged
+
+## Server Routes (Protected, Service Role)
+- `POST /api/org/create` - Create new organization (creator becomes admin)
+- `POST /api/admin/invite` - Invite user by email (org admin only)
+- `POST /api/admin/membership/role` - Change user role (org admin only)
+- `POST /api/admin/membership/disable` - Disable user (org admin only)
+
+## SQL Migrations
+- `sql/create_profiles_table.sql` - User profiles table
+- `sql/002_multi_tenant_rls.sql` - Organizations, memberships, invites, audit_logs with RLS
 
 ## Known Limitations
 - **Supabase Schema Cache:** The `min_headcount` column exists in the `positions` table but Supabase's PostgREST schema cache doesn't recognize it. This requires refreshing the schema cache through the Supabase dashboard (Database > API > Reload). The admin console currently excludes this field as a workaround.
