@@ -36,51 +36,24 @@ test.describe('MVP Smoke Tests', () => {
   });
 });
 
-test.describe('Gaps Page - Demo Mode', () => {
-  test('should generate gaps table after clicking Generate button', async ({ page }) => {
-    await page.goto('/app/gaps?demo=true');
-    
-    await expect(page.getByTestId('heading-tomorrows-gaps')).toBeVisible();
-    
-    await page.getByTestId('select-position').click();
-    await page.getByRole('option', { name: 'Pressline 1' }).click();
-    
-    await page.getByTestId('button-generate-gaps').click();
-    
-    await expect(page.getByTestId('card-summary')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByTestId('gaps-table')).toBeVisible();
-    await expect(page.getByTestId('text-employees-at-risk')).toBeVisible();
+test.describe('Protected App Routes - Auth Redirect', () => {
+  test('/app/gaps should redirect to login when not authenticated', async ({ page }) => {
+    await page.goto('/app/gaps');
+    await page.waitForURL(/\/login/, { timeout: 10000 });
+    await expect(page.getByTestId('input-email')).toBeVisible();
   });
 
-  test('CSV export button should exist and be clickable', async ({ page }) => {
-    await page.goto('/app/gaps?demo=true');
-    
-    await page.getByTestId('select-position').click();
-    await page.getByRole('option', { name: 'Pressline 1' }).click();
-    await page.getByTestId('button-generate-gaps').click();
-    
-    await expect(page.getByTestId('card-summary')).toBeVisible({ timeout: 5000 });
-    
-    const exportButton = page.getByTestId('button-export-csv');
-    await expect(exportButton).toBeVisible();
-    await expect(exportButton).toBeEnabled();
-    
-    const downloadPromise = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
-    await exportButton.click();
-    
-    const download = await downloadPromise;
-    if (download) {
-      expect(download.suggestedFilename()).toMatch(/gaps-\d{4}-\d{2}-\d{2}\.csv/);
-    }
+  test('/app/competence-matrix should redirect to login when not authenticated', async ({ page }) => {
+    await page.goto('/app/competence-matrix');
+    await page.waitForURL(/\/login/, { timeout: 10000 });
+    await expect(page.getByTestId('input-email')).toBeVisible();
   });
 });
 
-test.describe('Competence Matrix - Demo Mode', () => {
-  test('should load competence matrix in demo mode', async ({ page }) => {
-    await page.goto('/app/competence-matrix?demo=true');
-    
-    await page.waitForTimeout(2000);
-    
-    await expect(page.getByTestId('heading-competence-matrix')).toBeVisible();
+test.describe('Legacy Public Routes', () => {
+  test('/competence/matrix should redirect to login', async ({ page }) => {
+    await page.goto('/competence/matrix');
+    await page.waitForURL(/\/login/, { timeout: 10000 });
+    await expect(page.getByTestId('input-email')).toBeVisible();
   });
 });
