@@ -1,0 +1,162 @@
+You are a Staff Engineer + Product Owner. Build Nadiplan into a complete demo-ready web app that can be shown to customers this week. No half features. Everything must be clickable, readable, and coherent.
+
+1) Define “Sellable MVP” (non-negotiable acceptance criteria)
+
+The product is considered MVP-complete only if all are true:
+
+Public website: / looks premium and explains value in 10 seconds
+
+Auth works
+
+First user can create org, becomes admin
+
+Admin can invite another user by email, invited user joins org automatically
+
+Logged-in experience has no pricing anywhere
+
+Competence Matrix is readable, premium, and can run on demo data
+
+“Tomorrow’s Gaps” is one-button and produces:
+
+a clear summary “What to fix”
+
+a detailed gaps table
+
+Export gaps to CSV
+
+/health shows status OK
+
+npm run ci passes (lint, typecheck, unit tests, e2e smoke)
+
+If any criterion fails → fix it before adding new features.
+
+2) IA / Routing (must implement)
+
+Public:
+
+/ (landing)
+
+/pricing (public only)
+
+/login
+
+/signup
+
+App (authenticated):
+
+/app/org/select
+
+/app/dashboard
+
+/app/competence-matrix
+
+/app/gaps (Tomorrow’s gaps)
+
+/app/admin/users (admin only)
+
+/app/admin/audit (admin only)
+
+/health
+
+After login:
+
+if no org selected → redirect to /app/org/select
+
+else → /app/dashboard
+
+3) Visual Upgrade (sales-ready)
+
+Implement a light theme with proper tokens and apply to:
+
+dashboard cards
+
+matrix table
+
+gaps page
+
+admin pages
+Rules:
+
+Must be AA contrast compliant
+
+Sticky header + sticky first column for the matrix
+
+Badges for OK/GAP/RISK with soft backgrounds (no neon)
+
+Add “Demo Mode” banner when enabled
+
+4) DEMO_MODE (mandatory)
+
+Add env flag: NEXT_PUBLIC_DEMO_MODE=true
+When enabled:
+
+seed dataset (10 employees, 8 skills, 2 roles/positions)
+
+all pages show meaningful data without Supabase dependencies
+
+still keep Supabase paths available when DEMO_MODE is off
+
+Goal: Amir can show the product even if a customer’s data is not onboarded yet.
+
+5) Tomorrow’s Gaps (one-button flow)
+
+On /app/gaps implement:
+
+inputs: Date (default tomorrow), Shift (optional), Position/Line dropdown
+
+Button: “Generate Gaps”
+Outputs:
+A) “What to fix” summary card:
+
+Top 3 missing skills
+
+employees at risk
+
+Quick recommendation: swap suggestions if possible (simple heuristic ok)
+
+B) Gaps table:
+
+Employee
+
+Required skill + required level
+
+Current level
+
+Severity (OK/GAP/RISK)
+
+Suggested action (train/swap/assign buddy)
+
+C) Export:
+
+“Export CSV” downloads the exact gaps table
+
+6) Security + Orgs (minimum)
+
+Implement orgs + memberships + invites with RLS.
+Implement server routes for:
+
+org create
+
+invite user
+
+change role
+
+disable user
+Write audit logs for admin actions.
+
+7) Testing (must run in Replit)
+
+Implement:
+
+npm run ci = lint + typecheck + unit + build + e2e smoke
+E2E smoke must verify:
+
+/ loads
+
+/login works
+
+/app/competence-matrix loads in DEMO_MODE
+
+/app/gaps generate button works in DEMO_MODE
+
+CSV export triggers download event (basic assertion)
