@@ -11,6 +11,8 @@
   "/api/admin/membership/role/route": "/api/admin/membership/role",
   "/api/bootstrap/route": "/api/bootstrap",
   "/api/cron/daily-notifications/route": "/api/cron/daily-notifications",
+  "/api/debug/repair-orgid/route": "/api/debug/repair-orgid",
+  "/api/debug/schema/route": "/api/debug/schema",
   "/api/gdpr/export-employee-data/route": "/api/gdpr/export-employee-data",
   "/api/health/route": "/api/health",
   "/api/org/create/route": "/api/org/create",

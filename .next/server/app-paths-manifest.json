@@ -11,6 +11,8 @@
   "/api/admin/membership/role/route": "app/api/admin/membership/role/route.js",
   "/api/bootstrap/route": "app/api/bootstrap/route.js",
   "/api/cron/daily-notifications/route": "app/api/cron/daily-notifications/route.js",
+  "/api/debug/repair-orgid/route": "app/api/debug/repair-orgid/route.js",
+  "/api/debug/schema/route": "app/api/debug/schema/route.js",
   "/api/gdpr/export-employee-data/route": "app/api/gdpr/export-employee-data/route.js",
   "/api/health/route": "app/api/health/route.js",
   "/api/org/create/route": "app/api/org/create/route.js",

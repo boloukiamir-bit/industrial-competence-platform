@@ -20,8 +20,13 @@ import {
   Shield,
   Trash2,
   Radio,
-  Clock
+  Clock,
+  Search,
+  Wrench,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
+import { apiGet, apiPost } from '@/lib/apiClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -32,6 +37,12 @@ interface Counts {
   positions: number | 'denied' | null;
 }
 
+interface SchemaCheckResult {
+  tables: Record<string, { exists: boolean; hasOrgId: boolean; rlsEnabled: boolean | null }>;
+  nullOrgIdCounts: Record<string, number>;
+  errors: string[];
+}
+
 export default function DebugPage() {
   const { currentOrg, currentRole, memberships, isLoading: orgLoading, error: orgError } = useOrg();
   const { user: authUser, isAuthenticated } = useAuth();
@@ -40,6 +51,10 @@ export default function DebugPage() {
   const [copied, setCopied] = useState(false);
   const [debugState, setDebugState] = useState<DebugState>(getState());
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+  const [schemaCheck, setSchemaCheck] = useState<SchemaCheckResult | null>(null);
+  const [loadingSchema, setLoadingSchema] = useState(false);
+  const [repairResult, setRepairResult] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribe((state) => {
@@ -126,6 +141,46 @@ export default function DebugPage() {
   useEffect(() => {
     fetchCounts();
   }, [fetchCounts]);
+
+  const runSchemaCheck = useCallback(async () => {
+    if (!currentOrg || isDemoMode()) return;
+    
+    setLoadingSchema(true);
+    setSchemaCheck(null);
+    
+    try {
+      const result = await apiGet<SchemaCheckResult>(`/api/debug/schema?orgId=${currentOrg.id}`);
+      setSchemaCheck(result);
+    } catch (err) {
+      console.error('Schema check error:', err);
+    } finally {
+      setLoadingSchema(false);
+    }
+  }, [currentOrg]);
+
+  const handleRepair = async (table: string, dryRun: boolean) => {
+    if (!currentOrg) return;
+    
+    setRepairing(true);
+    setRepairResult(null);
+    
+    try {
+      const result = await apiPost<{ message: string; updatedCount?: number; nullCount?: number }>('/api/debug/repair-orgid', {
+        orgId: currentOrg.id,
+        table,
+        dryRun,
+      });
+      setRepairResult(result.message);
+      if (!dryRun) {
+        await runSchemaCheck();
+        await fetchCounts();
+      }
+    } catch (err) {
+      setRepairResult(err instanceof Error ? err.message : 'Repair failed');
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   const getOrgSource = () => {
     if (!currentOrg) return 'none';
@@ -376,6 +431,106 @@ export default function DebugPage() {
           </div>
         </CardContent>
       </Card>
+
+      {!isDemoMode() && (
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Search className="w-4 h-4" />
+              Schema Check
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={runSchemaCheck} disabled={loadingSchema || !currentOrg}>
+              {loadingSchema ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span className="ml-2">Run Check</span>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {!schemaCheck ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Click "Run Check" to validate database schema and RLS
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {schemaCheck.errors.length > 0 && (
+                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm font-medium text-destructive mb-1">Errors:</p>
+                    {schemaCheck.errors.map((e, i) => (
+                      <p key={i} className="text-xs text-destructive">{e}</p>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="grid gap-2">
+                  {Object.entries(schemaCheck.tables).map(([table, info]) => (
+                    <div key={table} className="p-3 rounded-md bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{table}</span>
+                        <div className="flex items-center gap-2">
+                          {info.exists ? (
+                            <span className="text-xs text-green-600 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> Exists
+                            </span>
+                          ) : (
+                            <span className="text-xs text-red-600 flex items-center gap-1">
+                              <XCircle className="w-3 h-3" /> Missing
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className={info.hasOrgId ? 'text-green-600' : 'text-red-600'}>
+                          org_id: {info.hasOrgId ? 'Yes' : 'No'}
+                        </span>
+                        <span className={info.rlsEnabled === true ? 'text-green-600' : info.rlsEnabled === false ? 'text-red-600' : 'text-muted-foreground'}>
+                          RLS: {info.rlsEnabled === true ? 'Enabled' : info.rlsEnabled === false ? 'Disabled' : 'Unknown'}
+                        </span>
+                        {schemaCheck.nullOrgIdCounts[table] !== undefined && (
+                          <span className={schemaCheck.nullOrgIdCounts[table] > 0 ? 'text-amber-600' : 'text-green-600'}>
+                            Null org_id: {schemaCheck.nullOrgIdCounts[table]}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {schemaCheck.nullOrgIdCounts[table] > 0 && (
+                        <div className="pt-2 border-t border-border flex items-center gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleRepair(table, true)}
+                            disabled={repairing}
+                          >
+                            <Wrench className="w-3 h-3 mr-1" />
+                            Preview Repair
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={() => {
+                              if (confirm(`This will update all ${schemaCheck.nullOrgIdCounts[table]} rows with null org_id to the current org. Continue?`)) {
+                                handleRepair(table, false);
+                              }
+                            }}
+                            disabled={repairing}
+                          >
+                            {repairing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wrench className="w-3 h-3 mr-1" />}
+                            Apply Repair
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                {repairResult && (
+                  <div className="p-3 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">{repairResult}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {debugState.lastApiCalls.length > 0 && (
         <Card>

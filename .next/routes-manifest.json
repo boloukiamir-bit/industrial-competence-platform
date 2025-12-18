@@ -159,6 +159,18 @@
       "namedRegex": "^/api/cron/daily\\-notifications(?:/)?$"
     },
     {
+      "page": "/api/debug/repair-orgid",
+      "regex": "^/api/debug/repair\\-orgid(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/repair\\-orgid(?:/)?$"
+    },
+    {
+      "page": "/api/debug/schema",
+      "regex": "^/api/debug/schema(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/schema(?:/)?$"
+    },
+    {
       "page": "/api/gdpr/export-employee-data",
       "regex": "^/api/gdpr/export\\-employee\\-data(?:/)?$",
       "routeKeys": {},

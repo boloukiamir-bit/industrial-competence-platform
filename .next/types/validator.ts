@@ -524,6 +524,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../app/api/debug/repair-orgid/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/debug/repair-orgid">> = Specific
+  const handler = {} as typeof import("../../app/api/debug/repair-orgid/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/debug/schema/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/debug/schema">> = Specific
+  const handler = {} as typeof import("../../app/api/debug/schema/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../app/api/gdpr/export-employee-data/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/gdpr/export-employee-data">> = Specific
