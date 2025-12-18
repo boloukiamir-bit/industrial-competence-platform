@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
+import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import { COPY } from "@/lib/copy";
 
 type NavItem = {
@@ -135,6 +136,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <OrgProvider>
+      <GlobalErrorHandler />
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
         <DemoModeBanner />
           <div className="flex flex-1 overflow-hidden">

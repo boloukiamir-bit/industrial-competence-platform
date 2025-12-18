@@ -1,0 +1,144 @@
+You are the senior engineer. Fix the Debug Cockpit so it updates live, captures API/Supabase errors automatically, and provides correct org-scoped counts. No silent failures.
+
+1) Make error logging reactive (live updates)
+
+Create a tiny error store:
+
+lib/debugStore.ts
+
+type DebugError = ... (reuse existing)
+
+subscribe(listener)
+
+logDebugError(err) pushes into in-memory array and notifies listeners
+
+keep max 50
+
+expose getErrors()
+
+Update DebugPage:
+
+replace local errorLog usage with store subscription:
+
+on mount: setErrors(getErrors())
+
+subscribe: setErrors([...getErrors()])
+Now errors appear instantly without refresh.
+
+2) Auto-capture client errors globally
+
+In app/layout.tsx or a top-level client provider:
+
+add window.addEventListener('error', ...)
+
+add window.addEventListener('unhandledrejection', ...)
+Log them to debugStore with:
+
+type: 'api' or 'supabase' if recognizable, else 'api'
+
+message + stack if available
+This stops “hidden errors.”
+
+3) Wrap fetch to capture API failures automatically
+
+Create lib/apiClient.ts:
+
+apiGet(url) and apiPost(url, body)
+
+on non-2xx:
+
+logDebugError({ type:'api', endpoint:url, status, message })
+
+throw Error(message)
+Use this wrapper in admin pages and anywhere that calls /api/....
+
+4) Wrap Supabase calls (RLS detector)
+
+Create lib/supabaseSafe.ts:
+
+helper handleSupabase(res, context)
+
+if res.error:
+
+logDebugError({ type:'supabase', code: res.error.code, message: res.error.message, hint: res.error.hint })
+
+if message includes “permission denied” or code indicates RLS -> set a global “rlsBlocked=true” flag in debugStore
+
+throw res.error
+
+Update DebugPage fetchCounts() to use this safe handler.
+
+5) Fix counts to be org-scoped and correct
+
+In fetchCounts():
+
+If DEMO_MODE: use demo dataset counts, do NOT query Supabase.
+
+If PROD:
+
+employees: filter by org_id
+
+org_units: filter by org_id
+
+competences: filter by org_id IF column exists; otherwise clarify table is global and rename label to “Global Skills”
+
+positions: filter by org_id IF column exists; otherwise treat as global and rename label
+
+Also show “Denied” state if permission error occurs, not “-”.
+
+6) Show the missing signals in the UI
+
+Add in DebugPage:
+
+“RLS Blocked: YES/NO”
+
+“Last API calls” (optional, last 10 endpoints)
+
+A big red banner if:
+
+no org selected
+
+currentRole is null
+
+orgLoading stuck > 2s (use timeout)
+
+7) Output requirement
+
+After implementation:
+
+Navigate to Admin → Users and Admin → Audit.
+
+Confirm Debug Cockpit shows the real errors live (if any).
+
+Copy Debug Report and paste into chat.
+
+No new features. Stabilization only.
+
+Immediate code-level changes you should do even before prompt (surgical)
+
+If you want the fastest manual patch:
+
+1) Make errors live without store (quick hack)
+
+Add a timer refresh:
+
+useEffect(() => {
+  const id = setInterval(() => setErrors([...errorLog]), 500);
+  return () => clearInterval(id);
+}, []);
+
+
+Not elegant, but it instantly fixes “stale errors”.
+
+2) Stop querying Supabase in demo mode
+
+At the start of fetchCounts():
+
+if (isDemoMode()) {
+  setCounts({ employees: 10, units: 2, skills: 8, positions: 3 }); // from demoData
+  return;
+}
+
+3) Filter competences/positions correctly (or label as global)
+
+Right now it’s inconsistent and will mislead you.

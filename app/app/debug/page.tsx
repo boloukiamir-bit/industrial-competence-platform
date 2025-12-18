@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useOrg } from '@/hooks/useOrg';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
-import { isDemoMode } from '@/lib/demoData';
+import { isDemoMode, DEMO_EMPLOYEES, DEMO_ORG_UNITS, DEMO_SKILLS, DEMO_POSITIONS } from '@/lib/demoData';
+import { subscribe, getState, setFlag, clearErrors, type DebugState, type DebugError } from '@/lib/debugStore';
+import { safeCount } from '@/lib/supabaseSafe';
 import { 
   Bug, 
   Copy, 
@@ -14,37 +16,20 @@ import {
   Building2, 
   AlertTriangle,
   RefreshCw,
-  Loader2
+  Loader2,
+  Shield,
+  Trash2,
+  Radio,
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface DebugError {
-  timestamp: string;
-  type: 'api' | 'supabase';
-  endpoint?: string;
-  status?: number;
-  code?: string;
-  message: string;
-  hint?: string;
-}
-
 interface Counts {
-  employees: number | null;
-  units: number | null;
-  skills: number | null;
-  positions: number | null;
-}
-
-const errorLog: DebugError[] = [];
-
-export function logDebugError(error: DebugError) {
-  errorLog.unshift(error);
-  if (errorLog.length > 10) errorLog.pop();
-}
-
-if (typeof window !== 'undefined') {
-  (window as unknown as { logDebugError: typeof logDebugError }).logDebugError = logDebugError;
+  employees: number | 'denied' | null;
+  units: number | 'denied' | null;
+  skills: number | 'denied' | null;
+  positions: number | 'denied' | null;
 }
 
 export default function DebugPage() {
@@ -53,42 +38,94 @@ export default function DebugPage() {
   const [counts, setCounts] = useState<Counts>({ employees: null, units: null, skills: null, positions: null });
   const [loadingCounts, setLoadingCounts] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [errors, setErrors] = useState<DebugError[]>([]);
+  const [debugState, setDebugState] = useState<DebugState>(getState());
+  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
 
   useEffect(() => {
-    setErrors([...errorLog]);
+    const unsubscribe = subscribe((state) => {
+      setDebugState(state);
+    });
+    return unsubscribe;
   }, []);
 
-  const fetchCounts = async () => {
-    if (!currentOrg) return;
+  useEffect(() => {
+    if (orgLoading) {
+      setLoadingStartTime(Date.now());
+    } else {
+      setLoadingStartTime(null);
+      setFlag('loadingTimeout', false);
+    }
+  }, [orgLoading]);
+
+  useEffect(() => {
+    if (!loadingStartTime) return;
+    
+    const timeoutId = setTimeout(() => {
+      if (orgLoading) {
+        setFlag('loadingTimeout', true);
+      }
+    }, 5000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [loadingStartTime, orgLoading]);
+
+  useEffect(() => {
+    setFlag('orgMissing', !currentOrg && !orgLoading);
+  }, [currentOrg, orgLoading]);
+
+  const fetchCounts = useCallback(async () => {
+    if (isDemoMode()) {
+      setCounts({
+        employees: DEMO_EMPLOYEES.length,
+        units: DEMO_ORG_UNITS.length,
+        skills: DEMO_SKILLS.length,
+        positions: DEMO_POSITIONS.length,
+      });
+      return;
+    }
+
+    if (!currentOrg) {
+      setCounts({ employees: null, units: null, skills: null, positions: null });
+      return;
+    }
     
     setLoadingCounts(true);
     try {
-      const [employeesRes, unitsRes, skillsRes, positionsRes] = await Promise.allSettled([
-        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', currentOrg.id),
-        supabase.from('org_units').select('id', { count: 'exact', head: true }).eq('org_id', currentOrg.id),
-        supabase.from('competences').select('id', { count: 'exact', head: true }),
-        supabase.from('positions').select('id', { count: 'exact', head: true }),
+      const [employeesCount, unitsCount, skillsCount, positionsCount] = await Promise.all([
+        safeCount(
+          async () => await supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', currentOrg.id),
+          'employees'
+        ),
+        safeCount(
+          async () => await supabase.from('org_units').select('id', { count: 'exact', head: true }).eq('org_id', currentOrg.id),
+          'org_units'
+        ),
+        safeCount(
+          async () => await supabase.from('competences').select('id', { count: 'exact', head: true }),
+          'competences (global)'
+        ),
+        safeCount(
+          async () => await supabase.from('positions').select('id', { count: 'exact', head: true }),
+          'positions (global)'
+        ),
       ]);
 
       setCounts({
-        employees: employeesRes.status === 'fulfilled' ? employeesRes.value.count : null,
-        units: unitsRes.status === 'fulfilled' ? unitsRes.value.count : null,
-        skills: skillsRes.status === 'fulfilled' ? skillsRes.value.count : null,
-        positions: positionsRes.status === 'fulfilled' ? positionsRes.value.count : null,
+        employees: employeesCount,
+        units: unitsCount,
+        skills: skillsCount,
+        positions: positionsCount,
       });
     } catch (err) {
       console.error('Error fetching counts:', err);
     } finally {
       setLoadingCounts(false);
     }
-  };
+  }, [currentOrg]);
 
   useEffect(() => {
-    if (currentOrg) {
-      fetchCounts();
-    }
-  }, [currentOrg]);
+    fetchCounts();
+  }, [fetchCounts]);
 
   const getOrgSource = () => {
     if (!currentOrg) return 'none';
@@ -121,7 +158,9 @@ export default function DebugPage() {
         status: m.status,
       })),
       counts,
-      errors: errors.slice(0, 10),
+      flags: debugState.flags,
+      errors: debugState.errors.slice(0, 10),
+      lastApiCalls: debugState.lastApiCalls,
       orgLoadingState: {
         isLoading: orgLoading,
         error: orgError,
@@ -140,6 +179,14 @@ export default function DebugPage() {
     }
   };
 
+  const formatCountValue = (value: number | 'denied' | null): string => {
+    if (value === 'denied') return 'Denied';
+    if (value === null) return '-';
+    return String(value);
+  };
+
+  const hasWarnings = debugState.flags.orgMissing || debugState.flags.rlsBlocked || debugState.flags.loadingTimeout || !currentRole;
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -147,25 +194,87 @@ export default function DebugPage() {
           <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-page-title">
             <Bug className="w-6 h-6" />
             Debug Cockpit
+            <span className="ml-2 flex items-center gap-1 text-sm font-normal text-green-600">
+              <Radio className="w-3 h-3 animate-pulse" />
+              Live
+            </span>
           </h1>
           <p className="text-muted-foreground mt-1">
             System state and diagnostics
           </p>
         </div>
-        <Button onClick={handleCopy} data-testid="button-copy-report">
-          {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-          {copied ? 'Copied!' : 'Copy Debug Report'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => clearErrors()} data-testid="button-clear-errors">
+            <Trash2 className="w-4 h-4 mr-2" />
+            Clear Errors
+          </Button>
+          <Button onClick={handleCopy} data-testid="button-copy-report">
+            {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+            {copied ? 'Copied!' : 'Copy Debug Report'}
+          </Button>
+        </div>
       </div>
+
+      {hasWarnings && (
+        <div className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 space-y-2">
+          <p className="font-medium text-red-800 dark:text-red-200 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            System Warnings
+          </p>
+          <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 ml-7">
+            {debugState.flags.orgMissing && <li>No organization selected</li>}
+            {!currentRole && currentOrg && <li>Current role is null (permissions issue)</li>}
+            {debugState.flags.rlsBlocked && <li>RLS (Row Level Security) blocked some queries</li>}
+            {debugState.flags.loadingTimeout && <li>Organization loading took longer than 5 seconds</li>}
+          </ul>
+        </div>
+      )}
 
       {isDemoMode() && (
         <div className="p-4 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
           <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
-            Demo mode is active. Database queries return mock data.
+            Demo mode is active. Counts reflect demo data, not database.
           </p>
         </div>
       )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            System Flags
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-3 rounded-md bg-muted/50">
+              <div className={`text-lg font-semibold ${debugState.flags.rlsBlocked ? 'text-red-600' : 'text-green-600'}`}>
+                {debugState.flags.rlsBlocked ? 'YES' : 'NO'}
+              </div>
+              <div className="text-xs text-muted-foreground">RLS Blocked</div>
+            </div>
+            <div className="text-center p-3 rounded-md bg-muted/50">
+              <div className={`text-lg font-semibold ${debugState.flags.orgMissing ? 'text-red-600' : 'text-green-600'}`}>
+                {debugState.flags.orgMissing ? 'YES' : 'NO'}
+              </div>
+              <div className="text-xs text-muted-foreground">Org Missing</div>
+            </div>
+            <div className="text-center p-3 rounded-md bg-muted/50">
+              <div className={`text-lg font-semibold ${debugState.flags.loadingTimeout ? 'text-red-600' : 'text-green-600'}`}>
+                {debugState.flags.loadingTimeout ? 'YES' : 'NO'}
+              </div>
+              <div className="text-xs text-muted-foreground">Loading Timeout</div>
+            </div>
+            <div className="text-center p-3 rounded-md bg-muted/50">
+              <div className={`text-lg font-semibold ${isDemoMode() ? 'text-amber-600' : 'text-foreground'}`}>
+                {isDemoMode() ? 'YES' : 'NO'}
+              </div>
+              <div className="text-xs text-muted-foreground">Demo Mode</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
@@ -223,7 +332,9 @@ export default function DebugPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Role:</span>
-              <span className="capitalize text-foreground">{currentRole || '-'}</span>
+              <span className={`capitalize ${currentRole ? 'text-foreground' : 'text-red-600'}`}>
+                {currentRole || 'null (!)'}
+              </span>
             </div>
             {orgLoading && (
               <div className="text-sm text-muted-foreground flex items-center gap-1">
@@ -241,7 +352,7 @@ export default function DebugPage() {
         <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Database className="w-4 h-4" />
-            Data Counts
+            Data Counts {isDemoMode() ? '(Demo)' : currentOrg ? '(Org-scoped)' : ''}
           </CardTitle>
           <Button variant="ghost" size="sm" onClick={fetchCounts} disabled={loadingCounts}>
             <RefreshCw className={`w-4 h-4 ${loadingCounts ? 'animate-spin' : ''}`} />
@@ -252,12 +363,12 @@ export default function DebugPage() {
             {[
               { label: 'Employees', value: counts.employees },
               { label: 'Org Units', value: counts.units },
-              { label: 'Competences', value: counts.skills },
-              { label: 'Positions', value: counts.positions },
+              { label: 'Skills (Global)', value: counts.skills },
+              { label: 'Positions (Global)', value: counts.positions },
             ].map(item => (
               <div key={item.label} className="text-center p-3 rounded-md bg-muted/50">
-                <div className="text-2xl font-semibold text-foreground">
-                  {item.value === null ? '-' : item.value}
+                <div className={`text-2xl font-semibold ${item.value === 'denied' ? 'text-red-600' : 'text-foreground'}`}>
+                  {formatCountValue(item.value)}
                 </div>
                 <div className="text-xs text-muted-foreground">{item.label}</div>
               </div>
@@ -266,24 +377,66 @@ export default function DebugPage() {
         </CardContent>
       </Card>
 
+      {debugState.lastApiCalls.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Last API Calls ({debugState.lastApiCalls.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {debugState.lastApiCalls.map((call, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-sm p-2 rounded bg-muted/30">
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${
+                    call.status >= 200 && call.status < 300 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  }`}>
+                    {call.status}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground truncate flex-1">
+                    {call.endpoint}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(call.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
-            Recent Errors (Last 10)
+            Recent Errors ({debugState.errors.length})
+            <span className="ml-auto text-xs font-normal text-muted-foreground flex items-center gap-1">
+              <Radio className="w-3 h-3 animate-pulse text-green-500" />
+              Auto-updating
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {errors.length === 0 ? (
+          {debugState.errors.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
               No errors logged in this session
             </p>
           ) : (
             <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {errors.map((error, idx) => (
+              {debugState.errors.map((error, idx) => (
                 <div key={idx} className="p-3 rounded-md bg-destructive/5 border border-destructive/20 text-sm">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="px-1.5 py-0.5 rounded text-xs bg-destructive/10 text-destructive uppercase">
+                    <span className={`px-1.5 py-0.5 rounded text-xs uppercase ${
+                      error.type === 'supabase' 
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                        : error.type === 'client'
+                        ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    }`}>
                       {error.type}
                     </span>
                     {error.endpoint && (
@@ -300,7 +453,9 @@ export default function DebugPage() {
                   {error.hint && (
                     <p className="text-xs text-muted-foreground">Hint: {error.hint}</p>
                   )}
-                  <p className="text-xs text-muted-foreground mt-1">{error.timestamp}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {new Date(error.timestamp).toLocaleString()}
+                  </p>
                 </div>
               ))}
             </div>

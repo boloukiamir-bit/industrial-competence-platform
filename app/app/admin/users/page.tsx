@@ -5,7 +5,7 @@ import { useOrg } from '@/hooks/useOrg';
 import { OrgGuard } from '@/components/OrgGuard';
 import { supabase } from '@/lib/supabaseClient';
 import { DataState, useDataState } from '@/components/DataState';
-import { logDebugError } from '@/app/app/debug/page';
+import { apiGet, apiPost } from '@/lib/apiClient';
 import { 
   Users, 
   UserPlus, 
@@ -63,39 +63,9 @@ function AdminUsersContent() {
     setError(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError({ message: 'Not authenticated', code: 'AUTH_REQUIRED' });
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch(`/api/admin/members?orgId=${currentOrg.id}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        const apiError = {
-          message: data.message || data.error || 'Failed to load members',
-          code: data.code,
-          hint: data.hint,
-        };
-        setError(apiError);
-        logDebugError?.({
-          timestamp: new Date().toISOString(),
-          type: 'api',
-          endpoint: '/api/admin/members',
-          status: res.status,
-          ...apiError,
-        });
-      } else {
-        setMembers(data.members || []);
-        setInvites(data.invites || []);
-      }
+      const data = await apiGet<{ members: Member[]; invites: Invite[] }>(`/api/admin/members?orgId=${currentOrg.id}`);
+      setMembers(data.members || []);
+      setInvites(data.invites || []);
     } catch (err) {
       console.error('Fetch error:', err);
       const apiError = { 
@@ -103,12 +73,6 @@ function AdminUsersContent() {
         code: 'NETWORK_ERROR'
       };
       setError(apiError);
-      logDebugError?.({
-        timestamp: new Date().toISOString(),
-        type: 'api',
-        endpoint: '/api/admin/members',
-        ...apiError,
-      });
     } finally {
       setLoading(false);
     }
@@ -126,33 +90,11 @@ function AdminUsersContent() {
     setInviteError(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setInviteError('Not authenticated');
-        setInviting(false);
-        return;
-      }
-
-      const res = await fetch('/api/admin/invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          orgId: currentOrg.id,
-          email: inviteEmail,
-          role: inviteRole,
-        }),
+      await apiPost('/api/admin/invite', {
+        orgId: currentOrg.id,
+        email: inviteEmail,
+        role: inviteRole,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setInviteError(data.error || 'Failed to send invite');
-        setInviting(false);
-        return;
-      }
 
       setInviteEmail('');
       setInviteRole('user');
@@ -160,7 +102,7 @@ function AdminUsersContent() {
       await fetchData();
     } catch (err) {
       console.error('Invite error:', err);
-      setInviteError('Failed to send invite');
+      setInviteError(err instanceof Error ? err.message : 'Failed to send invite');
     } finally {
       setInviting(false);
     }
@@ -172,28 +114,12 @@ function AdminUsersContent() {
     setChangingRole(userId);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setChangingRole(null);
-        return;
-      }
-
-      const res = await fetch('/api/admin/membership/role', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          orgId: currentOrg.id,
-          userId,
-          role: newRole,
-        }),
+      await apiPost('/api/admin/membership/role', {
+        orgId: currentOrg.id,
+        userId,
+        role: newRole,
       });
-
-      if (res.ok) {
-        await fetchData();
-      }
+      await fetchData();
     } catch (err) {
       console.error('Role change error:', err);
     } finally {
@@ -206,26 +132,11 @@ function AdminUsersContent() {
     if (!confirm('Are you sure you want to disable this user?')) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        return;
-      }
-
-      const res = await fetch('/api/admin/membership/disable', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          orgId: currentOrg.id,
-          userId,
-        }),
+      await apiPost('/api/admin/membership/disable', {
+        orgId: currentOrg.id,
+        userId,
       });
-
-      if (res.ok) {
-        await fetchData();
-      }
+      await fetchData();
     } catch (err) {
       console.error('Disable error:', err);
     }

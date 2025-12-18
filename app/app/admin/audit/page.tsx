@@ -5,7 +5,8 @@ import { useOrg } from '@/hooks/useOrg';
 import { OrgGuard } from '@/components/OrgGuard';
 import { supabase } from '@/lib/supabaseClient';
 import { DataState, useDataState } from '@/components/DataState';
-import { logDebugError } from '@/app/app/debug/page';
+import { logDebugError } from '@/lib/debugStore';
+import { apiGet } from '@/lib/apiClient';
 import { 
   ScrollText, 
   Filter,
@@ -61,42 +62,12 @@ function AdminAuditContent() {
     setError(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError({ message: 'Not authenticated', code: 'AUTH_REQUIRED' });
-        setLoading(false);
-        return;
+      const data = await apiGet<{ logs: AuditLog[] }>(`/api/admin/audit?orgId=${currentOrg.id}`);
+      let filteredLogs = data.logs || [];
+      if (actionFilter) {
+        filteredLogs = filteredLogs.filter((l: AuditLog) => l.action === actionFilter);
       }
-
-      const res = await fetch(`/api/admin/audit?orgId=${currentOrg.id}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        const apiError = {
-          message: data.message || data.error || 'Failed to load audit logs',
-          code: data.code,
-          hint: data.hint,
-        };
-        setError(apiError);
-        logDebugError?.({
-          timestamp: new Date().toISOString(),
-          type: 'api',
-          endpoint: '/api/admin/audit',
-          status: res.status,
-          ...apiError,
-        });
-      } else {
-        let filteredLogs = data.logs || [];
-        if (actionFilter) {
-          filteredLogs = filteredLogs.filter((l: AuditLog) => l.action === actionFilter);
-        }
-        setLogs(filteredLogs);
-      }
+      setLogs(filteredLogs);
     } catch (err) {
       console.error('Fetch error:', err);
       const apiError = { 
@@ -104,12 +75,6 @@ function AdminAuditContent() {
         code: 'NETWORK_ERROR'
       };
       setError(apiError);
-      logDebugError?.({
-        timestamp: new Date().toISOString(),
-        type: 'api',
-        endpoint: '/api/admin/audit',
-        ...apiError,
-      });
     } finally {
       setLoading(false);
     }
