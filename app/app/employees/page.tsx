@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { COPY } from "@/lib/copy";
 import { isDemoMode, DEMO_EMPLOYEES } from "@/lib/demoData";
+import { useOrg } from "@/hooks/useOrg";
 import type { Employee } from "@/types/domain";
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const { currentOrg } = useOrg();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -42,9 +44,15 @@ export default function EmployeesPage() {
         return;
       }
 
+      if (!currentOrg) {
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("employees")
         .select("*, manager:manager_id(name)")
+        .eq("org_id", currentOrg.id)
         .eq("is_active", true)
         .order("name");
 
@@ -80,7 +88,7 @@ export default function EmployeesPage() {
       setLoading(false);
     }
     loadEmployees();
-  }, []);
+  }, [currentOrg]);
 
   const lines = [...new Set(employees.map((e) => e.line).filter(Boolean))].sort();
 

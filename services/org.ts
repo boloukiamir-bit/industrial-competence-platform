@@ -1,11 +1,17 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { OrgUnit, Employee, OrgUnitType } from "@/types/domain";
 
-export async function getOrgUnits(): Promise<OrgUnit[]> {
-  const { data, error } = await supabase
+export async function getOrgUnits(orgId?: string): Promise<OrgUnit[]> {
+  let query = supabase
     .from("org_units")
     .select("*, manager:manager_employee_id(name)")
     .order("name");
+
+  if (orgId) {
+    query = query.eq("org_id", orgId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Error fetching org units:", error);
@@ -24,11 +30,16 @@ export async function getOrgUnits(): Promise<OrgUnit[]> {
   }));
 }
 
-export async function getOrgTree(): Promise<OrgUnit[]> {
-  const [unitsResult, employeesResult] = await Promise.all([
-    supabase.from("org_units").select("*, manager:manager_employee_id(name)").order("name"),
-    supabase.from("employees").select("id, name, role, org_unit_id").eq("is_active", true),
-  ]);
+export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
+  let unitsQuery = supabase.from("org_units").select("*, manager:manager_employee_id(name)").order("name");
+  let employeesQuery = supabase.from("employees").select("id, name, role, org_unit_id").eq("is_active", true);
+  
+  if (orgId) {
+    unitsQuery = unitsQuery.eq("org_id", orgId);
+    employeesQuery = employeesQuery.eq("org_id", orgId);
+  }
+
+  const [unitsResult, employeesResult] = await Promise.all([unitsQuery, employeesQuery]);
 
   if (unitsResult.error) {
     console.error("Error fetching org units:", unitsResult.error);
@@ -137,6 +148,7 @@ export type CreateOrgUnitPayload = {
   parentId?: string;
   type?: OrgUnitType;
   managerEmployeeId?: string;
+  orgId: string;
 };
 
 export async function createOrgUnit(payload: CreateOrgUnitPayload): Promise<OrgUnit | null> {
@@ -148,6 +160,7 @@ export async function createOrgUnit(payload: CreateOrgUnitPayload): Promise<OrgU
       parent_id: payload.parentId || null,
       type: payload.type || null,
       manager_employee_id: payload.managerEmployeeId || null,
+      org_id: payload.orgId,
     })
     .select()
     .single();

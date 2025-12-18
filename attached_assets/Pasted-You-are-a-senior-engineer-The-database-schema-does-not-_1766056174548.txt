@@ -1,0 +1,99 @@
+You are a senior engineer. The database schema does not match the app:
+
+public.org_units table missing
+
+employees table exists but lacks org_id
+Fix schema + data so Employees and Organization pages work and counts are not null.
+
+1) Produce SQL migration (single script) and apply it in Supabase
+
+Create a SQL script supabase/migrations/2025xxxx_fix_org_schema.sql that:
+
+1.1 Create org_units table (if not exists)
+create table if not exists public.org_units (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  name text not null,
+  code text,
+  parent_id uuid references public.org_units(id),
+  created_at timestamptz not null default now()
+);
+create index if not exists org_units_org_id_idx on public.org_units(org_id);
+
+1.2 Add org_id to employees (if missing)
+
+Add column:
+
+alter table public.employees add column if not exists org_id uuid;
+
+
+Backfill org_id:
+
+Set org_id from memberships for each employee row if possible.
+
+If no deterministic mapping exists, set org_id to the current org for all existing employees (this is acceptable for demo/dev).
+Example backfill approach:
+
+update public.employees
+set org_id = (select m.org_id from public.memberships m where m.user_id = auth.uid() limit 1)
+where org_id is null;
+
+
+If auth.uid() not available in SQL editor context, then provide a second update statement where orgId is manually pasted.
+
+Make org_id not null after backfill:
+
+alter table public.employees alter column org_id set not null;
+
+
+Add index:
+
+create index if not exists employees_org_id_idx on public.employees(org_id);
+
+2) Enable RLS and add policies (minimum SELECT)
+
+Enable RLS:
+
+alter table public.employees enable row level security;
+alter table public.org_units enable row level security;
+
+
+Policies:
+Employees SELECT:
+Allow select if user is active member of employee org.
+Org_units SELECT:
+Allow select if user is active member of unit org.
+
+Optionally allow INSERT/UPDATE/DELETE only for org admin/hr.
+
+3) Update app code to match schema
+
+Ensure all employees queries filter by .eq('org_id', currentOrg.id)
+
+Ensure org units queries use org_units table
+
+Update schema check endpoint to report correct existence and org_id presence
+
+4) Add “Create Unit” UI action (minimal)
+
+On Organization page:
+
+Add a “Create Unit” button (modal with unit name)
+
+Insert into org_units with org_id = currentOrg.id
+
+On success refresh list
+
+5) Verification
+
+After applying migration and deploying:
+
+/app/debug counts for employees and units show numeric values (not null)
+
+Organization page no longer throws “schema cache” error
+
+Employees page loads correctly (even if list empty)
+
+Paste new Debug Report
+
+Do not add new features beyond schema fix + minimal create unit.

@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   Building2, 
   Users, 
@@ -13,11 +15,13 @@ import {
   ChevronDown, 
   ChevronRight,
   Plus,
-  Upload
+  Upload,
+  Loader2
 } from "lucide-react";
-import { getOrgTree } from "@/services/org";
+import { getOrgTree, createOrgUnit } from "@/services/org";
 import { COPY } from "@/lib/copy";
 import { isDemoMode, DEMO_ORG_UNITS } from "@/lib/demoData";
+import { useOrg } from "@/hooks/useOrg";
 import type { OrgUnit } from "@/types/domain";
 
 function OrgUnitCard({
@@ -126,42 +130,71 @@ function OrgUnitCard({
 
 export default function OrgOverviewPage() {
   const router = useRouter();
+  const { currentOrg } = useOrg();
   const [orgTree, setOrgTree] = useState<OrgUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEmployees, setShowEmployees] = useState(false);
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
   const [showCreateUnitModal, setShowCreateUnitModal] = useState(false);
+  const [newUnitName, setNewUnitName] = useState("");
+  const [newUnitCode, setNewUnitCode] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const loadData = async () => {
+    if (isDemoMode()) {
+      const demoUnits: OrgUnit[] = DEMO_ORG_UNITS.filter(u => !u.parentId).map(u => ({
+        id: u.id,
+        name: u.name,
+        code: u.code,
+        type: u.type as OrgUnit['type'],
+        employeeCount: u.employeeCount,
+        createdAt: new Date().toISOString(),
+        children: DEMO_ORG_UNITS.filter(c => c.parentId === u.id).map(c => ({
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          type: c.type as OrgUnit['type'],
+          employeeCount: c.employeeCount,
+          createdAt: new Date().toISOString(),
+        })),
+      }));
+      setOrgTree(demoUnits);
+      setLoading(false);
+      return;
+    }
+
+    if (!currentOrg) {
+      setLoading(false);
+      return;
+    }
+
+    const tree = await getOrgTree(currentOrg.id);
+    setOrgTree(tree);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    async function loadData() {
-      if (isDemoMode()) {
-        const demoUnits: OrgUnit[] = DEMO_ORG_UNITS.filter(u => !u.parentId).map(u => ({
-          id: u.id,
-          name: u.name,
-          code: u.code,
-          type: u.type as OrgUnit['type'],
-          employeeCount: u.employeeCount,
-          createdAt: new Date().toISOString(),
-          children: DEMO_ORG_UNITS.filter(c => c.parentId === u.id).map(c => ({
-            id: c.id,
-            name: c.name,
-            code: c.code,
-            type: c.type as OrgUnit['type'],
-            employeeCount: c.employeeCount,
-            createdAt: new Date().toISOString(),
-          })),
-        }));
-        setOrgTree(demoUnits);
-        setLoading(false);
-        return;
-      }
-
-      const tree = await getOrgTree();
-      setOrgTree(tree);
-      setLoading(false);
-    }
     loadData();
-  }, []);
+  }, [currentOrg]);
+
+  const handleCreateUnit = async () => {
+    if (!newUnitName.trim() || !currentOrg) return;
+    
+    setCreating(true);
+    const result = await createOrgUnit({
+      name: newUnitName.trim(),
+      code: newUnitCode.trim() || undefined,
+      orgId: currentOrg.id,
+    });
+    
+    if (result) {
+      setNewUnitName("");
+      setNewUnitCode("");
+      setShowCreateUnitModal(false);
+      await loadData();
+    }
+    setCreating(false);
+  };
 
   if (loading) {
     return (
@@ -221,18 +254,38 @@ export default function OrgOverviewPage() {
         </Card>
 
         {showCreateUnitModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className="max-w-md mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUnitModal(false)}>
+            <Card className="max-w-md mx-4 w-full" onClick={(e) => e.stopPropagation()}>
               <CardHeader>
-                <CardTitle>Coming Soon</CardTitle>
+                <CardTitle>Create Organization Unit</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-4">
-                  Organization unit management is coming soon. For now, you can explore the demo data or import employees to get started.
-                </p>
-                <div className="flex gap-2">
-                  <Button onClick={() => setShowCreateUnitModal(false)}>Close</Button>
-                  <Button variant="outline" onClick={() => router.push("/app/setup")}>Go to Setup</Button>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="unit-name">Unit Name *</Label>
+                  <Input
+                    id="unit-name"
+                    placeholder="e.g., Manufacturing Division"
+                    value={newUnitName}
+                    onChange={(e) => setNewUnitName(e.target.value)}
+                    data-testid="input-unit-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unit-code">Code (optional)</Label>
+                  <Input
+                    id="unit-code"
+                    placeholder="e.g., MFG"
+                    value={newUnitCode}
+                    onChange={(e) => setNewUnitCode(e.target.value)}
+                    data-testid="input-unit-code"
+                  />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button onClick={handleCreateUnit} disabled={!newUnitName.trim() || creating} data-testid="button-confirm-create">
+                    {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Create Unit
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowCreateUnitModal(false)}>Cancel</Button>
                 </div>
               </CardContent>
             </Card>
@@ -302,18 +355,38 @@ export default function OrgOverviewPage() {
       </div>
 
       {showCreateUnitModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUnitModal(false)}>
+          <Card className="max-w-md mx-4 w-full" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
-              <CardTitle>Coming Soon</CardTitle>
+              <CardTitle>Create Organization Unit</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground mb-4">
-                Organization unit management is coming soon. For now, you can explore the demo data or import employees to get started.
-              </p>
-              <div className="flex gap-2">
-                <Button onClick={() => setShowCreateUnitModal(false)}>Close</Button>
-                <Button variant="outline" onClick={() => router.push("/app/setup")}>Go to Setup</Button>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="unit-name">Unit Name *</Label>
+                <Input
+                  id="unit-name"
+                  placeholder="e.g., Manufacturing Division"
+                  value={newUnitName}
+                  onChange={(e) => setNewUnitName(e.target.value)}
+                  data-testid="input-unit-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unit-code">Code (optional)</Label>
+                <Input
+                  id="unit-code"
+                  placeholder="e.g., MFG"
+                  value={newUnitCode}
+                  onChange={(e) => setNewUnitCode(e.target.value)}
+                  data-testid="input-unit-code"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button onClick={handleCreateUnit} disabled={!newUnitName.trim() || creating} data-testid="button-confirm-create">
+                  {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create Unit
+                </Button>
+                <Button variant="outline" onClick={() => setShowCreateUnitModal(false)}>Cancel</Button>
               </div>
             </CardContent>
           </Card>
