@@ -117,10 +117,22 @@
       "namedRegex": "^/admin/positions(?:/)?$"
     },
     {
+      "page": "/api/admin/audit",
+      "regex": "^/api/admin/audit(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/audit(?:/)?$"
+    },
+    {
       "page": "/api/admin/invite",
       "regex": "^/api/admin/invite(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/admin/invite(?:/)?$"
+    },
+    {
+      "page": "/api/admin/members",
+      "regex": "^/api/admin/members(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/members(?:/)?$"
     },
     {
       "page": "/api/admin/membership/disable",
@@ -219,6 +231,12 @@
       "namedRegex": "^/app/dashboard(?:/)?$"
     },
     {
+      "page": "/app/debug",
+      "regex": "^/app/debug(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/app/debug(?:/)?$"
+    },
+    {
       "page": "/app/demo",
       "regex": "^/app/demo(?:/)?$",
       "routeKeys": {},
@@ -235,6 +253,12 @@
       "regex": "^/app/employees(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/app/employees(?:/)?$"
+    },
+    {
+      "page": "/app/employees/new",
+      "regex": "^/app/employees/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/app/employees/new(?:/)?$"
     },
     {
       "page": "/app/equipment",
@@ -325,6 +349,12 @@
       "regex": "^/app/settings(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/app/settings(?:/)?$"
+    },
+    {
+      "page": "/app/setup",
+      "regex": "^/app/setup(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/app/setup(?:/)?$"
     },
     {
       "page": "/app/tomorrows-gaps",

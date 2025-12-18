@@ -252,6 +252,31 @@
         "x-next-revalidate-tag-token"
       ]
     },
+    "/app/debug": {
+      "experimentalBypassFor": [
+        {
+          "type": "header",
+          "key": "next-action"
+        },
+        {
+          "type": "header",
+          "key": "content-type",
+          "value": "multipart/form-data;.*"
+        }
+      ],
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/app/debug",
+      "dataRoute": "/app/debug.rsc",
+      "prefetchDataRoute": null,
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
     "/app/demo": {
       "experimentalBypassFor": [
         {
@@ -292,6 +317,31 @@
       "initialRevalidateSeconds": false,
       "srcRoute": "/app/documents",
       "dataRoute": "/app/documents.rsc",
+      "prefetchDataRoute": null,
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/app/employees/new": {
+      "experimentalBypassFor": [
+        {
+          "type": "header",
+          "key": "next-action"
+        },
+        {
+          "type": "header",
+          "key": "content-type",
+          "value": "multipart/form-data;.*"
+        }
+      ],
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/app/employees/new",
+      "dataRoute": "/app/employees/new.rsc",
       "prefetchDataRoute": null,
       "allowHeader": [
         "host",
@@ -727,6 +777,31 @@
         "x-next-revalidate-tag-token"
       ]
     },
+    "/app/setup": {
+      "experimentalBypassFor": [
+        {
+          "type": "header",
+          "key": "next-action"
+        },
+        {
+          "type": "header",
+          "key": "content-type",
+          "value": "multipart/form-data;.*"
+        }
+      ],
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/app/setup",
+      "dataRoute": "/app/setup.rsc",
+      "prefetchDataRoute": null,
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
     "/app/tomorrows-gaps": {
       "experimentalBypassFor": [
         {
@@ -906,8 +981,8 @@
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "0e3ae7bd9d1d8b4569fb65bbd7658179",
-    "previewModeSigningKey": "73b45df2e50c0083b860e927c05be28d5546ca6772e30157af0060c445165c6a",
-    "previewModeEncryptionKey": "dfe0f4f15a3d258593b519b9f74285d30e3c640d032967aee5be8e155cf4b3cf"
+    "previewModeId": "5d83553d17b08eaf3a112b5e24e820b3",
+    "previewModeSigningKey": "2563de1bf43107789267be1f91df9825ea02fdfb9f6b9e5b33c33733eeff5a23",
+    "previewModeEncryptionKey": "fba7b1513b1ea3786bae42a77d4d2402d9774704c415689563182e3df529e17d"
   }
 }
