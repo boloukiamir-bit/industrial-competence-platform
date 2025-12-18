@@ -8,6 +8,12 @@ interface SupabaseError {
   details?: string;
 }
 
+interface SupabaseResponseWithError {
+  data: unknown;
+  error: SupabaseError | null;
+  count?: number | null;
+}
+
 function isRlsError(error: SupabaseError): boolean {
   const msg = error.message?.toLowerCase() || '';
   const code = error.code || '';
@@ -21,6 +27,31 @@ function isRlsError(error: SupabaseError): boolean {
     code === '42501' ||
     code === '42P01'
   );
+}
+
+export function assertOk<T extends SupabaseResponseWithError>(
+  response: T,
+  context: string
+): T {
+  if (response.error) {
+    const err = response.error;
+    
+    logDebugError({
+      type: 'supabase',
+      endpoint: context,
+      code: err.code ?? undefined,
+      message: err.message ?? JSON.stringify(err),
+      hint: (err as { hint?: string }).hint ?? undefined,
+    });
+    
+    if (isRlsError(err)) {
+      setFlag('rlsBlocked', true);
+    }
+    
+    throw new Error(`${context}: ${err.message}`);
+  }
+  
+  return response;
 }
 
 export function handleSupabaseResponse<T>(

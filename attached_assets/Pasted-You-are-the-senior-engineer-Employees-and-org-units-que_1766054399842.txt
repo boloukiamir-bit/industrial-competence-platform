@@ -1,0 +1,97 @@
+You are the senior engineer. Employees and org_units queries fail, showing counts=null and empty pages. Fix this by making Supabase errors visible, verifying schema, and correcting RLS policies for org-scoped access.
+
+1) Stop swallowing Supabase errors (must show code/message/hint)
+
+Create lib/supabaseSafe.ts:
+
+export function assertOk(res, context):
+
+if res.error exists:
+
+logDebugError({
+type: 'supabase',
+endpoint: context,
+code: res.error.code ?? undefined,
+message: res.error.message ?? JSON.stringify(res.error),
+hint: (res.error as any).hint ?? undefined,
+timestamp: new Date().toISOString()
+})
+
+if message includes “permission denied” set debug flag rlsBlocked=true
+
+throw res.error
+
+return res
+
+Update DebugPage fetchCounts() to:
+
+call supabase
+
+pass response through assertOk()
+
+then read .count
+
+Also log the full response if count is null but no error (edge case).
+
+2) Add a schema validation panel in /app/debug
+
+Add a “Schema Check” section with a button “Run Schema Check”.
+It should call a new endpoint GET /app/api/debug/schema?orgId=... (admin only) which returns:
+
+whether tables exist: employees, org_units
+
+whether columns exist: org_id on employees and org_units
+
+whether RLS is enabled on those tables
+
+whether there are rows with null org_id for current org (counts)
+
+This endpoint must use server-side Supabase service role and must never run on client.
+
+3) Fix RLS policies for employees and org_units (SQL migration)
+
+Add a migration SQL (or instructions block) that does:
+
+Enable RLS on employees and org_units
+
+Create policies:
+
+employees SELECT
+
+Allow select if exists membership active:
+exists (select 1 from memberships m where m.org_id = employees.org_id and m.user_id = auth.uid() and m.status='active')
+
+org_units SELECT
+
+Same pattern:
+exists (select 1 from memberships m where m.org_id = org_units.org_id and m.user_id = auth.uid() and m.status='active')
+
+Optionally:
+
+Allow INSERT/UPDATE/DELETE only for org admin/hr via membership role check.
+
+4) Data repair (if org_id nulls exist)
+
+If schema check finds employees/org_units rows with org_id null:
+
+add an admin-only server endpoint POST /app/api/debug/repair-orgid
+
+it assigns org_id=currentOrgId to rows that are null (only for demo/dev safety; do not run automatically)
+
+include big warning UI.
+
+5) Verification requirements
+
+After implementing:
+
+Open /app/debug → Schema Check → verify tables/columns/RLS/policies OK
+
+Data Counts must show numbers (not null) for employees and org_units
+
+Employees page must list employees instead of empty
+
+Organization page must list units or show correct empty state with Create Unit CTA
+
+Paste the new Debug Report (it must contain real Supabase error messages if any)
+
+Do not add features. Fix data access.
