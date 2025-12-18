@@ -1,0 +1,155 @@
+You are the senior engineer. The app is confusing because core pages show empty states while backend calls fail. Implement an “Honest UI” layer and fix the specific failures shown in the screen recording.
+
+A) Fix the two critical broken admin pages (must be DONE)
+A1) Admin Audit Log: “Failed to load audit logs”
+
+Root cause is either missing org filter, RLS denial, missing table, or wrong query.
+
+Implement a server endpoint: GET /app/api/admin/audit?orgId=...
+
+Requires authenticated user
+
+Verifies user is org admin (membership check)
+
+Uses server-side Supabase client (service role) ONLY on server
+
+Returns latest 100 audit logs for org, sorted desc
+
+Returns structured error with code/message if fails
+
+Update /app/admin/audit page:
+
+Fetch from this endpoint (NOT direct client query)
+
+Show loading, error state, and “Open Debug” button
+
+If zero logs, show “No audit events yet” (not an error)
+
+A2) Admin User Management: “Failed to load members”
+
+Implement server endpoint: GET /app/api/admin/members?orgId=...
+
+Requires authenticated user
+
+Verifies org admin
+
+Returns memberships joined with profiles/email
+
+Update /app/admin/users page:
+
+Use endpoint
+
+Remove red banner on success
+
+Keep “Invite user” working (and write audit log)
+
+Acceptance criteria:
+
+No red “Failed to load …” banners for admin@nadiplan.test
+
+Both pages render data or a clean empty state
+
+All errors show the real cause (not silent)
+
+B) Kill the “Coming Soon modal” bug on core pages
+
+In the recording, Organization triggers a “Coming Soon” overlay.
+Fix navigation config so:
+
+Only items explicitly marked comingSoon: true show the modal/disabled state
+
+Core pages (Organization, Employees, Matrix, Tomorrow’s Gaps, Admin) must NEVER show Coming Soon
+
+Clicking a disabled item should not navigate and should show a small tooltip only (no full modal)
+
+Acceptance criteria:
+
+Organization opens normally with CTA buttons, no overlay.
+
+C) Make empty states honest (error ≠ empty)
+
+Implement a shared DataState component:
+
+states: loading | error | empty | ready
+
+error shows:
+
+short message
+
+“Retry”
+
+“Open Debug”
+
+empty shows:
+
+primary CTA (e.g., Import CSV / Create Unit / Define Requirements)
+
+never show “No data” if the fetch actually failed
+
+Apply to:
+
+Employees
+
+Organization
+
+Competence Matrix
+
+Tomorrow’s Gaps
+
+Admin pages
+
+D) Add /app/debug cockpit (so we stop guessing)
+
+Create /app/debug that displays:
+
+current user email
+
+current orgId + where it came from (cookie/localStorage/membership default)
+
+last 10 API errors (endpoint + status + message)
+
+last 10 Supabase errors (code + message + hint)
+
+current counts (employees, units, skills, positions)
+
+a “Copy Debug Report” button (copies JSON block)
+
+E) Org context: enforce one source of truth
+
+Create useOrg():
+
+returns orgId
+
+if missing → redirect to org select
+
+DO NOT call any org-scoped query without orgId
+
+Fix any pages that query without orgId (common cause of RLS denial).
+
+F) Verification (must run)
+
+Run and paste output of:
+
+npm run build
+
+a manual smoke:
+
+admin → users page loads without red banner
+
+admin → audit page loads without red banner
+
+organization page does not show Coming Soon modal
+
+/app/debug shows orgId and no critical errors after navigation
+
+Deliverables:
+
+endpoints /api/admin/audit, /api/admin/members
+
+fixed nav comingSoon behavior
+
+/app/debug
+
+DataState component used on key pages
+
+Do not add new modules. Stabilize only.

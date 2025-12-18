@@ -21,7 +21,8 @@ import {
   LogOut,
   Wrench,
   TrendingUp,
-  Clipboard
+  Clipboard,
+  Bug
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -64,6 +65,7 @@ const moreNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { name: "Settings", href: "/app/settings", icon: Settings },
+  { name: "Debug", href: "/app/debug", icon: Bug },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

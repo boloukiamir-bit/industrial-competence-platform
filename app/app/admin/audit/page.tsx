@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useOrg } from '@/hooks/useOrg';
 import { OrgGuard } from '@/components/OrgGuard';
 import { supabase } from '@/lib/supabaseClient';
+import { DataState, useDataState } from '@/components/DataState';
+import { logDebugError } from '@/app/app/debug/page';
 import { 
   ScrollText, 
-  Loader2,
   Filter,
   User,
   Building2,
@@ -23,9 +24,13 @@ interface AuditLog {
   target_id: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
-  actor_profile?: {
-    email: string;
-  };
+  actor_email?: string | null;
+}
+
+interface ApiError {
+  message: string;
+  code?: string;
+  hint?: string;
 }
 
 const ACTION_ICONS: Record<string, typeof Building2> = {
@@ -46,7 +51,7 @@ function AdminAuditContent() {
   const { currentOrg } = useOrg();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [actionFilter, setActionFilter] = useState<string>('');
 
   const fetchLogs = useCallback(async () => {
@@ -56,50 +61,55 @@ function AdminAuditContent() {
     setError(null);
 
     try {
-      let query = supabase
-        .from('audit_logs')
-        .select(`
-          id,
-          actor_user_id,
-          action,
-          target_type,
-          target_id,
-          metadata,
-          created_at,
-          actor_profile:profiles!audit_logs_actor_user_id_fkey(email)
-        `)
-        .eq('org_id', currentOrg.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (actionFilter) {
-        query = query.eq('action', actionFilter);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError({ message: 'Not authenticated', code: 'AUTH_REQUIRED' });
+        setLoading(false);
+        return;
       }
 
-      const { data, error: fetchError } = await query;
+      const res = await fetch(`/api/admin/audit?orgId=${currentOrg.id}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
 
-      if (fetchError) {
-        console.error('Error fetching audit logs:', fetchError);
-        setError('Failed to load audit logs');
+      const data = await res.json();
+
+      if (!res.ok) {
+        const apiError = {
+          message: data.message || data.error || 'Failed to load audit logs',
+          code: data.code,
+          hint: data.hint,
+        };
+        setError(apiError);
+        logDebugError?.({
+          timestamp: new Date().toISOString(),
+          type: 'api',
+          endpoint: '/api/admin/audit',
+          status: res.status,
+          ...apiError,
+        });
       } else {
-        const formattedLogs = (data || []).map((log: {
-          id: number;
-          actor_user_id: string;
-          action: string;
-          target_type: string | null;
-          target_id: string | null;
-          metadata: Record<string, unknown>;
-          created_at: string;
-          actor_profile: { email: string } | { email: string }[] | null;
-        }) => ({
-          ...log,
-          actor_profile: Array.isArray(log.actor_profile) ? log.actor_profile[0] : (log.actor_profile || undefined),
-        }));
-        setLogs(formattedLogs as AuditLog[]);
+        let filteredLogs = data.logs || [];
+        if (actionFilter) {
+          filteredLogs = filteredLogs.filter((l: AuditLog) => l.action === actionFilter);
+        }
+        setLogs(filteredLogs);
       }
     } catch (err) {
       console.error('Fetch error:', err);
-      setError('Failed to load audit logs');
+      const apiError = { 
+        message: err instanceof Error ? err.message : 'Failed to load audit logs',
+        code: 'NETWORK_ERROR'
+      };
+      setError(apiError);
+      logDebugError?.({
+        timestamp: new Date().toISOString(),
+        type: 'api',
+        endpoint: '/api/admin/audit',
+        ...apiError,
+      });
     } finally {
       setLoading(false);
     }
@@ -131,6 +141,7 @@ function AdminAuditContent() {
   };
 
   const uniqueActions = [...new Set(logs.map(l => l.action))];
+  const dataStatus = useDataState(logs, loading, error);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -144,40 +155,34 @@ function AdminAuditContent() {
           </p>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-muted-foreground" />
-          <select
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm"
-            data-testid="select-action-filter"
-          >
-            <option value="">All Actions</option>
-            {uniqueActions.map(action => (
-              <option key={action} value={action}>
-                {ACTION_LABELS[action] || action}
-              </option>
-            ))}
-          </select>
-        </div>
+        {dataStatus === 'ready' && (
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              className="px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm"
+              data-testid="select-action-filter"
+            >
+              <option value="">All Actions</option>
+              {uniqueActions.map(action => (
+                <option key={action} value={action}>
+                  {ACTION_LABELS[action] || action}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {error && (
-        <div className="p-4 rounded-md bg-destructive/10 text-destructive" data-testid="text-error">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : logs.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <ScrollText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No audit logs found</p>
-        </div>
-      ) : (
+      <DataState
+        status={dataStatus}
+        error={error}
+        onRetry={fetchLogs}
+        emptyTitle="No audit events yet"
+        emptyMessage="Activity will appear here as users take actions in the organization."
+        emptyIcon={<ScrollText className="w-8 h-8 text-muted-foreground" />}
+      >
         <div className="space-y-2">
           {logs.map((log) => {
             const IconComponent = ACTION_ICONS[log.action] || ScrollText;
@@ -206,7 +211,7 @@ function AdminAuditContent() {
                   
                   <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                     <User className="w-3 h-3" />
-                    <span>{log.actor_profile?.email || 'System'}</span>
+                    <span>{log.actor_email || 'System'}</span>
                     <span>at {formatDate(log.created_at)}</span>
                   </div>
                   
@@ -220,7 +225,7 @@ function AdminAuditContent() {
             );
           })}
         </div>
-      )}
+      </DataState>
     </div>
   );
 }

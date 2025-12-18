@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useOrg } from '@/hooks/useOrg';
 import { OrgGuard } from '@/components/OrgGuard';
 import { supabase } from '@/lib/supabaseClient';
+import { DataState, useDataState } from '@/components/DataState';
+import { logDebugError } from '@/app/app/debug/page';
 import { 
   Users, 
   UserPlus, 
-  MoreHorizontal, 
   Shield, 
   UserX,
   Loader2,
@@ -22,9 +23,7 @@ interface Member {
   role: 'admin' | 'hr' | 'manager' | 'user';
   status: 'active' | 'disabled';
   created_at: string;
-  profile?: {
-    email: string;
-  };
+  email?: string | null;
 }
 
 interface Invite {
@@ -36,20 +35,25 @@ interface Invite {
   accepted_at: string | null;
 }
 
+interface ApiError {
+  message: string;
+  code?: string;
+  hint?: string;
+}
+
 function AdminUsersContent() {
   const { currentOrg, isAdmin } = useOrg();
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   
-  // Invite form
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'hr' | 'manager' | 'user'>('user');
   const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
-  // Role change
   const [changingRole, setChangingRole] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -59,51 +63,52 @@ function AdminUsersContent() {
     setError(null);
 
     try {
-      // Fetch members with their profiles
-      const { data: memberData, error: memberError } = await supabase
-        .from('memberships')
-        .select(`
-          user_id,
-          role,
-          status,
-          created_at,
-          profile:profiles(email)
-        `)
-        .eq('org_id', currentOrg.id);
-
-      if (memberError) {
-        console.error('Error fetching members:', memberError);
-        setError('Failed to load members');
-      } else {
-        const formattedMembers = (memberData || []).map((m: {
-          user_id: string;
-          role: 'admin' | 'hr' | 'manager' | 'user';
-          status: 'active' | 'disabled';
-          created_at: string;
-          profile: { email: string } | { email: string }[] | null;
-        }) => ({
-          ...m,
-          profile: Array.isArray(m.profile) ? m.profile[0] : (m.profile || undefined),
-        }));
-        setMembers(formattedMembers as Member[]);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError({ message: 'Not authenticated', code: 'AUTH_REQUIRED' });
+        setLoading(false);
+        return;
       }
 
-      // Fetch pending invites
-      const { data: inviteData, error: inviteError } = await supabase
-        .from('invites')
-        .select('*')
-        .eq('org_id', currentOrg.id)
-        .is('accepted_at', null)
-        .gt('expires_at', new Date().toISOString());
+      const res = await fetch(`/api/admin/members?orgId=${currentOrg.id}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
 
-      if (inviteError) {
-        console.error('Error fetching invites:', inviteError);
+      const data = await res.json();
+
+      if (!res.ok) {
+        const apiError = {
+          message: data.message || data.error || 'Failed to load members',
+          code: data.code,
+          hint: data.hint,
+        };
+        setError(apiError);
+        logDebugError?.({
+          timestamp: new Date().toISOString(),
+          type: 'api',
+          endpoint: '/api/admin/members',
+          status: res.status,
+          ...apiError,
+        });
       } else {
-        setInvites(inviteData || []);
+        setMembers(data.members || []);
+        setInvites(data.invites || []);
       }
     } catch (err) {
       console.error('Fetch error:', err);
-      setError('Failed to load data');
+      const apiError = { 
+        message: err instanceof Error ? err.message : 'Failed to load members',
+        code: 'NETWORK_ERROR'
+      };
+      setError(apiError);
+      logDebugError?.({
+        timestamp: new Date().toISOString(),
+        type: 'api',
+        endpoint: '/api/admin/members',
+        ...apiError,
+      });
     } finally {
       setLoading(false);
     }
@@ -118,12 +123,12 @@ function AdminUsersContent() {
     if (!currentOrg) return;
 
     setInviting(true);
-    setError(null);
+    setInviteError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError('Not authenticated');
+        setInviteError('Not authenticated');
         setInviting(false);
         return;
       }
@@ -144,7 +149,7 @@ function AdminUsersContent() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Failed to send invite');
+        setInviteError(data.error || 'Failed to send invite');
         setInviting(false);
         return;
       }
@@ -155,7 +160,7 @@ function AdminUsersContent() {
       await fetchData();
     } catch (err) {
       console.error('Invite error:', err);
-      setError('Failed to send invite');
+      setInviteError('Failed to send invite');
     } finally {
       setInviting(false);
     }
@@ -165,12 +170,10 @@ function AdminUsersContent() {
     if (!currentOrg) return;
 
     setChangingRole(userId);
-    setError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError('Not authenticated');
         setChangingRole(null);
         return;
       }
@@ -188,18 +191,11 @@ function AdminUsersContent() {
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Failed to update role');
-        setChangingRole(null);
-        return;
+      if (res.ok) {
+        await fetchData();
       }
-
-      await fetchData();
     } catch (err) {
       console.error('Role change error:', err);
-      setError('Failed to update role');
     } finally {
       setChangingRole(null);
     }
@@ -209,12 +205,9 @@ function AdminUsersContent() {
     if (!currentOrg) return;
     if (!confirm('Are you sure you want to disable this user?')) return;
 
-    setError(null);
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError('Not authenticated');
         return;
       }
 
@@ -230,17 +223,11 @@ function AdminUsersContent() {
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Failed to disable user');
-        return;
+      if (res.ok) {
+        await fetchData();
       }
-
-      await fetchData();
     } catch (err) {
       console.error('Disable error:', err);
-      setError('Failed to disable user');
     }
   };
 
@@ -252,17 +239,11 @@ function AdminUsersContent() {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const dataStatus = useDataState(members, loading, error);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground" data-testid="text-page-title">
             User Management
@@ -271,10 +252,10 @@ function AdminUsersContent() {
             Manage members and invites for {currentOrg?.name}
           </p>
         </div>
-        {isAdmin && (
+        {isAdmin && dataStatus !== 'error' && (
           <button
             onClick={() => setShowInvite(!showInvite)}
-            className="px-4 py-2 rounded-md bg-primary text-primary-foreground flex items-center gap-2 hover-elevate"
+            className="px-4 py-2 rounded-md bg-primary text-primary-foreground flex items-center gap-2"
             data-testid="button-invite-user"
           >
             <UserPlus className="w-4 h-4" />
@@ -283,14 +264,13 @@ function AdminUsersContent() {
         )}
       </div>
 
-      {error && (
-        <div className="p-4 rounded-md bg-destructive/10 text-destructive" data-testid="text-error">
-          {error}
-        </div>
-      )}
-
       {showInvite && (
         <div className="p-4 rounded-lg border border-border bg-card">
+          {inviteError && (
+            <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {inviteError}
+            </div>
+          )}
           <form onSubmit={handleInvite} className="flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[200px]">
               <label htmlFor="invite-email" className="block text-sm font-medium text-foreground mb-1">
@@ -328,7 +308,7 @@ function AdminUsersContent() {
               <button
                 type="button"
                 onClick={() => setShowInvite(false)}
-                className="px-4 py-2 rounded-md border border-border text-foreground hover-elevate"
+                className="px-4 py-2 rounded-md border border-border text-foreground"
                 data-testid="button-cancel-invite"
               >
                 Cancel
@@ -336,7 +316,7 @@ function AdminUsersContent() {
               <button
                 type="submit"
                 disabled={inviting}
-                className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-2"
                 data-testid="button-send-invite"
               >
                 {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
@@ -347,111 +327,124 @@ function AdminUsersContent() {
         </div>
       )}
 
-      {/* Pending Invites */}
-      {invites.length > 0 && (
-        <div className="rounded-lg border border-border bg-card">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-medium text-foreground flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Pending Invites ({invites.length})
-            </h2>
-          </div>
-          <div className="divide-y divide-border">
-            {invites.map((invite) => (
-              <div key={invite.id} className="p-4 flex items-center justify-between" data-testid={`row-invite-${invite.id}`}>
-                <div>
-                  <div className="text-foreground">{invite.email}</div>
-                  <div className="text-sm text-muted-foreground">
-                    Invited as {invite.role} - Expires {formatDate(invite.expires_at)}
-                  </div>
-                </div>
-                <span className="px-2 py-1 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                  Pending
-                </span>
+      <DataState
+        status={dataStatus}
+        error={error}
+        onRetry={fetchData}
+        emptyTitle="No members yet"
+        emptyMessage="Invite users to join your organization."
+        emptyIcon={<Users className="w-8 h-8 text-muted-foreground" />}
+        emptyCta={{
+          label: 'Invite User',
+          onClick: () => setShowInvite(true),
+        }}
+      >
+        <>
+          {invites.length > 0 && (
+            <div className="rounded-lg border border-border bg-card">
+              <div className="p-4 border-b border-border">
+                <h2 className="font-medium text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Pending Invites ({invites.length})
+                </h2>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <div className="divide-y divide-border">
+                {invites.map((invite) => (
+                  <div key={invite.id} className="p-4 flex items-center justify-between" data-testid={`row-invite-${invite.id}`}>
+                    <div>
+                      <div className="text-foreground">{invite.email}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Invited as {invite.role} - Expires {formatDate(invite.expires_at)}
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                      Pending
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-      {/* Members Table */}
-      <div className="rounded-lg border border-border bg-card">
-        <div className="p-4 border-b border-border">
-          <h2 className="font-medium text-foreground flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Members ({members.filter(m => m.status === 'active').length})
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Email</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Role</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Joined</th>
-                <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {members.map((member) => (
-                <tr key={member.user_id} className="hover:bg-muted/30" data-testid={`row-member-${member.user_id}`}>
-                  <td className="px-4 py-3 text-foreground">
-                    {member.profile?.email || 'Unknown'}
-                  </td>
-                  <td className="px-4 py-3">
-                    {isAdmin && changingRole !== member.user_id ? (
-                      <select
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(member.user_id, e.target.value as typeof member.role)}
-                        className="px-2 py-1 rounded border border-input bg-background text-foreground text-sm"
-                        data-testid={`select-role-${member.user_id}`}
-                      >
-                        <option value="user">User</option>
-                        <option value="manager">Manager</option>
-                        <option value="hr">HR</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : changingRole === member.user_id ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <span className="capitalize">{member.role}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {member.status === 'active' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                        <Check className="w-3 h-3" />
-                        Active
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                        <X className="w-3 h-3" />
-                        Disabled
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground text-sm">
-                    {formatDate(member.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {isAdmin && member.status === 'active' && (
-                      <button
-                        onClick={() => handleDisable(member.user_id)}
-                        className="p-2 rounded hover-elevate text-muted-foreground hover:text-destructive"
-                        title="Disable user"
-                        data-testid={`button-disable-${member.user_id}`}
-                      >
-                        <UserX className="w-4 h-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="rounded-lg border border-border bg-card">
+            <div className="p-4 border-b border-border">
+              <h2 className="font-medium text-foreground flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Members ({members.filter(m => m.status === 'active').length})
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Email</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Role</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Joined</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {members.map((member) => (
+                    <tr key={member.user_id} className="hover:bg-muted/30" data-testid={`row-member-${member.user_id}`}>
+                      <td className="px-4 py-3 text-foreground">
+                        {member.email || 'Unknown'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isAdmin && changingRole !== member.user_id ? (
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleRoleChange(member.user_id, e.target.value as typeof member.role)}
+                            className="px-2 py-1 rounded border border-input bg-background text-foreground text-sm"
+                            data-testid={`select-role-${member.user_id}`}
+                          >
+                            <option value="user">User</option>
+                            <option value="manager">Manager</option>
+                            <option value="hr">HR</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        ) : changingRole === member.user_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <span className="capitalize">{member.role}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {member.status === 'active' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            <Check className="w-3 h-3" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                            <X className="w-3 h-3" />
+                            Disabled
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-sm">
+                        {formatDate(member.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isAdmin && member.status === 'active' && (
+                          <button
+                            onClick={() => handleDisable(member.user_id)}
+                            className="p-2 rounded text-muted-foreground hover:text-destructive"
+                            title="Disable user"
+                            data-testid={`button-disable-${member.user_id}`}
+                          >
+                            <UserX className="w-4 h-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      </DataState>
     </div>
   );
 }
