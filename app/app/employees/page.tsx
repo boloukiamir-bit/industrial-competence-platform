@@ -51,7 +51,7 @@ export default function EmployeesPage() {
 
       const { data, error } = await supabase
         .from("employees")
-        .select("*, manager:manager_id(name)")
+        .select("*")
         .eq("org_id", currentOrg.id)
         .eq("is_active", true)
         .order("name");
@@ -74,7 +74,7 @@ export default function EmployeesPage() {
             startDate: row.start_date || undefined,
             contractEndDate: row.contract_end_date || undefined,
             managerId: row.manager_id || undefined,
-            managerName: row.manager?.name || undefined,
+            managerName: undefined,
             address: row.address || undefined,
             city: row.city || undefined,
             postalCode: row.postal_code || undefined,
