@@ -56,16 +56,14 @@ export default function NewEmployeePage() {
     setLoading(true);
 
     try {
+      // Note: Some columns may not exist in Supabase schema yet
       const { error: dbError } = await supabase.from("employees").insert({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
         name: `${formData.firstName} ${formData.lastName}`,
         email: formData.email || null,
         employee_number: formData.employeeNumber || `EMP-${Date.now()}`,
         role: formData.role || null,
         line: formData.line || null,
         team: formData.team || null,
-        employment_type: formData.employmentType,
         start_date: formData.startDate,
         is_active: true,
       });

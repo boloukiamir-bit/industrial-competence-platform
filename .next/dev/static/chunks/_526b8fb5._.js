@@ -795,7 +795,8 @@ function EmployeesPage() {
                     setLoading(false);
                     return;
                 }
-                const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("*").eq("org_id", currentOrg.id).eq("is_active", true).order("name");
+                // Note: org_id filtering disabled until Supabase schema is updated
+                const { data, error } = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("*").eq("is_active", true).order("name");
                 if (!error && data) {
                     setEmployees(data.map({
                         "EmployeesPage.useEffect.loadEmployees": (row)=>({

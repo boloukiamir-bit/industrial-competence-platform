@@ -49,10 +49,10 @@ export default function EmployeesPage() {
         return;
       }
 
+      // Note: org_id filtering disabled until Supabase schema is updated
       const { data, error } = await supabase
         .from("employees")
         .select("*")
-        .eq("org_id", currentOrg.id)
         .eq("is_active", true)
         .order("name");
 
