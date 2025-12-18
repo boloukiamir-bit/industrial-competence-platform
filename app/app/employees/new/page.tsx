@@ -61,7 +61,7 @@ export default function NewEmployeePage() {
         name: `${formData.firstName} ${formData.lastName}`,
         email: formData.email || null,
         employee_number: formData.employeeNumber || `EMP-${Date.now()}`,
-        role: formData.role || null,
+        role: formData.role || "Employee",
         line: formData.line || null,
         team: formData.team || null,
         is_active: true,
