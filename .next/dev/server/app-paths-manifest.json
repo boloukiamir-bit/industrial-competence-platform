@@ -1,5 +1,23 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/workflows/route": "app/api/workflows/route.js",
+  "/app/admin/page": "app/app/admin/page.js",
   "/app/competence-matrix/page": "app/app/competence-matrix/page.js",
-  "/app/manager/risks/page": "app/app/manager/risks/page.js"
+  "/app/dashboard/page": "app/app/dashboard/page.js",
+  "/app/debug/page": "app/app/debug/page.js",
+  "/app/demo-center/page": "app/app/demo-center/page.js",
+  "/app/documents/page": "app/app/documents/page.js",
+  "/app/employees/page": "app/app/employees/page.js",
+  "/app/equipment/page": "app/app/equipment/page.js",
+  "/app/gaps/page": "app/app/gaps/page.js",
+  "/app/handbooks/page": "app/app/handbooks/page.js",
+  "/app/hr/analytics/page": "app/app/hr/analytics/page.js",
+  "/app/hr/workflows/page": "app/app/hr/workflows/page.js",
+  "/app/import-employees/page": "app/app/import-employees/page.js",
+  "/app/manager/risks/page": "app/app/manager/risks/page.js",
+  "/app/news/page": "app/app/news/page.js",
+  "/app/org/overview/page": "app/app/org/overview/page.js",
+  "/app/safety/certificates/page": "app/app/safety/certificates/page.js",
+  "/app/settings/page": "app/app/settings/page.js",
+  "/app/setup/page": "app/app/setup/page.js"
 }

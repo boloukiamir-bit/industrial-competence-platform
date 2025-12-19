@@ -4,11 +4,79 @@
       "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
       "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
     ],
+    "[project]/app/app/admin/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
     "[project]/app/app/competence-matrix/page": [
       "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
       "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
     ],
+    "[project]/app/app/dashboard/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/debug/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/demo-center/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/documents/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/employees/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/equipment/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/gaps/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/handbooks/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/hr/analytics/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/hr/workflows/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/import-employees/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
     "[project]/app/app/manager/risks/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/news/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/org/overview/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/safety/certificates/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/settings/page": [
+      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
+      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
+    ],
+    "[project]/app/app/setup/page": [
       "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
       "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
     ]
