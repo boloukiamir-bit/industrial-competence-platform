@@ -1,5 +1,5 @@
 {
+  "/app/competence-matrix/page": "app/app/competence-matrix/page.js",
   "/app/demo-center/page": "app/app/demo-center/page.js",
-  "/app/org/overview/page": "app/app/org/overview/page.js",
   "/login/page": "app/login/page.js"
 }
