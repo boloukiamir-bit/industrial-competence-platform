@@ -130,9 +130,10 @@ CREATE POLICY "org_units_select_policy" ON public.org_units
   );
 
 -- 8. CREATE A DEFAULT DEMO ORGANIZATION (optional)
-INSERT INTO public.organizations (id, name, slug)
-VALUES ('11111111-1111-1111-1111-111111111111', 'Demo Company', 'demo-company')
-ON CONFLICT (slug) DO NOTHING;
+-- Skip if created_by column exists and requires a value
+-- INSERT INTO public.organizations (id, name, slug)
+-- VALUES ('11111111-1111-1111-1111-111111111111', 'Demo Company', 'demo-company')
+-- ON CONFLICT (slug) DO NOTHING;
 
 -- 9. REFRESH THE SCHEMA CACHE
 -- After running this migration, go to Database > API in Supabase Dashboard
