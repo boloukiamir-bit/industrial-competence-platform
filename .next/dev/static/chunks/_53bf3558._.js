@@ -1024,6 +1024,8 @@ __turbopack_context__.s([
     ()=>getDemoEmployeeSkills,
     "getDemoEmployees",
     ()=>getDemoEmployees,
+    "getDemoEvents",
+    ()=>getDemoEvents,
     "getDemoGaps",
     ()=>getDemoGaps,
     "getDemoMetrics",
@@ -1195,6 +1197,73 @@ function getDemoMetrics() {
         totalOrgUnits: getDemoOrgUnits().length,
         gapCount: gaps.length
     };
+}
+function getDemoEvents() {
+    const employees = getDemoEmployees();
+    const today = new Date();
+    const addDays = (date, days)=>{
+        const result = new Date(date);
+        result.setDate(result.getDate() + days);
+        return result.toISOString().slice(0, 10);
+    };
+    return [
+        {
+            id: "evt-001",
+            employeeId: employees[0]?.id || "E1001",
+            employeeName: employees[0]?.name || "Anna Lindberg",
+            category: "certification",
+            title: "Forklift License Renewal",
+            description: "Annual forklift operator certification renewal",
+            dueDate: addDays(today, -5),
+            completedDate: undefined,
+            recurrence: "12m",
+            ownerManagerId: "mgr-001",
+            status: "overdue",
+            notes: ""
+        },
+        {
+            id: "evt-002",
+            employeeId: employees[1]?.id || "E1002",
+            employeeName: employees[1]?.name || "Erik Johansson",
+            category: "safety",
+            title: "Safety Training",
+            description: "Mandatory annual safety training",
+            dueDate: addDays(today, 15),
+            completedDate: undefined,
+            recurrence: "12m",
+            ownerManagerId: "mgr-001",
+            status: "due_soon",
+            notes: ""
+        },
+        {
+            id: "evt-003",
+            employeeId: employees[2]?.id || "E1003",
+            employeeName: employees[2]?.name || "Maria Svensson",
+            category: "review",
+            title: "Performance Review",
+            description: "Annual performance review",
+            dueDate: addDays(today, 45),
+            completedDate: undefined,
+            recurrence: "12m",
+            ownerManagerId: "mgr-001",
+            status: "due_soon",
+            notes: ""
+        },
+        {
+            id: "evt-004",
+            employeeId: employees[3]?.id || "E1004",
+            employeeName: employees[3]?.name || "Karl Andersson",
+            category: "onboarding",
+            title: "90-Day Check-in",
+            description: "New employee 90-day review",
+            dueDate: addDays(today, 90),
+            completedDate: undefined,
+            recurrence: undefined,
+            ownerManagerId: "mgr-001",
+            status: "upcoming",
+            notes: ""
+        }
+    ];
 }
 function getDemoScript() {
     return `NADIPLAN DEMO SCRIPT

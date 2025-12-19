@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RiskListSection } from "@/components/RiskListSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAllEvents, markEventCompleted, extendDueDate } from "@/services/events";
+import { isDemoMode, getDemoEvents } from "@/lib/demoRuntime";
 import { COPY } from "@/lib/copy";
 import type { PersonEvent } from "@/types/domain";
 import { Loader2, AlertTriangle } from "lucide-react";
@@ -11,9 +12,18 @@ import { Loader2, AlertTriangle } from "lucide-react";
 export default function ManagerRisksPage() {
   const [events, setEvents] = useState<PersonEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
 
   const fetchEvents = async () => {
     setLoading(true);
+    
+    if (isDemoMode()) {
+      setIsDemo(true);
+      setEvents(getDemoEvents() as PersonEvent[]);
+      setLoading(false);
+      return;
+    }
+    
     const data = await getAllEvents();
     setEvents(data);
     setLoading(false);
@@ -24,11 +34,28 @@ export default function ManagerRisksPage() {
   }, []);
 
   const handleMarkCompleted = async (eventId: string) => {
+    if (isDemo) {
+      setEvents(prev => prev.map(e => 
+        e.id === eventId ? { ...e, status: "completed" as const, completedDate: new Date().toISOString().slice(0, 10) } : e
+      ));
+      return;
+    }
     await markEventCompleted(eventId);
     fetchEvents();
   };
 
   const handleExtendDueDate = async (eventId: string) => {
+    if (isDemo) {
+      const addDays = (dateStr: string, days: number): string => {
+        const date = new Date(dateStr);
+        date.setDate(date.getDate() + days);
+        return date.toISOString().slice(0, 10);
+      };
+      setEvents(prev => prev.map(e => 
+        e.id === eventId ? { ...e, dueDate: addDays(e.dueDate, 30), status: "upcoming" as const } : e
+      ));
+      return;
+    }
     await extendDueDate(eventId, 30);
     fetchEvents();
   };

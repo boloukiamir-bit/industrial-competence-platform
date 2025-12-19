@@ -190,6 +190,76 @@ export function getDemoMetrics() {
   };
 }
 
+export function getDemoEvents() {
+  const employees = getDemoEmployees();
+  const today = new Date();
+  
+  const addDays = (date: Date, days: number): string => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result.toISOString().slice(0, 10);
+  };
+
+  return [
+    {
+      id: "evt-001",
+      employeeId: employees[0]?.id || "E1001",
+      employeeName: employees[0]?.name || "Anna Lindberg",
+      category: "certification" as const,
+      title: "Forklift License Renewal",
+      description: "Annual forklift operator certification renewal",
+      dueDate: addDays(today, -5),
+      completedDate: undefined,
+      recurrence: "12m",
+      ownerManagerId: "mgr-001",
+      status: "overdue" as const,
+      notes: "",
+    },
+    {
+      id: "evt-002",
+      employeeId: employees[1]?.id || "E1002",
+      employeeName: employees[1]?.name || "Erik Johansson",
+      category: "safety" as const,
+      title: "Safety Training",
+      description: "Mandatory annual safety training",
+      dueDate: addDays(today, 15),
+      completedDate: undefined,
+      recurrence: "12m",
+      ownerManagerId: "mgr-001",
+      status: "due_soon" as const,
+      notes: "",
+    },
+    {
+      id: "evt-003",
+      employeeId: employees[2]?.id || "E1003",
+      employeeName: employees[2]?.name || "Maria Svensson",
+      category: "review" as const,
+      title: "Performance Review",
+      description: "Annual performance review",
+      dueDate: addDays(today, 45),
+      completedDate: undefined,
+      recurrence: "12m",
+      ownerManagerId: "mgr-001",
+      status: "due_soon" as const,
+      notes: "",
+    },
+    {
+      id: "evt-004",
+      employeeId: employees[3]?.id || "E1004",
+      employeeName: employees[3]?.name || "Karl Andersson",
+      category: "onboarding" as const,
+      title: "90-Day Check-in",
+      description: "New employee 90-day review",
+      dueDate: addDays(today, 90),
+      completedDate: undefined,
+      recurrence: undefined,
+      ownerManagerId: "mgr-001",
+      status: "upcoming" as const,
+      notes: "",
+    },
+  ];
+}
+
 export function getDemoScript(): string {
   return `NADIPLAN DEMO SCRIPT
 ====================

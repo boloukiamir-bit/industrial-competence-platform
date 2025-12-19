@@ -468,7 +468,6 @@ __turbopack_context__.s([
     "default",
     ()=>GapsPage
 ]);
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = /*#__PURE__*/ __turbopack_context__.i("[project]/node_modules/next/dist/build/polyfills/process.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/index.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/components/ui/card.tsx [app-client] (ecmascript)");
@@ -481,9 +480,11 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$users$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Users$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/users.js [app-client] (ecmascript) <export default as Users>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$lightbulb$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Lightbulb$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/lightbulb.js [app-client] (ecmascript) <export default as Lightbulb>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$refresh$2d$cw$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__RefreshCw$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/refresh-cw.js [app-client] (ecmascript) <export default as RefreshCw>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$demoRuntime$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/demoRuntime.ts [app-client] (ecmascript)");
 ;
 var _s = __turbopack_context__.k.signature();
 "use client";
+;
 ;
 ;
 ;
@@ -584,13 +585,6 @@ const demoGapsData = [
         suggestedAction: "No action"
     }
 ];
-function isDemoMode() {
-    if ("TURBOPACK compile-time truthy", 1) {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("demo") === "true") return true;
-    }
-    return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_DEMO_MODE === "true";
-}
 function computeSummary(gaps) {
     const riskEmployees = new Set(gaps.filter((g)=>g.severity === "RISK" || g.severity === "GAP").map((g)=>g.employeeId));
     const skillCounts = {};
@@ -617,7 +611,7 @@ function getSeverityBadge(severity) {
                 children: "OK"
             }, void 0, false, {
                 fileName: "[project]/app/app/gaps/page.tsx",
-                lineNumber: 92,
+                lineNumber: 85,
                 columnNumber: 14
             }, this);
         case "GAP":
@@ -626,7 +620,7 @@ function getSeverityBadge(severity) {
                 children: "GAP"
             }, void 0, false, {
                 fileName: "[project]/app/app/gaps/page.tsx",
-                lineNumber: 94,
+                lineNumber: 87,
                 columnNumber: 14
             }, this);
         case "RISK":
@@ -635,7 +629,7 @@ function getSeverityBadge(severity) {
                 children: "RISK"
             }, void 0, false, {
                 fileName: "[project]/app/app/gaps/page.tsx",
-                lineNumber: 96,
+                lineNumber: 89,
                 columnNumber: 14
             }, this);
     }
@@ -682,7 +676,7 @@ function GapsPage() {
     const [generated, setGenerated] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [loading, setLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [gaps, setGaps] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
-    const demoMode = isDemoMode();
+    const demoMode = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$demoRuntime$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["isDemoMode"])();
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + 1);
     const dateStr = targetDate.toISOString().slice(0, 10);
@@ -730,7 +724,7 @@ function GapsPage() {
                         children: "Tomorrow's Gaps"
                     }, void 0, false, {
                         fileName: "[project]/app/app/gaps/page.tsx",
-                        lineNumber: 178,
+                        lineNumber: 171,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -742,13 +736,13 @@ function GapsPage() {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/gaps/page.tsx",
-                        lineNumber: 181,
+                        lineNumber: 174,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/gaps/page.tsx",
-                lineNumber: 177,
+                lineNumber: 170,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Card"], {
@@ -766,7 +760,7 @@ function GapsPage() {
                                         children: "Position / Line"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 190,
+                                        lineNumber: 183,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -779,12 +773,12 @@ function GapsPage() {
                                                     placeholder: "Select position..."
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 193,
+                                                    lineNumber: 186,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                lineNumber: 192,
+                                                lineNumber: 185,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -793,24 +787,24 @@ function GapsPage() {
                                                         children: p
                                                     }, p, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 197,
+                                                        lineNumber: 190,
                                                         columnNumber: 21
                                                     }, this))
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                lineNumber: 195,
+                                                lineNumber: 188,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 191,
+                                        lineNumber: 184,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 189,
+                                lineNumber: 182,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -821,7 +815,7 @@ function GapsPage() {
                                         children: "Shift (optional)"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 204,
+                                        lineNumber: 197,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Select"], {
@@ -834,12 +828,12 @@ function GapsPage() {
                                                     placeholder: "All shifts"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 207,
+                                                    lineNumber: 200,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                lineNumber: 206,
+                                                lineNumber: 199,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -849,7 +843,7 @@ function GapsPage() {
                                                         children: "All shifts"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 210,
+                                                        lineNumber: 203,
                                                         columnNumber: 19
                                                     }, this),
                                                     demoShifts.map((s)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -857,25 +851,25 @@ function GapsPage() {
                                                             children: s
                                                         }, s, false, {
                                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                                            lineNumber: 212,
+                                                            lineNumber: 205,
                                                             columnNumber: 21
                                                         }, this))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                lineNumber: 209,
+                                                lineNumber: 202,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 205,
+                                        lineNumber: 198,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 203,
+                                lineNumber: 196,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -889,7 +883,7 @@ function GapsPage() {
                                             className: "h-4 w-4 mr-2 animate-spin"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 226,
+                                            lineNumber: 219,
                                             columnNumber: 19
                                         }, this),
                                         "Generating..."
@@ -900,7 +894,7 @@ function GapsPage() {
                                             className: "h-4 w-4 mr-2"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 231,
+                                            lineNumber: 224,
                                             columnNumber: 19
                                         }, this),
                                         "Generate Gaps"
@@ -908,23 +902,23 @@ function GapsPage() {
                                 }, void 0, true)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 218,
+                                lineNumber: 211,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/gaps/page.tsx",
-                        lineNumber: 188,
+                        lineNumber: 181,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/app/app/gaps/page.tsx",
-                    lineNumber: 187,
+                    lineNumber: 180,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/gaps/page.tsx",
-                lineNumber: 186,
+                lineNumber: 179,
                 columnNumber: 7
             }, this),
             generated && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -942,19 +936,19 @@ function GapsPage() {
                                             className: "h-5 w-5 text-amber-500"
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 245,
+                                            lineNumber: 238,
                                             columnNumber: 17
                                         }, this),
                                         "What to Fix"
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                    lineNumber: 244,
+                                    lineNumber: 237,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 243,
+                                lineNumber: 236,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -970,12 +964,12 @@ function GapsPage() {
                                                         className: "h-5 w-5 text-red-600 dark:text-red-400"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 253,
+                                                        lineNumber: 246,
                                                         columnNumber: 21
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 252,
+                                                    lineNumber: 245,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -986,7 +980,7 @@ function GapsPage() {
                                                             children: summary.employeesAtRisk
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                                            lineNumber: 256,
+                                                            lineNumber: 249,
                                                             columnNumber: 21
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -994,19 +988,19 @@ function GapsPage() {
                                                             children: "Employees at Risk"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                                            lineNumber: 259,
+                                                            lineNumber: 252,
                                                             columnNumber: 21
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 255,
+                                                    lineNumber: 248,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 251,
+                                            lineNumber: 244,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1016,7 +1010,7 @@ function GapsPage() {
                                                     children: "Top Missing Skills"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 264,
+                                                    lineNumber: 257,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1029,7 +1023,7 @@ function GapsPage() {
                                                                     children: item.skill
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                                    lineNumber: 269,
+                                                                    lineNumber: 262,
                                                                     columnNumber: 27
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Badge"], {
@@ -1038,31 +1032,31 @@ function GapsPage() {
                                                                     children: item.count
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                                    lineNumber: 270,
+                                                                    lineNumber: 263,
                                                                     columnNumber: 27
                                                                 }, this)
                                                             ]
                                                         }, i, true, {
                                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                                            lineNumber: 268,
+                                                            lineNumber: 261,
                                                             columnNumber: 25
                                                         }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                         className: "text-sm text-muted-foreground",
                                                         children: "No gaps found"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 274,
+                                                        lineNumber: 267,
                                                         columnNumber: 23
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 265,
+                                                    lineNumber: 258,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 263,
+                                            lineNumber: 256,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1074,12 +1068,12 @@ function GapsPage() {
                                                         className: "h-5 w-5 text-green-600 dark:text-green-400"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 281,
+                                                        lineNumber: 274,
                                                         columnNumber: 21
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 280,
+                                                    lineNumber: 273,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1089,7 +1083,7 @@ function GapsPage() {
                                                             children: "Fastest Fix"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                                            lineNumber: 284,
+                                                            lineNumber: 277,
                                                             columnNumber: 21
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1098,36 +1092,36 @@ function GapsPage() {
                                                             children: summary.fastestFix || "No immediate action needed"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                                            lineNumber: 285,
+                                                            lineNumber: 278,
                                                             columnNumber: 21
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 283,
+                                                    lineNumber: 276,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 279,
+                                            lineNumber: 272,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                    lineNumber: 250,
+                                    lineNumber: 243,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 249,
+                                lineNumber: 242,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/gaps/page.tsx",
-                        lineNumber: 242,
+                        lineNumber: 235,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1138,7 +1132,7 @@ function GapsPage() {
                                 children: "Gaps Table"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 295,
+                                lineNumber: 288,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Button"], {
@@ -1151,20 +1145,20 @@ function GapsPage() {
                                         className: "h-4 w-4 mr-2"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 302,
+                                        lineNumber: 295,
                                         columnNumber: 15
                                     }, this),
                                     "Export CSV"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 296,
+                                lineNumber: 289,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/gaps/page.tsx",
-                        lineNumber: 294,
+                        lineNumber: 287,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Card"], {
@@ -1183,7 +1177,7 @@ function GapsPage() {
                                                     children: "Employee"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 312,
+                                                    lineNumber: 305,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1191,7 +1185,7 @@ function GapsPage() {
                                                     children: "Skill"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 315,
+                                                    lineNumber: 308,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1199,7 +1193,7 @@ function GapsPage() {
                                                     children: "Required"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 318,
+                                                    lineNumber: 311,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1207,7 +1201,7 @@ function GapsPage() {
                                                     children: "Current"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 321,
+                                                    lineNumber: 314,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1215,7 +1209,7 @@ function GapsPage() {
                                                     children: "Severity"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 324,
+                                                    lineNumber: 317,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1223,18 +1217,18 @@ function GapsPage() {
                                                     children: "Suggested Action"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/gaps/page.tsx",
-                                                    lineNumber: 327,
+                                                    lineNumber: 320,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 311,
+                                            lineNumber: 304,
                                             columnNumber: 19
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 310,
+                                        lineNumber: 303,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -1246,12 +1240,12 @@ function GapsPage() {
                                                 children: "No competence gaps found for tomorrow."
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                lineNumber: 335,
+                                                lineNumber: 328,
                                                 columnNumber: 23
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/gaps/page.tsx",
-                                            lineNumber: 334,
+                                            lineNumber: 327,
                                             columnNumber: 21
                                         }, this) : gaps.map((gap, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
                                                 className: `border-b last:border-0 ${index % 2 === 0 ? "bg-muted/20" : ""}`,
@@ -1262,7 +1256,7 @@ function GapsPage() {
                                                         children: gap.employee
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 346,
+                                                        lineNumber: 339,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1272,7 +1266,7 @@ function GapsPage() {
                                                                 children: gap.skill
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                                lineNumber: 348,
+                                                                lineNumber: 341,
                                                                 columnNumber: 27
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1280,13 +1274,13 @@ function GapsPage() {
                                                                 children: gap.skillCode
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                                lineNumber: 349,
+                                                                lineNumber: 342,
                                                                 columnNumber: 27
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 347,
+                                                        lineNumber: 340,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1294,7 +1288,7 @@ function GapsPage() {
                                                         children: gap.requiredLevel
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 351,
+                                                        lineNumber: 344,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1302,7 +1296,7 @@ function GapsPage() {
                                                         children: gap.currentLevel
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 352,
+                                                        lineNumber: 345,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1310,7 +1304,7 @@ function GapsPage() {
                                                         children: getSeverityBadge(gap.severity)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 353,
+                                                        lineNumber: 346,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1318,34 +1312,34 @@ function GapsPage() {
                                                         children: gap.suggestedAction
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                                        lineNumber: 354,
+                                                        lineNumber: 347,
                                                         columnNumber: 25
                                                     }, this)
                                                 ]
                                             }, `${gap.employeeId}-${gap.skillCode}-${index}`, true, {
                                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                                lineNumber: 341,
+                                                lineNumber: 334,
                                                 columnNumber: 23
                                             }, this))
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/gaps/page.tsx",
-                                        lineNumber: 332,
+                                        lineNumber: 325,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/gaps/page.tsx",
-                                lineNumber: 309,
+                                lineNumber: 302,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/gaps/page.tsx",
-                            lineNumber: 308,
+                            lineNumber: 301,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/gaps/page.tsx",
-                        lineNumber: 307,
+                        lineNumber: 300,
                         columnNumber: 11
                     }, this)
                 ]
@@ -1359,7 +1353,7 @@ function GapsPage() {
                             className: "h-12 w-12 mx-auto text-muted-foreground/50 mb-4"
                         }, void 0, false, {
                             fileName: "[project]/app/app/gaps/page.tsx",
-                            lineNumber: 368,
+                            lineNumber: 361,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1367,24 +1361,24 @@ function GapsPage() {
                             children: 'Select a position and click "Generate Gaps" to analyze tomorrow\'s skill coverage.'
                         }, void 0, false, {
                             fileName: "[project]/app/app/gaps/page.tsx",
-                            lineNumber: 369,
+                            lineNumber: 362,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/gaps/page.tsx",
-                    lineNumber: 367,
+                    lineNumber: 360,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/gaps/page.tsx",
-                lineNumber: 366,
+                lineNumber: 359,
                 columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/app/gaps/page.tsx",
-        lineNumber: 176,
+        lineNumber: 169,
         columnNumber: 5
     }, this);
 }

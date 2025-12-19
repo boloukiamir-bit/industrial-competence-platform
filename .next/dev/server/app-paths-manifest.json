@@ -1,5 +1,5 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
   "/app/competence-matrix/page": "app/app/competence-matrix/page.js",
-  "/app/demo-center/page": "app/app/demo-center/page.js",
-  "/login/page": "app/login/page.js"
+  "/app/manager/risks/page": "app/app/manager/risks/page.js"
 }
