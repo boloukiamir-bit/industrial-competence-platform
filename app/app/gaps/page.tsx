@@ -19,6 +19,7 @@ import {
   Lightbulb,
   RefreshCw
 } from "lucide-react";
+import { isDemoMode } from "@/lib/demoRuntime";
 
 interface GapRow {
   employee: string;
@@ -50,14 +51,6 @@ const demoGapsData: GapRow[] = [
   { employee: "Maria Svensson", employeeId: "E1003", skill: "Truck A1 License", skillCode: "TRUCK_A1", requiredLevel: 3, currentLevel: 2, severity: "GAP", suggestedAction: "Train" },
   { employee: "Anna Lindberg", employeeId: "E1001", skill: "Pressline A", skillCode: "PRESS_A", requiredLevel: 4, currentLevel: 3, severity: "OK", suggestedAction: "No action" },
 ];
-
-function isDemoMode(): boolean {
-  if (typeof window !== "undefined") {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("demo") === "true") return true;
-  }
-  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-}
 
 function computeSummary(gaps: GapRow[]): GapSummary {
   const riskEmployees = new Set(

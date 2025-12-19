@@ -54,11 +54,72 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
     return found ? found.level : 0;
   }
 
+  function exportToCSV() {
+    const headers = ["Employee", ...skills.map(s => s.code)];
+    const rows = employees.map(emp => [
+      emp.name,
+      ...skills.map(s => getSkillLevel(emp.id, s.id).toString())
+    ]);
+    
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(r => r.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `competence-matrix-${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6" data-testid="heading-competence-matrix">
-        Competence Matrix
-      </h1>
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white" data-testid="heading-competence-matrix">
+          Competence Matrix
+        </h1>
+        <div className="flex items-center gap-2">
+          <a
+            href="/app/admin/competence"
+            className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            data-testid="button-edit-requirements"
+          >
+            Edit Requirements
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              const headers = ["Employee", ...skills.map(s => s.code)];
+              const rows = employees.map(emp => [
+                emp.name,
+                ...skills.map(s => getSkillLevel(emp.id, s.id).toString())
+              ]);
+              const csvContent = [
+                headers.join(","),
+                ...rows.map(r => r.map(cell => `"${cell}"`).join(","))
+              ].join("\n");
+              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.setAttribute("href", url);
+              link.setAttribute("download", `competence-matrix-${new Date().toISOString().slice(0, 10)}.csv`);
+              link.style.visibility = "hidden";
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            data-testid="button-export-csv"
+          >
+            Export CSV
+          </button>
+        </div>
+      </div>
 
       <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-4">
         <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">

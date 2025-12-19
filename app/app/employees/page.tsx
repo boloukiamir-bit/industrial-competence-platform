@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { COPY } from "@/lib/copy";
-import { isDemoMode, DEMO_EMPLOYEES } from "@/lib/demoData";
+import { isDemoMode, getDemoEmployees } from "@/lib/demoRuntime";
 import { useOrg } from "@/hooks/useOrg";
 import type { Employee } from "@/types/domain";
 
@@ -23,23 +23,7 @@ export default function EmployeesPage() {
   useEffect(() => {
     async function loadEmployees() {
       if (isDemoMode()) {
-        setEmployees(
-          DEMO_EMPLOYEES.map((e) => ({
-            id: e.id,
-            name: e.name,
-            firstName: e.firstName,
-            lastName: e.lastName,
-            employeeNumber: e.employeeNumber,
-            email: e.email,
-            role: e.role,
-            line: e.line,
-            team: e.team,
-            startDate: e.startDate,
-            isActive: e.isActive,
-            country: "Sweden",
-            employmentType: "permanent",
-          }))
-        );
+        setEmployees(getDemoEmployees());
         setLoading(false);
         return;
       }

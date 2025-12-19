@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { getOrgTree, createOrgUnit } from "@/services/org";
 import { COPY } from "@/lib/copy";
-import { isDemoMode, DEMO_ORG_UNITS } from "@/lib/demoData";
+import { isDemoMode, getDemoOrgUnits } from "@/lib/demoRuntime";
 import { useOrg } from "@/hooks/useOrg";
 import type { OrgUnit } from "@/types/domain";
 
@@ -142,21 +142,11 @@ export default function OrgOverviewPage() {
 
   const loadData = async () => {
     if (isDemoMode()) {
-      const demoUnits: OrgUnit[] = DEMO_ORG_UNITS.filter(u => !u.parentId).map(u => ({
-        id: u.id,
-        name: u.name,
-        code: u.code,
-        type: u.type as OrgUnit['type'],
-        employeeCount: u.employeeCount,
-        createdAt: new Date().toISOString(),
-        children: DEMO_ORG_UNITS.filter(c => c.parentId === u.id).map(c => ({
-          id: c.id,
-          name: c.name,
-          code: c.code,
-          type: c.type as OrgUnit['type'],
-          employeeCount: c.employeeCount,
-          createdAt: new Date().toISOString(),
-        })),
+      const allUnits = getDemoOrgUnits();
+      const rootUnits = allUnits.filter(u => !u.parentId);
+      const demoUnits: OrgUnit[] = rootUnits.map(u => ({
+        ...u,
+        children: allUnits.filter(c => c.parentId === u.id),
       }));
       setOrgTree(demoUnits);
       setLoading(false);

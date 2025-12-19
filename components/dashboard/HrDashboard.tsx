@@ -11,10 +11,12 @@ import {
   FileCheck, 
   Workflow,
   ArrowRight,
-  Plus
+  Plus,
+  TrendingUp
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { SetupProgressCard } from "@/components/SetupProgressCard";
+import { isDemoMode, getDemoMetrics } from "@/lib/demoRuntime";
 
 type DashboardData = {
   totalHeadcount: number;
@@ -23,6 +25,8 @@ type DashboardData = {
   expiringContracts: number;
   openWorkflows: number;
   riskUnits: { unitName: string; riskIndex: number; criticalCount: number }[];
+  avgReadiness?: number;
+  topGapSkill?: string;
 };
 
 export function HrDashboard() {
@@ -31,6 +35,26 @@ export function HrDashboard() {
 
   useEffect(() => {
     async function loadDashboard() {
+      if (isDemoMode()) {
+        const demoMetrics = getDemoMetrics();
+        setData({
+          totalHeadcount: demoMetrics.totalEmployees,
+          overdueEvents: 3,
+          dueSoonEvents: 5,
+          expiringContracts: 2,
+          openWorkflows: 4,
+          avgReadiness: demoMetrics.avgReadiness,
+          topGapSkill: demoMetrics.topGapSkill,
+          riskUnits: [
+            { unitName: "Pressline 1", riskIndex: 0.35, criticalCount: 2 },
+            { unitName: "Assembly", riskIndex: 0.25, criticalCount: 1 },
+            { unitName: "Logistics", riskIndex: 0.15, criticalCount: 1 },
+          ],
+        });
+        setLoading(false);
+        return;
+      }
+
       const today = new Date().toISOString().split("T")[0];
       const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       const ninetyDaysLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];

@@ -1,0 +1,126 @@
+You are the lead engineer. Do NOT delete or remove any modules/pages. Keep everything in the navigation. Your mission is to make a flawless demo for a customer today by implementing a Golden Path and ensuring every page has buttons and clear logic.
+
+0) Definition of Done (customer demo must pass)
+
+With admin@nadiplan.test:
+
+Dashboard shows non-zero demo metrics
+
+Employees page shows a list + buttons (Import CSV, Add Employee)
+
+Competence Matrix renders rows/columns with status badges
+
+Tomorrow’s Gaps: Generate works, shows summary + table
+
+Export CSV downloads a file
+
+No red “Failed to load …” banners on core pages
+
+No page shows empty/blank without a reason banner and CTA
+
+1) Implement “Demo Shield” (do not rely on DB for demo)
+
+Create lib/demoRuntime.ts:
+
+isDemoMode() controlled by env NEXT_PUBLIC_DEMO_MODE OR query param ?demo=1
+
+getDemoOrg(), getDemoEmployees(), getDemoUnits(), getDemoSkills(), getDemoPositions(), getDemoRequirements()
+
+One consistent dataset used across Dashboard/Employees/Org/Matrix/Gaps
+
+Update all core pages to use a single service layer services/data.ts:
+
+If demo mode → return demo data (no Supabase calls)
+
+Else → use Supabase (org-scoped)
+
+Core pages: Dashboard, Employees, Organization, Competence Matrix, Tomorrow’s Gaps, Admin Users, Admin Audit.
+
+2) Add “Demo Control Center” page (so Amir can guarantee demo works)
+
+Create /app/demo-center:
+
+Shows demo mode status
+
+Buttons:
+
+“Enable demo mode for this session”
+
+“Reset demo data”
+
+“Copy demo script”
+
+Show the exact 6-step demo checklist
+
+Add a persistent “Demo mode active” banner with link to Demo Center.
+
+3) Fix missing buttons (absolute requirement)
+Employees
+
+Top-right: Primary “Import CSV”, Secondary “Add employee”
+
+Empty state must contain these buttons too
+
+Organization
+
+Top-right: Primary “Create unit”
+
+Empty state: Create unit CTA
+
+Competence Matrix
+
+Top-right: “Edit requirements” + “Export CSV”
+
+Tomorrow’s Gaps
+
+Inputs + Primary button “Generate gaps”
+
+If requirements missing: show banner with CTA to “Define requirements”
+
+4) Implement “Reason Banners” (stop confusing empty screens)
+
+Create a ReasonBanner component:
+
+states: Missing employees / Missing requirements / Demo mode / Permission issue / Coming soon
+Use it on all pages that can be empty.
+
+Rule: Never show “No data found” if there was an error. Errors show error state with Retry + Open Debug.
+
+5) Keep all modules, but make non-core modules demo-safe
+
+Do NOT delete modules. For pages without functionality:
+
+Keep them accessible
+
+Show a “Not configured yet” card with:
+
+What this module will do (1 sentence)
+
+CTA: “Return to Setup” or “See Demo Center”
+No broken UI, no blank pages.
+
+6) Make Tomorrow’s Gaps demo-perfect
+
+On /app/gaps:
+
+Generate uses demo requirements + demo employees in demo mode
+
+Output:
+
+“What to fix” summary (top 3 missing skills + at-risk count)
+
+Gaps table with severity and suggested action
+
+Export CSV button that exports table rows shown
+Filename: gaps-YYYY-MM-DD.csv
+
+7) Verify and deliver proof
+
+After implementation:
+
+Provide 3 screenshots: Dashboard, Matrix, Gaps (with summary + table)
+
+Confirm demo flow works end-to-end in DEMO_MODE without Supabase calls
+
+Ensure no core page displays red error banners
+Do not ask for confirmation. Execute.
