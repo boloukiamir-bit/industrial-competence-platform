@@ -378,7 +378,7 @@ __turbopack_context__.s([
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/supabaseClient.ts [app-client] (ecmascript)");
 ;
 async function getOrgUnits(orgId) {
-    let query = __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("org_units").select("*, manager:manager_employee_id(name)").order("name");
+    let query = __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("org_units").select("*").order("name");
     if (orgId) {
         query = query.eq("org_id", orgId);
     }
@@ -394,13 +394,13 @@ async function getOrgUnits(orgId) {
             parentId: row.parent_id || undefined,
             type: row.type,
             managerEmployeeId: row.manager_employee_id || undefined,
-            managerName: row.manager?.name || undefined,
+            managerName: undefined,
             createdAt: row.created_at
         }));
 }
 async function getOrgTree(orgId) {
-    let unitsQuery = __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("org_units").select("*, manager:manager_employee_id(name)").order("name");
-    let employeesQuery = __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id, name, role, org_unit_id").eq("is_active", true);
+    let unitsQuery = __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("org_units").select("*").order("name");
+    let employeesQuery = __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabaseClient$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["supabase"].from("employees").select("id, name, role").eq("is_active", true);
     if (orgId) {
         unitsQuery = unitsQuery.eq("org_id", orgId);
         employeesQuery = employeesQuery.eq("org_id", orgId);
@@ -420,7 +420,7 @@ async function getOrgTree(orgId) {
             parentId: row.parent_id || undefined,
             type: row.type,
             managerEmployeeId: row.manager_employee_id || undefined,
-            managerName: row.manager?.name || undefined,
+            managerName: undefined,
             createdAt: row.created_at,
             children: [],
             employees: [],
@@ -434,7 +434,7 @@ async function getOrgTree(orgId) {
             line: "",
             team: "",
             employmentType: "permanent",
-            orgUnitId: row.org_unit_id || undefined,
+            orgUnitId: undefined,
             isActive: true
         }));
     const unitMap = new Map();

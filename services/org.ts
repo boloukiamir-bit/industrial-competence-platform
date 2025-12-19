@@ -4,7 +4,7 @@ import type { OrgUnit, Employee, OrgUnitType } from "@/types/domain";
 export async function getOrgUnits(orgId?: string): Promise<OrgUnit[]> {
   let query = supabase
     .from("org_units")
-    .select("*, manager:manager_employee_id(name)")
+    .select("*")
     .order("name");
 
   if (orgId) {
@@ -25,14 +25,14 @@ export async function getOrgUnits(orgId?: string): Promise<OrgUnit[]> {
     parentId: row.parent_id || undefined,
     type: row.type as OrgUnitType | undefined,
     managerEmployeeId: row.manager_employee_id || undefined,
-    managerName: row.manager?.name || undefined,
+    managerName: undefined,
     createdAt: row.created_at,
   }));
 }
 
 export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
-  let unitsQuery = supabase.from("org_units").select("*, manager:manager_employee_id(name)").order("name");
-  let employeesQuery = supabase.from("employees").select("id, name, role, org_unit_id").eq("is_active", true);
+  let unitsQuery = supabase.from("org_units").select("*").order("name");
+  let employeesQuery = supabase.from("employees").select("id, name, role").eq("is_active", true);
   
   if (orgId) {
     unitsQuery = unitsQuery.eq("org_id", orgId);
@@ -53,7 +53,7 @@ export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
     parentId: row.parent_id || undefined,
     type: row.type as OrgUnitType | undefined,
     managerEmployeeId: row.manager_employee_id || undefined,
-    managerName: row.manager?.name || undefined,
+    managerName: undefined,
     createdAt: row.created_at,
     children: [],
     employees: [],
@@ -68,7 +68,7 @@ export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
     line: "",
     team: "",
     employmentType: "permanent",
-    orgUnitId: row.org_unit_id || undefined,
+    orgUnitId: undefined,
     isActive: true,
   }));
 
