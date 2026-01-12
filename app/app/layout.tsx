@@ -22,7 +22,8 @@ import {
   Wrench,
   TrendingUp,
   Clipboard,
-  Bug
+  Bug,
+  Gauge
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -40,12 +41,13 @@ type NavItem = {
 };
 
 const coreNavItems: NavItem[] = [
+  { name: "Cockpit", href: "/app/cockpit", icon: Gauge },
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
-  { name: "Setup", href: "/app/setup", icon: Clipboard },
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
   { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
   { name: "Tomorrow's Gaps", href: "/app/gaps", icon: TrendingUp },
+  { name: "Setup", href: "/app/setup", icon: Clipboard },
   { name: "Admin", href: "/app/admin", icon: Wrench, hrAdminOnly: true },
 ];
 

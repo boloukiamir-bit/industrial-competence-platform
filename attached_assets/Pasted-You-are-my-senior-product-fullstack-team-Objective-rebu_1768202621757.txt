@@ -1,0 +1,134 @@
+You are my senior product+fullstack team. Objective: rebuild the current app into a “Production Leader OS” with a premium, Apple-level demo UI. Focus on ZERO-admin, day-control cockpit + people/compliance + safety culture. We will deliver in milestones with strict acceptance criteria.
+
+TECH STACK (do not change): Next.js App Router + Tailwind + Supabase (Postgres + RLS) + existing services layer.
+RULES:
+- No “preview-only” screens. Everything must be clickable in the deployed environment.
+- No pricing inside the authenticated app. Pricing only on public landing page.
+- Every milestone must be deployed with a public URL + a test account.
+- All new tables must include org_id and created_at/updated_at.
+- UI must be visually premium: clean typography, spacing, subtle shadows, consistent cards, elegant empty states, smooth hover states, responsive layout.
+- Use a design system: define tokens (spacing, radius, shadows, font sizes) and reuse components.
+
+========================================
+MILESTONE 1 (DEMO READY) — “TODAY COCKPIT” (5 business days max)
+========================================
+Deliver a new default post-login page: /app/app/cockpit (or /app/app/today). This is the main demo page.
+
+A) PAGE LAYOUT (premium UI)
+- Top header: “Today” + date + shift selector (Day/Evening/Night) + line selector (optional).
+- Main grid (responsive):
+  1) Top 5 Actions (most important)
+  2) Staffing Status (red/yellow/green by station)
+  3) Compliance Radar (expiring soon / overdue)
+  4) Safety Pulse (observations + open safety actions)
+  5) Plan vs Actual (can be mock for now but must look real)
+
+B) WIDGET REQUIREMENTS
+1) Top 5 Actions
+- Data source: actions table (new if missing).
+- Sort by: severity DESC, due_date ASC, status=open.
+- One-click: mark as done; open detail drawer.
+- Each action shows: title, domain (Ops/People/Safety), owner, due date, impact badge.
+
+2) Staffing Status
+- Show stations as cards in a board style:
+  - Station name, assigned employee, status chip (Green/Yellow/Red), quick “suggest replacement” button (can be stub in Milestone 1).
+- Status logic (simple for demo):
+  - Green: assigned and compliance valid
+  - Yellow: assigned but compliance expiring <=30 days
+  - Red: unassigned OR overdue compliance
+- Data source: stations + shift_assignments + compliance_items.
+
+3) Compliance Radar
+- List employees with items expiring within 30 days or overdue.
+- Filters: All / Expiring / Overdue.
+- One-click: create an action “Renew training/cert”.
+
+4) Safety Pulse
+- Show latest safety observations (last 7 days) and open safety actions.
+- One-click: create observation.
+- Severity levels: Low/Medium/High.
+
+5) Plan vs Actual
+- Use mock dataset for demo now.
+- UI must look premium with a simple chart (Recharts ok).
+- Later we connect real data; for now: display “Today plan: X / Actual: Y”.
+
+C) AUTH + NAV
+- After login redirect to Cockpit by default.
+- Navigation should include:
+  - Cockpit (Today)
+  - Staffing Board (placeholder link ok)
+  - People (placeholder link ok)
+  - Competence Matrix (existing)
+  - Workflows (existing)
+- Remove any pricing content from logged-in area.
+
+D) DATA
+- Create seed/demo data for one org so the demo looks alive:
+  - 10 employees
+  - 6 stations
+  - 1 shift with assignments
+  - compliance items with a mix of valid/expiring/overdue
+  - 8 actions (mix of Ops/People/Safety)
+  - 5 safety observations
+
+E) ACCEPTANCE CRITERIA (Milestone 1)
+- Deployed URL accessible.
+- Login works with test account.
+- Cockpit loads with real data (seeded) and zero blocking console errors.
+- All buttons/drawers work (create action, mark done, create observation).
+- UI is consistent, premium, responsive.
+- Pricing is ONLY on landing page, never inside the app.
+
+========================================
+SQL / SUPABASE (Milestone 1) — Create these tables
+========================================
+Create migrations for:
+- actions
+- compliance_items
+- stations
+- shifts
+- shift_assignments
+- safety_observations
+
+Also prepare placeholders for later milestones (can be created now if easy):
+- rehab_cases (with RLS)
+- station_role_requirements
+
+IMPORTANT: add org_id to all new tables.
+
+========================================
+MILESTONE 2 — Staffing Board MVP
+========================================
+- Build /app/app/staffing as a board: stations -> assigned employees
+- Add “Suggest replacement” (logic: employee has required skill level + compliance valid)
+- Requires station_role_requirements + employee_skills + role_skill_requirements integration
+
+========================================
+MILESTONE 3 — People Care & Rehab (RLS)
+========================================
+- Build /app/app/people with:
+  - Rehab board: status, next_action_date, owner, notes
+  - Strict RLS:
+    - HR can see all in org
+    - Manager can see direct reports only
+- Create actions from rehab items.
+
+========================================
+MILESTONE 4 — Safety Culture Loop
+========================================
+- Safety observations -> actions -> closure metrics
+- “Daily safety pulse” embedded in cockpit
+
+========================================
+DELIVERY FORMAT
+========================================
+For each milestone deliver:
+1) Deployed URL + test login credentials
+2) Short changelog
+3) List of migrations applied
+4) Screenshots (optional)
+5) Known issues (must be non-blocking)
+
+Start now with Milestone 1. No scope creep until Milestone 1 passes acceptance.

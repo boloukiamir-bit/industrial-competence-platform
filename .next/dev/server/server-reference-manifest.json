@@ -1,21 +1,5 @@
 {
-  "node": {
-    "40283ceac9500e8f49cee10418d6ad6684fbd18e4b": {
-      "workers": {
-        "app/app/import-employees/page": {
-          "moduleId": "[project]/.next-internal/server/app/app/import-employees/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/app/import-employees/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
-          "async": false,
-          "exportedName": "importEmployeesFromCsv",
-          "filename": "app/app/import-employees/actions.ts"
-        }
-      },
-      "layer": {
-        "app/app/import-employees/page": "action-browser"
-      },
-      "filename": "app/app/import-employees/actions.ts",
-      "exportedName": "importEmployeesFromCsv"
-    }
-  },
+  "node": {},
   "edge": {},
-  "encryptionKey": "OKNFC+HYFnWAVl2vw+oT5hVjWMe5ITldrtqRSR8e8Fw="
+  "encryptionKey": "ir5PiCSy63dj+4Pihi8C30HuikGH1cGtFPmz1uCn+jM="
 }
