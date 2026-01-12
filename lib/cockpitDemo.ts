@@ -152,3 +152,156 @@ export function getDemoPlanVsActual(): PlanVsActual[] {
     { label: "Sun", plan: 60, actual: 58 },
   ];
 }
+
+import type { PriorityItem, ActivityLogEntry, EmployeeSuggestion, HandoverItem } from "@/types/cockpit";
+
+export function getDemoPriorityItems(): PriorityItem[] {
+  const unassignedStation = DEMO_SHIFT_ASSIGNMENTS.find(a => a.status === "unassigned");
+  const station = unassignedStation ? DEMO_STATIONS.find(s => s.id === unassignedStation.stationId) : null;
+  
+  const items: PriorityItem[] = [];
+
+  if (station) {
+    items.push({
+      id: "priority-1",
+      type: "staffing",
+      title: `${station.name} has no operator`,
+      impact: "Production line at risk of stopping",
+      severity: "critical",
+      linkedEntity: { type: "station", id: station.id, name: station.name },
+    });
+  }
+
+  const expiredCompliance = DEMO_COMPLIANCE.filter(c => c.status === "expired");
+  for (const comp of expiredCompliance.slice(0, 2)) {
+    items.push({
+      id: `priority-comp-${comp.id}`,
+      type: "compliance",
+      title: `${comp.employeeName}: ${comp.title} expired`,
+      impact: "Cannot work at licensed stations",
+      severity: "high",
+      linkedEntity: { type: "employee", id: comp.employeeId, name: comp.employeeName || "" },
+    });
+  }
+
+  const highSeveritySafety = DEMO_SAFETY_OBSERVATIONS.filter(o => o.severity === "high" && o.status === "open");
+  for (const obs of highSeveritySafety.slice(0, 2)) {
+    items.push({
+      id: `priority-safety-${obs.id}`,
+      type: "safety",
+      title: obs.title,
+      impact: obs.description || "Safety risk identified",
+      severity: "high",
+      linkedEntity: obs.stationId ? { type: "station", id: obs.stationId, name: obs.stationName || "" } : undefined,
+    });
+  }
+
+  return items.slice(0, 5);
+}
+
+export function getDemoActivityLog(actionId: string): ActivityLogEntry[] {
+  const now = new Date();
+  return [
+    {
+      id: `log-${actionId}-1`,
+      actionId,
+      type: "created",
+      description: "Action created",
+      userName: "System",
+      createdAt: new Date(now.getTime() - 86400000 * 2).toISOString(),
+    },
+    {
+      id: `log-${actionId}-2`,
+      actionId,
+      type: "reassigned",
+      description: "Reassigned from Maria Svensson to Johan Nilsson",
+      userName: "Anna Lindberg",
+      createdAt: new Date(now.getTime() - 86400000).toISOString(),
+    },
+    {
+      id: `log-${actionId}-3`,
+      actionId,
+      type: "updated",
+      description: "Added impact description",
+      userName: "Johan Nilsson",
+      createdAt: new Date(now.getTime() - 3600000).toISOString(),
+    },
+  ];
+}
+
+export function getDemoEmployeeSuggestions(stationId: string): EmployeeSuggestion[] {
+  const assignedEmployeeIds = DEMO_SHIFT_ASSIGNMENTS
+    .filter(a => a.employeeId && a.stationId !== stationId)
+    .map(a => a.employeeId);
+
+  const availableEmployees = DEMO_EMPLOYEES_COCKPIT.filter(
+    e => !assignedEmployeeIds.includes(e.id)
+  );
+
+  return availableEmployees.slice(0, 3).map((emp, idx) => {
+    const compliance = DEMO_COMPLIANCE.find(c => c.employeeId === emp.id);
+    const hasComplianceIssue = compliance?.status === "expired";
+
+    return {
+      employee: emp,
+      score: 95 - idx * 12 - (hasComplianceIssue ? 20 : 0),
+      complianceValid: !hasComplianceIssue,
+      skillMatch: 90 - idx * 8,
+      availability: idx === 0 ? "available" : idx === 1 ? "available" : "busy",
+    } as EmployeeSuggestion;
+  });
+}
+
+export function getDemoHandoverItems(): { openLoops: HandoverItem[]; decisions: HandoverItem[]; risks: HandoverItem[] } {
+  const now = new Date();
+  
+  const openLoops: HandoverItem[] = DEMO_ACTIONS
+    .filter(a => a.status === "open")
+    .slice(0, 3)
+    .map(a => ({
+      id: `loop-${a.id}`,
+      type: "open_loop" as const,
+      title: a.title,
+      description: a.description,
+      severity: a.severity === "critical" ? "high" : a.severity === "high" ? "medium" : "low",
+      createdAt: a.createdAt,
+    }));
+
+  const decisions: HandoverItem[] = [
+    {
+      id: "dec-1",
+      type: "decision",
+      title: "Approved overtime for Assembly team",
+      description: "2 hours extra to complete rush order",
+      createdAt: new Date(now.getTime() - 3600000 * 4).toISOString(),
+    },
+    {
+      id: "dec-2",
+      type: "decision",
+      title: "Rerouted quality checks to Station 5",
+      description: "Due to maintenance on Station 3",
+      createdAt: new Date(now.getTime() - 3600000 * 2).toISOString(),
+    },
+  ];
+
+  const risks: HandoverItem[] = [
+    {
+      id: "risk-1",
+      type: "risk",
+      title: "Material shortage expected",
+      description: "Steel plates delivery delayed until tomorrow",
+      severity: "high",
+      createdAt: now.toISOString(),
+    },
+    {
+      id: "risk-2",
+      type: "risk",
+      title: "Equipment maintenance due",
+      description: "Pressline B calibration needed this week",
+      severity: "medium",
+      createdAt: now.toISOString(),
+    },
+  ];
+
+  return { openLoops, decisions, risks };
+}

@@ -130,3 +130,47 @@ export type PlanVsActual = {
   plan: number;
   actual: number;
 };
+
+export type PriorityItem = {
+  id: string;
+  type: 'staffing' | 'compliance' | 'safety';
+  title: string;
+  impact: string;
+  severity: 'high' | 'critical';
+  linkedEntity?: {
+    type: 'station' | 'employee';
+    id: string;
+    name: string;
+  };
+  actionId?: string;
+};
+
+export type ActivityLogEntry = {
+  id: string;
+  actionId: string;
+  type: 'created' | 'updated' | 'reassigned' | 'due_date_changed' | 'completed';
+  description: string;
+  userId?: string;
+  userName?: string;
+  createdAt: string;
+};
+
+export type EmployeeSuggestion = {
+  employee: {
+    id: string;
+    name: string;
+  };
+  score: number;
+  complianceValid: boolean;
+  skillMatch: number;
+  availability: 'available' | 'busy' | 'off';
+};
+
+export type HandoverItem = {
+  id: string;
+  type: 'open_loop' | 'decision' | 'risk';
+  title: string;
+  description?: string;
+  severity?: 'low' | 'medium' | 'high';
+  createdAt: string;
+};

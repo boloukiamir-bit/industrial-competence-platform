@@ -10,7 +10,7 @@ import type { Action } from "@/types/cockpit";
 interface ActionsWidgetProps {
   actions: Action[];
   onMarkDone: (actionId: string) => void;
-  onViewDetails?: (action: Action) => void;
+  onActionClick?: (action: Action) => void;
 }
 
 const domainIcons: Record<string, React.ReactNode> = {
@@ -47,7 +47,7 @@ function formatDueDate(dueDate?: string): string {
   return `${diffDays}d`;
 }
 
-export function ActionsWidget({ actions, onMarkDone, onViewDetails }: ActionsWidgetProps) {
+export function ActionsWidget({ actions, onMarkDone, onActionClick }: ActionsWidgetProps) {
   const [completing, setCompleting] = useState<string | null>(null);
 
   const handleMarkDone = async (actionId: string) => {
@@ -75,7 +75,7 @@ export function ActionsWidget({ actions, onMarkDone, onViewDetails }: ActionsWid
             <div
               key={action.id}
               className="group flex items-start gap-3 p-3 rounded-lg border border-border/50 hover-elevate cursor-pointer transition-all"
-              onClick={() => onViewDetails?.(action)}
+              onClick={() => onActionClick?.(action)}
               data-testid={`action-item-${action.id}`}
             >
               <div className="flex-1 min-w-0">
