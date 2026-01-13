@@ -1,0 +1,119 @@
+You are my senior fullstack/product team. We have successfully imported demo data into Supabase tables with prefix pl_* for org_id:
+f607f244-da91-41d9-a648-d02a1591105c
+
+Goal: Build a premium, Apple-level demo page that visualizes ALL lines -> machines -> staffing + planned hours for day/week, and supports daily attendance + auto-suggestion planning. This must feel like “God Mode” (decision engine), not a passive dashboard.
+
+NON-NEGOTIABLE RULES
+- Deployed URL + test login must work. No preview-only.
+- Premium UI: consistent card system, typography hierarchy, whitespace, hover states, skeleton loading, responsive.
+- No scope creep: deliver exactly what’s below.
+- Use our existing stack (Next.js App Router + Tailwind + Supabase). Reuse existing layout/components where possible.
+- The page must be fast (single query or view preferred).
+- All queries MUST filter by org_id = f607f244-da91-41d9-a648-d02a1591105c (until we add multi-org selection).
+
+========================================
+MILESTONE: LINE OVERVIEW (DEMO SELLER) — 3–5 days
+========================================
+
+1) Create page: /app/app/line-overview (add to left nav as “Line Overview”)
+This is the primary demo page for the customer request:
+“visualize all lines with personnel and planned hours day/week + who runs which machine”.
+
+2) UI/UX SPEC (must be beautiful)
+Top Bar:
+- Title: “Line Overview”
+- Date picker (default today)
+- Shift selector: Day / Evening / Night
+- Toggle: Day view / Week view
+- Right side KPI chips:
+  - Coverage % (assigned hours / required hours)
+  - Gaps (total missing hours)
+  - Overtime hours (from pl_overtime_overrides)
+  - Present headcount vs absent
+
+Body:
+- Render lines as sections. Each section has:
+  - Line header card: line name + summary metrics (required hours, assigned hours, gap)
+  - Machine grid beneath (cards):
+    - Machine code + name
+    - Required hours (from pl_machine_demand)
+    - Assigned hours (sum of pl_assignment_segments hours)
+    - Gap (required - assigned)
+    - Assigned people chips with time blocks (e.g. 07–11 Vangelis)
+    - Status chip:
+      - Green: gap <= 0
+      - Yellow: gap > 0 but <= 2 hours
+      - Red: gap > 2 hours OR no assignment segments
+    - Primary CTA per machine:
+      - “Assign” (opens assignment drawer)
+      - “Suggest” (runs auto-suggest and proposes best person)
+
+Right Drawer (universal):
+- Opens when clicking a machine card or Assign button
+- Shows:
+  - Machine details
+  - Demand for selected shift/date
+  - Current assignments (segments)
+  - Attendance list (present/partial only) quick pick
+  - Create/edit assignment segment (start_time, end_time, employee)
+  - Save -> writes to pl_assignment_segments
+
+3) DATA SOURCE (pl_* tables)
+Use these tables (already imported):
+- public.pl_lines
+- public.pl_machines (machines reference line)
+- public.pl_machine_demand (required_hours by date/shift/machine)
+- public.pl_attendance (present/absent/partial by date/shift/employee)
+- public.pl_assignment_segments (time blocks by date/shift/machine/employee)
+- public.pl_employees
+- public.pl_overtime_overrides
+
+Important: machine_code and employee_code exist in pl_* data. Join them consistently.
+
+4) WEEK VIEW REQUIREMENT
+When toggle is Week view:
+- Show week totals per line/machine:
+  - required_hours_week = sum(pl_machine_demand.required_hours) for Mon–Sun (or Mon–Fri if defined)
+  - assigned_hours_week = sum(segments)
+  - gap_week
+- UI can collapse machine details (optional) but must show line totals and top gaps.
+
+5) AUTO-SUGGEST (simple V1, demo-first)
+Add a “Suggest” button on each machine:
+Algorithm V1 (no skills yet):
+- Only consider employees with attendance status = present or partial for that date/shift
+- Exclude employees who are already fully booked (sum assigned hours >= 8, or for partial, within their window)
+- Prefer employees with fewer assigned hours (load balancing)
+- Return top 3 suggestions (show modal). One-click “Apply” creates a single segment filling the biggest gap:
+  - If gap >= 4 -> create 4-hour segment starting at shift start
+  - Else create segment equal to gap
+- Write to pl_assignment_segments
+
+We will add skill matrix matching in later milestone.
+
+6) QUALITY / POLISH
+- Skeleton loading for the grid
+- Empty states:
+  - No demand for date/shift -> show CTA “Import demand” (demo copy)
+  - No attendance -> show CTA “Set attendance”
+- No console errors, no broken joins, handle missing data gracefully.
+- Ensure it looks premium: soft shadows, rounded corners, consistent spacing.
+- Make it feel “2050”: quick, decisive, clean.
+
+7) ACCEPTANCE CRITERIA
+- Deployed URL + working login.
+- /app/app/line-overview loads for org_id f607f244-da91-41d9-a648-d02a1591105c.
+- Date + shift selection updates the view.
+- Day/Week toggle works.
+- Coverage %, gaps, overtime metrics show correctly.
+- Assign drawer can create/edit/delete segments (CRUD) and updates the UI instantly.
+- Suggest button returns top 3 options and Apply writes to DB.
+- Premium UI consistency + responsive layout.
+
+DELIVERABLES
+1) Deployed URL + test credentials
+2) Short changelog
+3) Any SQL views created (optional)
+4) Known issues (must be non-blocking)
+
+Start immediately with this milestone only.

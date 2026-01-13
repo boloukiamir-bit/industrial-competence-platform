@@ -84,5 +84,17 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - **Supabase Schema Cache:** The `min_headcount` column exists in the `positions` table but Supabase's PostgREST schema cache doesn't recognize it. This requires refreshing the schema cache through the Supabase dashboard (Database > API > Reload). The admin console currently excludes this field as a workaround.
 - **Supabase Schema Cache for other columns:** Same issue may affect `sort_order` on competence_groups and `active` on competences if the schema cache is stale.
 
+## Production Leader OS - Line Overview
+The Line Overview page (`/app/line-overview`) provides a "God Mode" visualization of all production lines, machines, and staffing:
+- **Top Bar:** Date picker, shift selector (Day/Evening/Night), Day/Week toggle
+- **KPI Chips:** Coverage %, Gap hours, Overtime hours, Present/Absent counts
+- **Lines as Sections:** Collapsible line cards with total metrics
+- **Machine Grid:** Cards showing required/assigned hours, gap, status (green/yellow/red), assigned people chips
+- **Assignment Drawer:** Right-side sheet for CRUD on pl_assignment_segments
+- **Auto-Suggest Modal:** V1 algorithm recommending top 3 available employees based on workload
+
+Data from pl_* tables (pl_lines, pl_machines, pl_machine_demand, pl_attendance, pl_assignment_segments, pl_employees, pl_overtime_overrides).
+Hardcoded org_id: f607f244-da91-41d9-a648-d02a1591105c
+
 ## External Dependencies
 - **Supabase:** Used for database (PostgreSQL) and authentication services.

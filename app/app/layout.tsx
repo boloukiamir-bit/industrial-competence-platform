@@ -23,7 +23,8 @@ import {
   TrendingUp,
   Clipboard,
   Bug,
-  Gauge
+  Gauge,
+  Factory
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -42,6 +43,7 @@ type NavItem = {
 
 const coreNavItems: NavItem[] = [
   { name: "Cockpit", href: "/app/cockpit", icon: Gauge },
+  { name: "Line Overview", href: "/app/line-overview", icon: Factory },
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
