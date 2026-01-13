@@ -62,6 +62,8 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 ## SQL Migrations
 - `sql/create_profiles_table.sql` - User profiles table
 - `sql/002_multi_tenant_rls.sql` - Organizations, memberships, invites, audit_logs with RLS
+- `sql/007_production_leader_schema.sql` - Production Leader OS tables with RLS (departments, lines, machines, employees, shifts, crews, attendance, assignments)
+- `sql/008_plannja_demo_data.sql` - Demo data for Plannja Järnforsen organization
 
 ## Testing Infrastructure
 - **Unit Tests:** Jest with ts-jest for TypeScript support (jest.config.cjs)
