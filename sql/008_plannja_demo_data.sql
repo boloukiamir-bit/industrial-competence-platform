@@ -6,22 +6,8 @@
 
 DO $$
 DECLARE
-  v_org_id uuid;
+  v_org_id uuid := 'f607f244-da91-41d9-a648-d02a1591105c'::uuid;
 BEGIN
-  -- Lookup or create organization
-  SELECT id INTO v_org_id
-  FROM public.organizations
-  WHERE name ILIKE 'Plannja Järnforsen'
-  LIMIT 1;
-
-  -- Create the organization if it doesn't exist
-  IF v_org_id IS NULL THEN
-    INSERT INTO public.organizations (name, slug)
-    VALUES ('Plannja Järnforsen', 'plannja-jarnforsen')
-    RETURNING id INTO v_org_id;
-    
-    RAISE NOTICE 'Created organization Plannja Järnforsen with id: %', v_org_id;
-  END IF;
 
   -- ========== DEPARTMENTS ==========
   INSERT INTO public.pl_departments (org_id, department_code, department_name, notes) VALUES
