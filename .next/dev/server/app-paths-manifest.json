@@ -1,4 +1,4 @@
 {
-  "/app/line-overview/page": "app/app/line-overview/page.js",
-  "/login/page": "app/login/page.js"
+  "/api/line-overview/route": "app/api/line-overview/route.js",
+  "/app/line-overview/page": "app/app/line-overview/page.js"
 }
