@@ -8,14 +8,19 @@ DO $$
 DECLARE
   v_org_id uuid;
 BEGIN
-  -- Lookup organization by name
+  -- Lookup or create organization
   SELECT id INTO v_org_id
   FROM public.organizations
   WHERE name ILIKE 'Plannja Järnforsen'
   LIMIT 1;
 
+  -- Create the organization if it doesn't exist
   IF v_org_id IS NULL THEN
-    RAISE EXCEPTION 'Organization not found: Plannja Järnforsen. Create it in organizations first.';
+    INSERT INTO public.organizations (name, slug)
+    VALUES ('Plannja Järnforsen', 'plannja-jarnforsen')
+    RETURNING id INTO v_org_id;
+    
+    RAISE NOTICE 'Created organization Plannja Järnforsen with id: %', v_org_id;
   END IF;
 
   -- ========== DEPARTMENTS ==========
