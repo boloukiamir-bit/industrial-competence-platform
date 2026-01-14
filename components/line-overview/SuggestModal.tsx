@@ -56,9 +56,9 @@ export function SuggestModal({
     setLoading(true);
     try {
       const results = await getSuggestions(
+        machine.machine.machineCode,
         planDate,
         shiftType,
-        machine.machine.machineCode,
         machine.gap
       );
       setSuggestions(results);
@@ -84,14 +84,14 @@ export function SuggestModal({
     const endTime = `${endHour.toString().padStart(2, "0")}:00`;
 
     try {
-      const result = await createAssignment(
-        planDate,
-        shiftType,
-        machine.machine.machineCode,
-        suggestion.employee.employeeCode,
-        shiftStart,
-        endTime
-      );
+      const result = await createAssignment({
+        date: planDate,
+        shift: shiftType,
+        machineCode: machine.machine.machineCode,
+        employeeCode: suggestion.employee.employeeCode,
+        startTime: shiftStart,
+        endTime: endTime,
+      });
 
       if (result) {
         toast({

@@ -1343,7 +1343,14 @@ function AssignmentDrawer({ open, onOpenChange, machine, planDate, shiftType, em
         }
         setSaving(true);
         try {
-            const result = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$lineOverview$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["createAssignment"])(planDate, shiftType, machine.machine.machineCode, newEmployee, newStartTime, newEndTime);
+            const result = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$lineOverview$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["createAssignment"])({
+                date: planDate,
+                shift: shiftType,
+                machineCode: machine.machine.machineCode,
+                employeeCode: newEmployee,
+                startTime: newStartTime,
+                endTime: newEndTime
+            });
             if (result) {
                 toast({
                     title: "Assignment created"
@@ -2208,7 +2215,7 @@ function SuggestModal({ open, onOpenChange, machine, planDate, shiftType, onAppl
         if (!machine) return;
         setLoading(true);
         try {
-            const results = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$lineOverview$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSuggestions"])(planDate, shiftType, machine.machine.machineCode, machine.gap);
+            const results = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$lineOverview$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSuggestions"])(machine.machine.machineCode, planDate, shiftType, machine.gap);
             setSuggestions(results);
         } catch (err) {
             console.error("Failed to load suggestions:", err);
@@ -2230,7 +2237,14 @@ function SuggestModal({ open, onOpenChange, machine, planDate, shiftType, onAppl
         const endHour = startHour + Math.ceil(segmentHours);
         const endTime = `${endHour.toString().padStart(2, "0")}:00`;
         try {
-            const result = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$lineOverview$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["createAssignment"])(planDate, shiftType, machine.machine.machineCode, suggestion.employee.employeeCode, shiftStart, endTime);
+            const result = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$lineOverview$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["createAssignment"])({
+                date: planDate,
+                shift: shiftType,
+                machineCode: machine.machine.machineCode,
+                employeeCode: suggestion.employee.employeeCode,
+                startTime: shiftStart,
+                endTime: endTime
+            });
             if (result) {
                 toast({
                     title: "Assignment created",

@@ -91,14 +91,14 @@ export function AssignmentDrawer({
 
     setSaving(true);
     try {
-      const result = await createAssignment(
-        planDate,
-        shiftType,
-        machine.machine.machineCode,
-        newEmployee,
-        newStartTime,
-        newEndTime
-      );
+      const result = await createAssignment({
+        date: planDate,
+        shift: shiftType,
+        machineCode: machine.machine.machineCode,
+        employeeCode: newEmployee,
+        startTime: newStartTime,
+        endTime: newEndTime,
+      });
 
       if (result) {
         toast({ title: "Assignment created" });
