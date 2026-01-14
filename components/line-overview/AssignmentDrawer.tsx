@@ -160,14 +160,25 @@ export function AssignmentDrawer({
               <p className="text-xs text-muted-foreground">Assigned Hours</p>
             </div>
             <div className="text-center">
-              <p
-                className={`text-2xl font-bold ${
-                  machine.gap > 0 ? "text-destructive" : "text-green-600"
-                }`}
-              >
-                {machine.gap > 0 ? `+${machine.gap.toFixed(1)}` : machine.gap.toFixed(1)}
-              </p>
-              <p className="text-xs text-muted-foreground">Gap</p>
+              {machine.overAssigned > 0 ? (
+                <>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    +{machine.overAssigned.toFixed(1)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Over-assigned</p>
+                </>
+              ) : (
+                <>
+                  <p
+                    className={`text-2xl font-bold ${
+                      machine.gap > 0 ? "text-destructive" : "text-green-600"
+                    }`}
+                  >
+                    {machine.gap > 0 ? machine.gap.toFixed(1) : "0.0"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Gap</p>
+                </>
+              )}
             </div>
           </div>
 

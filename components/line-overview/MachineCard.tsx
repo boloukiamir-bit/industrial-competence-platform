@@ -3,39 +3,52 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Cog, User, Zap } from "lucide-react";
-import type { MachineWithData } from "@/types/lineOverview";
+import { Cog, User, Zap, Plus } from "lucide-react";
+import type { MachineWithData, ShiftType } from "@/types/lineOverview";
 
 interface MachineCardProps {
   data: MachineWithData;
   viewMode: "day" | "week";
   onClick: () => void;
   onSuggest: () => void;
+  onImportDemand?: () => void;
 }
 
 const statusStyles = {
-  green: {
+  ok: {
     border: "border-green-200 dark:border-green-800",
     bg: "bg-green-50 dark:bg-green-900/20",
     badge: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
     text: "OK",
   },
-  yellow: {
+  partial: {
     border: "border-yellow-200 dark:border-yellow-800",
     bg: "bg-yellow-50 dark:bg-yellow-900/20",
     badge: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300",
-    text: "Low Gap",
+    text: "Partial",
   },
-  red: {
+  gap: {
     border: "border-red-200 dark:border-red-800",
     bg: "bg-red-50 dark:bg-red-900/20",
     badge: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
     text: "Gap",
   },
+  over: {
+    border: "border-blue-200 dark:border-blue-800",
+    bg: "bg-blue-50 dark:bg-blue-900/20",
+    badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
+    text: "Over-assigned",
+  },
+  no_demand: {
+    border: "border-muted",
+    bg: "",
+    badge: "bg-muted text-muted-foreground",
+    text: "No demand",
+  },
 };
 
-export function MachineCard({ data, viewMode, onClick, onSuggest }: MachineCardProps) {
-  const { machine, requiredHours, assignedHours, gap, status, assignedPeople } = data;
+export function MachineCard({ data, viewMode, onClick, onSuggest, onImportDemand }: MachineCardProps) {
+  const { machine, requiredHours, assignedHours, gap, overAssigned, status, assignedPeople } = data;
   const style = statusStyles[status];
   const hasDemand = requiredHours > 0;
 
@@ -75,10 +88,21 @@ export function MachineCard({ data, viewMode, onClick, onSuggest }: MachineCardP
                 <p className="text-xs text-muted-foreground">Assigned</p>
               </div>
               <div>
-                <p className={`text-lg font-bold ${gap > 0 ? "text-destructive" : "text-green-600"}`}>
-                  {gap > 0 ? `+${gap.toFixed(1)}` : gap.toFixed(1)}
-                </p>
-                <p className="text-xs text-muted-foreground">Gap</p>
+                {overAssigned > 0 ? (
+                  <>
+                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                      +{overAssigned.toFixed(1)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Over</p>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-lg font-bold ${gap > 0 ? "text-destructive" : "text-green-600"}`}>
+                      {gap > 0 ? gap.toFixed(1) : "0.0"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Gap</p>
+                  </>
+                )}
               </div>
             </div>
 
@@ -148,13 +172,16 @@ export function MachineCard({ data, viewMode, onClick, onSuggest }: MachineCardP
             <p className="text-sm text-muted-foreground mb-2">No demand scheduled</p>
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               className="h-8 text-xs"
               onClick={(e) => {
                 e.stopPropagation();
+                onImportDemand?.();
               }}
+              data-testid={`button-import-demand-${machine.machineCode}`}
             >
-              Import demand
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add demand
             </Button>
           </div>
         )}

@@ -102,10 +102,12 @@ async function GET(request) {
             assignmentsByMachine.set(a.machine_code, list);
         });
         const presentCount = attendance.filter((a)=>a.status === "present").length;
+        const partialCount = attendance.filter((a)=>a.status === "partial").length;
         const absentCount = attendance.filter((a)=>a.status === "absent").length;
         let totalRequired = 0;
         let totalAssigned = 0;
         let totalGap = 0;
+        let totalOverAssigned = 0;
         const lineData = lines.map((line)=>{
             const lineMachines = machines.filter((m)=>m.line_code === line.line_code);
             const machineData = lineMachines.map((machine)=>{
@@ -133,14 +135,30 @@ async function GET(request) {
                     }
                 });
                 const gap = requiredHours - assignedHours;
+                const overAssigned = assignedHours > requiredHours ? assignedHours - requiredHours : 0;
                 totalRequired += requiredHours;
                 totalAssigned += assignedHours;
                 if (gap > 0) totalGap += gap;
-                let status = "ok";
+                if (overAssigned > 0) totalOverAssigned += overAssigned;
+                let status = "no_demand";
                 if (requiredHours > 0) {
                     if (assignedHours === 0) status = "gap";
                     else if (assignedHours < requiredHours) status = "partial";
+                    else if (assignedHours > requiredHours) status = "over";
+                    else status = "ok";
+                } else if (assignedHours > 0) {
+                    status = "over";
                 }
+                const assignments = machineAssignments.map((a)=>({
+                        id: a.id,
+                        planDate: a.plan_date,
+                        shiftType: a.shift_type,
+                        machineCode: a.machine_code,
+                        employeeCode: a.employee_code,
+                        startTime: a.start_time,
+                        endTime: a.end_time,
+                        roleNote: a.role_note
+                    }));
                 return {
                     machine: {
                         id: machine.id,
@@ -151,13 +169,16 @@ async function GET(request) {
                     requiredHours,
                     assignedHours,
                     gap,
+                    overAssigned,
                     status,
+                    assignments,
                     assignedPeople
                 };
             });
             const lineRequired = machineData.reduce((sum, m)=>sum + m.requiredHours, 0);
             const lineAssigned = machineData.reduce((sum, m)=>sum + m.assignedHours, 0);
             const lineGap = machineData.reduce((sum, m)=>sum + Math.max(0, m.gap), 0);
+            const lineOverAssigned = machineData.reduce((sum, m)=>sum + m.overAssigned, 0);
             return {
                 line: {
                     id: line.id,
@@ -167,23 +188,37 @@ async function GET(request) {
                 machines: machineData,
                 totalRequired: lineRequired,
                 totalAssigned: lineAssigned,
-                totalGap: lineGap
+                totalGap: lineGap,
+                totalOverAssigned: lineOverAssigned
             };
         });
-        const coveragePercent = totalRequired > 0 ? Math.round(totalAssigned / totalRequired * 100) : 100;
+        const hasDemand = totalRequired > 0;
+        const coveragePercent = hasDemand ? Math.min(Math.round(totalAssigned / totalRequired * 100), 999) : null;
         return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
             lines: lineData,
             kpis: {
+                hasDemand,
                 coveragePercent,
-                gapHours: totalGap,
-                overtimeHours: 0,
+                gapHours: hasDemand ? totalGap : null,
+                overAssignedHours: totalOverAssigned,
                 presentCount,
+                partialCount,
                 absentCount
             },
             employees: employees.map((e)=>({
                     id: e.id,
                     employeeCode: e.employee_code,
                     fullName: e.full_name
+                })),
+            attendance: attendance.map((a)=>({
+                    id: a.id,
+                    employeeCode: a.employee_code,
+                    planDate: a.plan_date,
+                    shiftType: a.shift_type,
+                    status: a.status,
+                    availableFrom: a.available_from,
+                    availableTo: a.available_to,
+                    note: a.note
                 }))
         });
     } catch (error) {

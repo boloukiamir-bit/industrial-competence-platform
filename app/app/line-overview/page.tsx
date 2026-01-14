@@ -30,6 +30,7 @@ import type { LineOverviewData, MachineWithData, ShiftType } from "@/types/lineO
 import { MachineCard } from "@/components/line-overview/MachineCard";
 import { AssignmentDrawer } from "@/components/line-overview/AssignmentDrawer";
 import { SuggestModal } from "@/components/line-overview/SuggestModal";
+import { DemandModal } from "@/components/line-overview/DemandModal";
 
 type ViewMode = "day" | "week";
 
@@ -57,6 +58,8 @@ export default function LineOverviewPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [suggestMachine, setSuggestMachine] = useState<MachineWithData | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [demandMachine, setDemandMachine] = useState<MachineWithData | null>(null);
+  const [demandOpen, setDemandOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -108,7 +111,16 @@ export default function LineOverviewPage() {
     setSuggestOpen(true);
   };
 
+  const handleDemandClick = (machine: MachineWithData) => {
+    setDemandMachine(machine);
+    setDemandOpen(true);
+  };
+
   const handleAssignmentChange = () => {
+    loadData();
+  };
+
+  const handleDemandChange = () => {
     loadData();
   };
 
@@ -186,28 +198,41 @@ export default function LineOverviewPage() {
 
           {data && !loading && (
             <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t">
-              <MetricChip
-                icon={<Percent className="h-3.5 w-3.5" />}
-                label="Coverage"
-                value={`${data.metrics.coveragePercent}%`}
-                variant={data.metrics.coveragePercent >= 90 ? "success" : data.metrics.coveragePercent >= 70 ? "warning" : "danger"}
-              />
-              <MetricChip
-                icon={<AlertTriangle className="h-3.5 w-3.5" />}
-                label="Gap"
-                value={`${data.metrics.totalGapHours.toFixed(1)}h`}
-                variant={data.metrics.totalGapHours === 0 ? "success" : data.metrics.totalGapHours <= 8 ? "warning" : "danger"}
-              />
-              <MetricChip
-                icon={<Zap className="h-3.5 w-3.5" />}
-                label="Overtime"
-                value={`${data.metrics.overtimeHours}h`}
-                variant="neutral"
-              />
+              {data.metrics.hasDemand ? (
+                <>
+                  <MetricChip
+                    icon={<Percent className="h-3.5 w-3.5" />}
+                    label="Coverage"
+                    value={`${data.metrics.coveragePercent}%`}
+                    variant={(data.metrics.coveragePercent ?? 0) >= 90 ? "success" : (data.metrics.coveragePercent ?? 0) >= 70 ? "warning" : "danger"}
+                  />
+                  <MetricChip
+                    icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                    label="Gap"
+                    value={`${(data.metrics.totalGapHours ?? 0).toFixed(1)}h`}
+                    variant={(data.metrics.totalGapHours ?? 0) === 0 ? "success" : (data.metrics.totalGapHours ?? 0) <= 8 ? "warning" : "danger"}
+                  />
+                </>
+              ) : (
+                <MetricChip
+                  icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                  label="Demand"
+                  value="No demand"
+                  variant="neutral"
+                />
+              )}
+              {data.metrics.overAssignedHours > 0 && (
+                <MetricChip
+                  icon={<Zap className="h-3.5 w-3.5" />}
+                  label="Over-assigned"
+                  value={`+${data.metrics.overAssignedHours.toFixed(1)}h`}
+                  variant="info"
+                />
+              )}
               <MetricChip
                 icon={<Users className="h-3.5 w-3.5" />}
                 label="Present"
-                value={String(data.metrics.presentCount)}
+                value={String(data.metrics.presentCount + data.metrics.partialCount)}
                 variant="success"
               />
               <MetricChip
@@ -345,6 +370,7 @@ export default function LineOverviewPage() {
                               viewMode={viewMode}
                               onClick={() => handleMachineClick(machineData)}
                               onSuggest={() => handleSuggestClick(machineData)}
+                              onImportDemand={() => handleDemandClick(machineData)}
                             />
                           ))}
                         </div>
@@ -377,6 +403,15 @@ export default function LineOverviewPage() {
         shiftType={shiftType}
         onApply={handleAssignmentChange}
       />
+
+      <DemandModal
+        open={demandOpen}
+        onOpenChange={setDemandOpen}
+        machine={demandMachine}
+        planDate={formatDate(selectedDate)}
+        shiftType={shiftType}
+        onDemandChange={handleDemandChange}
+      />
     </div>
   );
 }
@@ -390,13 +425,14 @@ function MetricChip({
   icon: React.ReactNode;
   label: string;
   value: string;
-  variant: "success" | "warning" | "danger" | "neutral";
+  variant: "success" | "warning" | "danger" | "neutral" | "info";
 }) {
   const variantStyles = {
     success: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     warning: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
     danger: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
     neutral: "bg-muted text-muted-foreground",
+    info: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   };
 
   return (

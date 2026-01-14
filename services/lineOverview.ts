@@ -40,15 +40,26 @@ export async function fetchLineOverviewData(
         orgId: "",
         machineCode: m.machine.machineCode,
         machineName: m.machine.machineName,
-        lineCode: m.machine.lineId,
+        lineCode: m.machine.lineCode,
         isCritical: false,
         notes: undefined,
       } as PLMachine,
-      assignments: [],
+      assignments: (m.assignments || []).map((a: any) => ({
+        id: a.id,
+        orgId: "",
+        planDate: a.planDate,
+        shiftType: a.shiftType as ShiftType,
+        machineCode: a.machineCode,
+        employeeCode: a.employeeCode,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        roleNote: a.roleNote,
+      } as PLAssignmentSegment)),
       requiredHours: m.requiredHours,
       assignedHours: m.assignedHours,
       gap: m.gap,
-      status: m.status === "gap" ? "red" : m.status === "partial" ? "yellow" : "green" as "green" | "yellow" | "red",
+      overAssigned: m.overAssigned || 0,
+      status: m.status as "ok" | "partial" | "gap" | "over" | "no_demand",
       assignedPeople: (m.assignedPeople || []).map((p: any) => ({
         employeeCode: p.employeeCode,
         employeeName: p.employeeName,
@@ -59,6 +70,7 @@ export async function fetchLineOverviewData(
     totalRequiredHours: lineData.totalRequired,
     totalAssignedHours: lineData.totalAssigned,
     totalGap: lineData.totalGap,
+    totalOverAssigned: lineData.totalOverAssigned || 0,
   } as LineWithMachines));
 
   const employees: PLEmployee[] = (data.employees || []).map((e: any) => ({
@@ -69,19 +81,32 @@ export async function fetchLineOverviewData(
   }));
 
   const metrics: LineOverviewMetrics = {
-    coveragePercent: data.kpis?.coveragePercent || 100,
-    totalGapHours: data.kpis?.gapHours || 0,
-    overtimeHours: data.kpis?.overtimeHours || 0,
+    hasDemand: data.kpis?.hasDemand ?? false,
+    coveragePercent: data.kpis?.coveragePercent ?? null,
+    totalGapHours: data.kpis?.gapHours ?? null,
+    overAssignedHours: data.kpis?.overAssignedHours || 0,
     presentCount: data.kpis?.presentCount || 0,
+    partialCount: data.kpis?.partialCount || 0,
     absentCount: data.kpis?.absentCount || 0,
-    partialCount: 0,
   };
+
+  const attendance: PLAttendance[] = (data.attendance || []).map((a: any) => ({
+    id: a.id,
+    orgId: "",
+    planDate: a.planDate,
+    shiftType: a.shiftType as ShiftType,
+    employeeCode: a.employeeCode,
+    status: a.status as "present" | "absent" | "partial",
+    availableFrom: a.availableFrom,
+    availableTo: a.availableTo,
+    note: a.note,
+  }));
 
   return {
     lines,
     employees,
     metrics,
-    attendance: [],
+    attendance,
   };
 }
 
@@ -113,29 +138,47 @@ export async function fetchWeekOverviewData(
         orgId: "",
         machineCode: m.machine.machineCode,
         machineName: m.machine.machineName,
-        lineCode: m.machine.lineId,
+        lineCode: m.machine.lineCode,
         isCritical: false,
         notes: undefined,
       } as PLMachine,
-      assignments: [],
+      assignments: (m.assignments || []).map((a: any) => ({
+        id: a.id,
+        orgId: "",
+        planDate: a.planDate,
+        shiftType: a.shiftType as ShiftType,
+        machineCode: a.machineCode,
+        employeeCode: a.employeeCode,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        roleNote: a.roleNote,
+      } as PLAssignmentSegment)),
       requiredHours: m.requiredHours,
       assignedHours: m.assignedHours,
       gap: m.gap,
-      status: m.status === "gap" ? "red" : m.status === "partial" ? "yellow" : "green" as "green" | "yellow" | "red",
-      assignedPeople: [],
+      overAssigned: m.overAssigned || 0,
+      status: m.status as "ok" | "partial" | "gap" | "over" | "no_demand",
+      assignedPeople: (m.assignedPeople || []).map((p: any) => ({
+        employeeCode: p.employeeCode,
+        employeeName: p.employeeName,
+        startTime: p.startTime,
+        endTime: p.endTime,
+      })),
     } as MachineWithData)),
     totalRequiredHours: lineData.totalRequired,
     totalAssignedHours: lineData.totalAssigned,
     totalGap: lineData.totalGap,
+    totalOverAssigned: lineData.totalOverAssigned || 0,
   } as LineWithMachines));
 
   const metrics: LineOverviewMetrics = {
-    coveragePercent: data.kpis?.coveragePercent || 100,
-    totalGapHours: data.kpis?.gapHours || 0,
-    overtimeHours: data.kpis?.overtimeHours || 0,
-    presentCount: 0,
-    absentCount: 0,
-    partialCount: 0,
+    hasDemand: data.kpis?.hasDemand ?? false,
+    coveragePercent: data.kpis?.coveragePercent ?? null,
+    totalGapHours: data.kpis?.gapHours ?? null,
+    overAssignedHours: data.kpis?.overAssignedHours || 0,
+    presentCount: data.kpis?.presentCount || 0,
+    partialCount: data.kpis?.partialCount || 0,
+    absentCount: data.kpis?.absentCount || 0,
   };
 
   return {

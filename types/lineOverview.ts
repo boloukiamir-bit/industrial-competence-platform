@@ -88,7 +88,8 @@ export interface MachineWithData {
   requiredHours: number;
   assignedHours: number;
   gap: number;
-  status: "green" | "yellow" | "red";
+  overAssigned: number;
+  status: "ok" | "partial" | "gap" | "over" | "no_demand";
   assignedPeople: {
     employeeCode: string;
     employeeName: string;
@@ -103,15 +104,17 @@ export interface LineWithMachines {
   totalRequiredHours: number;
   totalAssignedHours: number;
   totalGap: number;
+  totalOverAssigned: number;
 }
 
 export interface LineOverviewMetrics {
-  coveragePercent: number;
-  totalGapHours: number;
-  overtimeHours: number;
+  hasDemand: boolean;
+  coveragePercent: number | null;
+  totalGapHours: number | null;
+  overAssignedHours: number;
   presentCount: number;
-  absentCount: number;
   partialCount: number;
+  absentCount: number;
 }
 
 export interface LineOverviewData {
