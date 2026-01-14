@@ -1,5 +1,5 @@
 {
   "/api/line-overview/route": "app/api/line-overview/route.js",
-  "/api/line-overview/suggestions/route": "app/api/line-overview/suggestions/route.js",
-  "/app/line-overview/page": "app/app/line-overview/page.js"
+  "/app/line-overview/page": "app/app/line-overview/page.js",
+  "/page": "app/page.js"
 }

@@ -3,7 +3,6 @@ import { supabase } from "@/lib/supabaseClient";
 import { WORKFLOW_TEMPLATES } from "@/services/hrWorkflows";
 import type { HRWorkflowInstance, HRWorkflowStep, HRWorkflowTemplateId } from "@/types/domain";
 
-// In-memory storage for workflow instances (development workaround for Supabase schema cache)
 const workflowInstances: HRWorkflowInstance[] = [];
 
 export async function GET() {
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
 
     workflowInstances.push(instance);
 
-    // Create person_events for workflow steps
     const personEvents = template.defaultSteps.map((step) => {
       const dueDate = new Date(now.getTime() + step.daysFromStart * 24 * 60 * 60 * 1000);
       return {
