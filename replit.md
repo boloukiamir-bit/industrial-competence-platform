@@ -96,5 +96,18 @@ The Line Overview page (`/app/line-overview`) provides a "God Mode" visualizatio
 Data from pl_* tables (pl_lines, pl_machines, pl_machine_demand, pl_attendance, pl_assignment_segments, pl_employees, pl_overtime_overrides).
 Hardcoded org_id: f607f244-da91-41d9-a648-d02a1591105c
 
+## Spaljisten Go-Live MVP
+The Spaljisten Go-Live system (`/app/spaljisten/*`) provides skill matrix and gap analysis for customer Spaljisten:
+- **Dashboard (/app/spaljisten/dashboard):** KPIs, top risk stations, skill gap table with filters
+- **Import (/app/spaljisten/import):** CSV import for areas, stations, employees, skills, ratings
+- **Export (/api/spaljisten/export):** CSV export of filtered skill gap data
+
+Data from sp_* tables (sp_areas, sp_stations, sp_employees, sp_skills, sp_employee_skills, sp_area_leaders, sp_rating_scales).
+Hardcoded org_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Customer admin: Daniel Buhre <daniel.buhre@spaljisten.se>
+
+**Architecture Note:** Uses direct PostgreSQL connection via `pg` library (lib/pgClient.ts) instead of Supabase REST API to bypass PostgREST schema cache issues with new tables.
+
 ## External Dependencies
 - **Supabase:** Used for database (PostgreSQL) and authentication services.
+- **pg Library:** Direct PostgreSQL connection for Spaljisten APIs (bypasses Supabase schema cache)

@@ -1,5 +1,5 @@
 {
-  "/api/line-overview/route": "app/api/line-overview/route.js",
-  "/app/line-overview/page": "app/app/line-overview/page.js",
+  "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
+  "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
   "/login/page": "app/login/page.js"
 }

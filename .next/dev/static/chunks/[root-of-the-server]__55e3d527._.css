@@ -678,6 +678,10 @@ body {
   position: relative;
 }
 
+.sticky {
+  position: sticky;
+}
+
 .inset-0 {
   inset: 0;
 }
@@ -1111,6 +1115,10 @@ body {
   min-height: 2.25rem;
 }
 
+.min-h-\[400px\] {
+  min-height: 400px;
+}
+
 .min-h-\[50vh\] {
   min-height: 50vh;
 }
@@ -1229,6 +1237,10 @@ body {
 
 .w-\[130px\] {
   width: 130px;
+}
+
+.w-\[200px\] {
+  width: 200px;
 }
 
 .w-full {
@@ -1705,6 +1717,11 @@ body {
 .border-card-border {
   --tw-border-opacity: 1;
   border-color: hsl(var(--card-border) / var(--tw-border-opacity, 1));
+}
+
+.border-destructive {
+  --tw-border-opacity: 1;
+  border-color: hsl(var(--destructive) / var(--tw-border-opacity, 1));
 }
 
 .border-destructive-border {
@@ -4113,6 +4130,11 @@ body {
   background-color: rgb(243 244 246 / var(--tw-bg-opacity, 1));
 }
 
+.file\:bg-primary::file-selector-button {
+  --tw-bg-opacity: 1;
+  background-color: hsl(var(--primary) / var(--tw-bg-opacity, 1));
+}
+
 .file\:bg-transparent::file-selector-button {
   background-color: #0000;
 }
@@ -4144,6 +4166,11 @@ body {
 .file\:text-gray-700::file-selector-button {
   --tw-text-opacity: 1;
   color: rgb(55 65 81 / var(--tw-text-opacity, 1));
+}
+
+.file\:text-primary-foreground::file-selector-button {
+  --tw-text-opacity: 1;
+  color: hsl(var(--primary-foreground) / var(--tw-text-opacity, 1));
 }
 
 .placeholder\:text-muted-foreground::placeholder {
@@ -4190,6 +4217,11 @@ body {
   background-color: rgb(249 250 251 / var(--tw-bg-opacity, 1));
 }
 
+.hover\:bg-green-600:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(22 163 74 / var(--tw-bg-opacity, 1));
+}
+
 .hover\:bg-muted:hover {
   --tw-bg-opacity: 1;
   background-color: hsl(var(--muted) / var(--tw-bg-opacity, 1));
@@ -4206,6 +4238,11 @@ body {
 .hover\:bg-red-50:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(254 242 242 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-yellow-600:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(202 138 4 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:text-blue-600:hover {
@@ -4257,6 +4294,10 @@ body {
 .hover\:file\:bg-gray-200::file-selector-button:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(229 231 235 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:file\:bg-primary\/90::file-selector-button:hover {
+  background-color: hsl(var(--primary) / .9);
 }
 
 .focus\:bg-accent:focus {
@@ -4557,6 +4598,11 @@ body {
 
 .dark\:bg-blue-900\/50:is(.dark *) {
   background-color: #1e3a8a80;
+}
+
+.dark\:bg-blue-950:is(.dark *) {
+  --tw-bg-opacity: 1;
+  background-color: rgb(23 37 84 / var(--tw-bg-opacity, 1));
 }
 
 .dark\:bg-blue-950\/30:is(.dark *) {
