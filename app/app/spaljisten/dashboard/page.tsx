@@ -48,7 +48,7 @@ type SkillGapData = {
 type DashboardData = {
   kpis: DashboardKPIs;
   topRiskStations: TopRiskStation[];
-  skillGapData: SkillGapData[];
+  skillGapTable: SkillGapData[];
   filterOptions: { areas: SPArea[]; stations: SPStation[] };
 };
 
@@ -316,13 +316,13 @@ export default function SpaljistenDashboard() {
           <CardTitle>Skill Gap Details</CardTitle>
         </CardHeader>
         <CardContent>
-          {data.skillGapData.length === 0 ? (
+          {data.skillGapTable.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No skill data available for the selected filters.
             </p>
           ) : (
             <div className="space-y-2">
-              {data.skillGapData.map((item) => (
+              {data.skillGapTable.map((item) => (
                 <div
                   key={`${item.stationCode}-${item.skillId}`}
                   className="border rounded-md overflow-hidden"
