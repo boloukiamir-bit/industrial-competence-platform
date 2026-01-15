@@ -159,12 +159,12 @@ export default function SpaljistenDashboard() {
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <Select value={selectedArea} onValueChange={(v) => { setSelectedArea(v); setSelectedStation(""); }}>
+        <Select value={selectedArea || "all"} onValueChange={(v) => { setSelectedArea(v === "all" ? "" : v); setSelectedStation(""); }}>
           <SelectTrigger className="w-[200px]" data-testid="select-area">
             <SelectValue placeholder="All Areas" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Areas</SelectItem>
+            <SelectItem value="all">All Areas</SelectItem>
             {data.filterOptions.areas.map((area) => (
               <SelectItem key={area.id} value={area.id}>
                 {area.areaName}
@@ -173,12 +173,12 @@ export default function SpaljistenDashboard() {
           </SelectContent>
         </Select>
 
-        <Select value={selectedStation} onValueChange={setSelectedStation}>
+        <Select value={selectedStation || "all"} onValueChange={(v) => setSelectedStation(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[200px]" data-testid="select-station">
             <SelectValue placeholder="All Stations" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Stations</SelectItem>
+            <SelectItem value="all">All Stations</SelectItem>
             {filteredStations.map((station) => (
               <SelectItem key={station.id} value={station.id}>
                 {station.stationName}
