@@ -85,11 +85,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user: authUser, loading: authLoading, isAuthenticated } = useAuth(true);
   const [user, setUser] = useState<CurrentUser | null>(null);
 
+  const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
+  const isSpaljistenUser = authUser?.email?.endsWith("@spaljisten.se");
+
   useEffect(() => {
     if (isAuthenticated) {
       getCurrentUser().then(setUser);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isSpaljistenUser && !isSpaljistenPage) {
+      router.push("/app/spaljisten/dashboard");
+    }
+  }, [isSpaljistenUser, isSpaljistenPage, router]);
 
   async function handleSignOut() {
     try {
@@ -118,15 +127,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return true;
     });
 
-  const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
-  const isSpaljistenUser = authUser?.email?.endsWith("@spaljisten.se");
   const showOnlySpaljisten = isSpaljistenPage || isSpaljistenUser;
 
   const visibleCoreItems = showOnlySpaljisten ? [] : filterItems(coreNavItems);
   const visibleHrItems = showOnlySpaljisten ? [] : filterItems(hrNavItems);
   const visibleMoreItems = showOnlySpaljisten ? [] : moreNavItems;
   const visibleSettingsItems = showOnlySpaljisten ? [] : filterItems(settingsNavItems);
-  const visibleSpaljistenItems = showOnlySpaljisten ? spaljistenNavItems : spaljistenNavItems;
+  const visibleSpaljistenItems = showOnlySpaljisten ? spaljistenNavItems : [];
 
   const renderNavItem = (item: NavItem) => {
     const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
