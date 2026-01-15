@@ -95,8 +95,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    // Spaljisten users can ONLY access SP pages
     if (isSpaljistenUser && !isSpaljistenPage) {
       router.push("/app/spaljisten/dashboard");
+    }
+    // Non-Spaljisten users cannot access SP pages
+    if (!isSpaljistenUser && isSpaljistenPage) {
+      router.push("/app/dashboard");
     }
   }, [isSpaljistenUser, isSpaljistenPage, router]);
 
@@ -161,7 +166,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <OrgProvider>
       <GlobalErrorHandler />
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
-        <DemoModeBanner />
+        {!isSpaljistenUser && <DemoModeBanner />}
           <div className="flex flex-1 overflow-hidden">
           <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">

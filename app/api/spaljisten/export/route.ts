@@ -70,6 +70,12 @@ export async function GET(request: NextRequest) {
           employees: employeeDetails,
           riskLevel,
         };
+      })
+      .filter((s) => s.totalEmployees > 0)
+      .sort((a, b) => {
+        const order: Record<string, number> = { critical: 0, warning: 1, ok: 2 };
+        if (a.riskLevel !== b.riskLevel) return order[a.riskLevel] - order[b.riskLevel];
+        return a.independentCount - b.independentCount;
       });
 
       const headers = [
