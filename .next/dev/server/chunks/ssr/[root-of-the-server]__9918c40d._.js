@@ -1806,7 +1806,7 @@ const settingsNavItems = [
     }
 ];
 // Dev mode flag - when true, all authenticated users can access Spaljisten pages
-const SPALI_DEV_MODE = process.env.NEXT_PUBLIC_SPALI_DEV_MODE === "true";
+const SPALI_DEV_MODE = ("TURBOPACK compile-time value", "true") === "true";
 function AppLayout({ children }) {
     const pathname = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["usePathname"])();
     const router = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRouter"])();
@@ -1859,11 +1859,11 @@ function AppLayout({ children }) {
     // On Spaljisten pages: show only Spaljisten nav (focused experience)
     const showOnlySpaljisten = !SPALI_DEV_MODE && isSpaljistenPage;
     const showSpaljistenNav = SPALI_DEV_MODE || isSpaljistenPage;
-    const visibleCoreItems = showOnlySpaljisten ? [] : filterItems(coreNavItems);
-    const visibleHrItems = showOnlySpaljisten ? [] : filterItems(hrNavItems);
-    const visibleMoreItems = showOnlySpaljisten ? [] : moreNavItems;
-    const visibleSettingsItems = showOnlySpaljisten ? [] : filterItems(settingsNavItems);
-    const visibleSpaljistenItems = showSpaljistenNav ? spaljistenNavItems : [];
+    const visibleCoreItems = ("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : filterItems(coreNavItems);
+    const visibleHrItems = ("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : filterItems(hrNavItems);
+    const visibleMoreItems = ("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : moreNavItems;
+    const visibleSettingsItems = ("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : filterItems(settingsNavItems);
+    const visibleSpaljistenItems = ("TURBOPACK compile-time truthy", 1) ? spaljistenNavItems : "TURBOPACK unreachable";
     const renderNavItem = (item)=>{
         const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
         const Icon = item.icon;
