@@ -11,26 +11,37 @@ export async function GET(request: NextRequest) {
 
     const client = await pool.connect();
     try {
-      const [stationsRes, skillsRes, ratingsRes, employeesRes] = await Promise.all([
+      const [stationsRes, skillsRes, ratingsRes, employeesRes, areasRes] = await Promise.all([
         client.query("SELECT id, area_id, station_code, station_name FROM sp_stations WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
-        client.query("SELECT skill_id, skill_name, station_id FROM sp_skills WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
+        client.query("SELECT skill_id, skill_name, station_id, category FROM sp_skills WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
         client.query("SELECT employee_id, skill_id, rating FROM sp_employee_skills WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
         client.query("SELECT employee_id, employee_name FROM sp_employees WHERE org_id = $1 AND is_active = true", [SPALJISTEN_ORG_ID]),
+        client.query("SELECT id, area_code, area_name FROM sp_areas WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
       ]);
 
       const stations = stationsRes.rows;
       const skills = skillsRes.rows;
       const ratings = ratingsRes.rows;
       const employees = employeesRes.rows;
-
-      let filteredStations = stations;
-      if (areaId) filteredStations = filteredStations.filter((s) => s.area_id === areaId);
-      if (stationId) filteredStations = filteredStations.filter((s) => s.id === stationId);
-
-      const filteredStationIds = new Set(filteredStations.map((s) => s.id));
-      const filteredSkills = skills.filter((s) => filteredStationIds.has(s.station_id));
+      const areas = areasRes.rows;
 
       const stationMap = new Map(stations.map((s) => [s.id, s]));
+      const areaMap = new Map(areas.map((a) => [a.id, a.area_name]));
+
+      const getSkillAreaId = (skill: { station_id: string | null }) => {
+        if (!skill.station_id) return null;
+        const station = stationMap.get(skill.station_id);
+        return station?.area_id || null;
+      };
+
+      let filteredSkills = skills;
+      if (areaId) {
+        filteredSkills = skills.filter((skill) => getSkillAreaId(skill) === areaId);
+      }
+      if (stationId) {
+        filteredSkills = filteredSkills.filter((s) => s.station_id === stationId);
+      }
+
       const employeeMap = new Map(employees.map((e) => [e.employee_id, e.employee_name]));
 
       const gapData = filteredSkills.map((skill) => {

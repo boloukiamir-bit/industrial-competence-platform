@@ -11,17 +11,21 @@ export async function GET(request: NextRequest) {
 
     const client = await pool.connect();
     try {
-      const [areasRes, employeesRes, skillsRes, ratingsRes] = await Promise.all([
+      const [areasRes, employeesRes, skillsRes, ratingsRes, stationsRes] = await Promise.all([
         client.query("SELECT id, org_id, area_code, area_name FROM sp_areas WHERE org_id = $1 ORDER BY area_name", [SPALJISTEN_ORG_ID]),
         client.query("SELECT id, org_id, employee_id, employee_name, area_id, is_active FROM sp_employees WHERE org_id = $1 AND is_active = true", [SPALJISTEN_ORG_ID]),
-        client.query("SELECT id, org_id, skill_id, skill_name, category FROM sp_skills WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
+        client.query("SELECT id, org_id, skill_id, skill_name, category, station_id FROM sp_skills WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
         client.query("SELECT id, org_id, employee_id, skill_id, rating FROM sp_employee_skills WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
+        client.query("SELECT id, area_id, station_code, station_name FROM sp_stations WHERE org_id = $1", [SPALJISTEN_ORG_ID]),
       ]);
 
       const areas = areasRes.rows;
       const employees = employeesRes.rows;
       const skills = skillsRes.rows;
       const ratings = ratingsRes.rows;
+      const stations = stationsRes.rows;
+      
+      const stationMap = new Map(stations.map((s) => [s.id, s]));
 
       const totalEmployees = employees.length;
       const totalSkills = skills.length;
@@ -44,21 +48,24 @@ export async function GET(request: NextRequest) {
       const employeeMap = new Map(employees.map((e) => [e.employee_id, { name: e.employee_name, areaId: e.area_id }]));
       const areaMap = new Map(areas.map((a) => [a.id, a.area_name]));
 
+      const getSkillAreaId = (skill: { station_id: string | null }) => {
+        if (!skill.station_id) return null;
+        const station = stationMap.get(skill.station_id);
+        return station?.area_id || null;
+      };
+
+      let filteredSkills = skills;
+      if (areaId) {
+        filteredSkills = skills.filter((skill) => getSkillAreaId(skill) === areaId);
+      }
+
       const skillRisks: { skillId: string; skillName: string; category: string; independentCount: number; totalRated: number; riskLevel: string }[] = [];
       
-      for (const skill of skills) {
+      for (const skill of filteredSkills) {
         const skillRatings = ratings.filter((r) => r.skill_id === skill.skill_id);
         
-        let filteredSkillRatings = skillRatings;
-        if (areaId) {
-          filteredSkillRatings = skillRatings.filter((r) => {
-            const emp = employeeMap.get(r.employee_id);
-            return emp && emp.areaId === areaId;
-          });
-        }
-        
-        const independentCount = filteredSkillRatings.filter((r) => r.rating !== null && r.rating >= 3).length;
-        const totalRated = filteredSkillRatings.filter((r) => r.rating !== null).length;
+        const independentCount = skillRatings.filter((r) => r.rating !== null && r.rating >= 3).length;
+        const totalRated = skillRatings.filter((r) => r.rating !== null).length;
         
         let riskLevel: "ok" | "warning" | "critical" = "ok";
         if (independentCount === 0) riskLevel = "critical";
@@ -83,21 +90,13 @@ export async function GET(request: NextRequest) {
         })
         .slice(0, 10);
 
-      const skillGapData = skills.map((skill) => {
+      const skillGapData = filteredSkills.map((skill) => {
         const skillRatings = ratings.filter((r) => r.skill_id === skill.skill_id);
         
-        let filteredSkillRatings = skillRatings;
-        if (areaId) {
-          filteredSkillRatings = skillRatings.filter((r) => {
-            const emp = employeeMap.get(r.employee_id);
-            return emp && emp.areaId === areaId;
-          });
-        }
-        
-        const independentCount = filteredSkillRatings.filter((r) => r.rating !== null && r.rating >= 3).length;
-        const totalEmployeesForSkill = filteredSkillRatings.length;
+        const independentCount = skillRatings.filter((r) => r.rating !== null && r.rating >= 3).length;
+        const totalEmployeesForSkill = skillRatings.length;
 
-        const employeeDetails = filteredSkillRatings.map((r) => {
+        const employeeDetails = skillRatings.map((r) => {
           const emp = employeeMap.get(r.employee_id);
           return {
             employeeId: r.employee_id,

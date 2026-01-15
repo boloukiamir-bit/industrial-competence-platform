@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Upload, CheckCircle, XCircle, AlertCircle, FileText } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertCircle, FileText, Trash2, RefreshCw } from "lucide-react";
 
 type ImportResult = {
   success: boolean;
@@ -27,12 +27,60 @@ const IMPORT_TYPES = [
   { value: "rating_scales", label: "Rating Scales", order: 7, description: "Rating configuration (optional)" },
 ];
 
+type DataCounts = {
+  areas: number;
+  stations: number;
+  employees: number;
+  skills: number;
+  ratings: number;
+};
+
 export default function SpaljistenImportPage() {
   const [selectedType, setSelectedType] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dataCounts, setDataCounts] = useState<DataCounts | null>(null);
+
+  const fetchDataCounts = async () => {
+    try {
+      const res = await fetch("/api/spaljisten/reset");
+      if (res.ok) {
+        setDataCounts(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch data counts:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDataCounts();
+  }, []);
+
+  const handleReset = async () => {
+    if (!confirm("Are you sure you want to delete ALL Spaljisten data? This cannot be undone.")) {
+      return;
+    }
+    setIsResetting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/spaljisten/reset", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Reset failed");
+      } else {
+        setResult(null);
+        fetchDataCounts();
+        alert("Dataset reset successfully!");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -66,6 +114,7 @@ export default function SpaljistenImportPage() {
         setError(data.error || "Import failed");
       } else {
         setResult(data);
+        fetchDataCounts();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
@@ -82,14 +131,44 @@ export default function SpaljistenImportPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="heading-import">
-          Spaljisten Data Import
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Import CSV files to populate the skill matrix. Import in order: Areas &rarr; Stations &rarr; Employees &rarr; Skills &rarr; Ratings.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="heading-import">
+            Spaljisten Data Import
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Import CSV files to populate the skill matrix. Import in order: Areas &rarr; Stations &rarr; Employees &rarr; Skills &rarr; Ratings.
+          </p>
+        </div>
+        <Button
+          variant="destructive"
+          onClick={handleReset}
+          disabled={isResetting}
+          data-testid="button-reset"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          {isResetting ? "Resetting..." : "Reset All Data"}
+        </Button>
       </div>
+
+      {dataCounts && (
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-6 text-sm">
+                <span>Areas: <strong data-testid="count-areas">{dataCounts.areas}</strong></span>
+                <span>Stations: <strong data-testid="count-stations">{dataCounts.stations}</strong></span>
+                <span>Employees: <strong data-testid="count-employees">{dataCounts.employees}</strong></span>
+                <span>Skills: <strong data-testid="count-skills">{dataCounts.skills}</strong></span>
+                <span>Ratings: <strong data-testid="count-ratings">{dataCounts.ratings}</strong></span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={fetchDataCounts} data-testid="button-refresh-counts">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

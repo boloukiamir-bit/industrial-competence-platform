@@ -24,18 +24,26 @@ async function importAreas(rows: Record<string, string>[]): Promise<ImportResult
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const lineNum = i + 2;
-      const areaCode = row["area_code"]?.trim() || row["code"]?.trim() || row["area"]?.trim();
-      const areaName = row["area_name"]?.trim() || row["name"]?.trim() || areaCode;
+      const rawAreaCode = row["area_code"]?.trim() || row["code"]?.trim() || row["area"]?.trim();
+      const areaName = row["area_name"]?.trim() || row["name"]?.trim() || rawAreaCode;
 
-      if (!areaCode) { failedRows.push({ line: lineNum, reason: "Missing area_code or area" }); continue; }
+      if (!rawAreaCode) { failedRows.push({ line: lineNum, reason: "Missing area_code or area" }); continue; }
+
+      const areaCode = rawAreaCode.toLowerCase();
 
       try {
-        const existing = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaCode]);
+        const existing = await client.query(
+          "SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", 
+          [SPALJISTEN_ORG_ID, areaCode]
+        );
         if (existing.rows.length > 0) {
           await client.query("UPDATE sp_areas SET area_name = $1 WHERE id = $2", [areaName, existing.rows[0].id]);
           updated++;
         } else {
-          await client.query("INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3)", [SPALJISTEN_ORG_ID, areaCode, areaName]);
+          await client.query(
+            "INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3) ON CONFLICT (org_id, area_code) DO UPDATE SET area_name = EXCLUDED.area_name", 
+            [SPALJISTEN_ORG_ID, areaCode, areaName]
+          );
           inserted++;
         }
       } catch (err) {
@@ -66,7 +74,11 @@ async function importStations(rows: Record<string, string>[]): Promise<ImportRes
       try {
         let areaId = null;
         if (areaCode) {
-          const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [SPALJISTEN_ORG_ID, areaCode]);
+          const normalizedAreaCode = areaCode.toLowerCase();
+          const areaRes = await client.query(
+            "SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", 
+            [SPALJISTEN_ORG_ID, normalizedAreaCode]
+          );
           areaId = areaRes.rows[0]?.id || null;
         }
 
@@ -108,10 +120,20 @@ async function importEmployees(rows: Record<string, string>[]): Promise<ImportRe
       try {
         let areaId = null;
         if (areaName) {
-          let areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [SPALJISTEN_ORG_ID, areaName]);
+          const normalizedAreaCode = areaName.trim().toLowerCase();
+          let areaRes = await client.query(
+            "SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", 
+            [SPALJISTEN_ORG_ID, normalizedAreaCode]
+          );
           if (areaRes.rows.length === 0) {
-            await client.query("INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3)", [SPALJISTEN_ORG_ID, areaName, areaName]);
-            areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaName]);
+            await client.query(
+              "INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3) ON CONFLICT (org_id, area_code) DO NOTHING", 
+              [SPALJISTEN_ORG_ID, normalizedAreaCode, areaName.trim()]
+            );
+            areaRes = await client.query(
+              "SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", 
+              [SPALJISTEN_ORG_ID, normalizedAreaCode]
+            );
           }
           areaId = areaRes.rows[0]?.id || null;
         }
@@ -237,7 +259,11 @@ async function importAreaLeaders(rows: Record<string, string>[]): Promise<Import
       if (!leaderName) { failedRows.push({ line: lineNum, reason: "Missing leader_name" }); continue; }
 
       try {
-        const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [SPALJISTEN_ORG_ID, areaName]);
+        const normalizedAreaCode = areaName.toLowerCase();
+        const areaRes = await client.query(
+          "SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", 
+          [SPALJISTEN_ORG_ID, normalizedAreaCode]
+        );
         if (areaRes.rows.length === 0) {
           failedRows.push({ line: lineNum, reason: `Area not found: ${areaName}` });
           continue;
