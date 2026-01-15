@@ -79,6 +79,9 @@ const settingsNavItems: NavItem[] = [
   { name: "Debug", href: "/app/debug", icon: Bug },
 ];
 
+// Dev mode flag - when true, all authenticated users can access Spaljisten pages
+const SPALI_DEV_MODE = process.env.NEXT_PUBLIC_SPALI_DEV_MODE === "true";
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -86,7 +89,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
 
   const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
-  const isSpaljistenUser = authUser?.email?.endsWith("@spaljisten.se");
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -94,16 +96,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    // Spaljisten users can ONLY access SP pages
-    if (isSpaljistenUser && !isSpaljistenPage) {
-      router.push("/app/spaljisten/dashboard");
-    }
-    // Non-Spaljisten users cannot access SP pages
-    if (!isSpaljistenUser && isSpaljistenPage) {
-      router.push("/app/dashboard");
-    }
-  }, [isSpaljistenUser, isSpaljistenPage, router]);
+  // In dev mode, no route guards - all authenticated users can access everything
+  // In production mode, would check org membership in DB (not email domain)
+  // For now, dev mode removes all restrictions
 
   async function handleSignOut() {
     try {
@@ -132,13 +127,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return true;
     });
 
-  const showOnlySpaljisten = isSpaljistenPage || isSpaljistenUser;
+  // In dev mode: show all navigation including Spaljisten
+  // On Spaljisten pages: show only Spaljisten nav (focused experience)
+  const showOnlySpaljisten = !SPALI_DEV_MODE && isSpaljistenPage;
+  const showSpaljistenNav = SPALI_DEV_MODE || isSpaljistenPage;
 
   const visibleCoreItems = showOnlySpaljisten ? [] : filterItems(coreNavItems);
   const visibleHrItems = showOnlySpaljisten ? [] : filterItems(hrNavItems);
   const visibleMoreItems = showOnlySpaljisten ? [] : moreNavItems;
   const visibleSettingsItems = showOnlySpaljisten ? [] : filterItems(settingsNavItems);
-  const visibleSpaljistenItems = showOnlySpaljisten ? spaljistenNavItems : [];
+  const visibleSpaljistenItems = showSpaljistenNav ? spaljistenNavItems : [];
 
   const renderNavItem = (item: NavItem) => {
     const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -166,7 +164,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <OrgProvider>
       <GlobalErrorHandler />
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
-        {!isSpaljistenUser && <DemoModeBanner />}
+        <DemoModeBanner />
           <div className="flex flex-1 overflow-hidden">
           <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
