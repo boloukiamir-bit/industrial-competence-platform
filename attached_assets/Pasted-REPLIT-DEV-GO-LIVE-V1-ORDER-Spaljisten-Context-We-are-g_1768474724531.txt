@@ -1,0 +1,92 @@
+REPLIT / DEV — GO-LIVE V1 ORDER (Spaljisten)
+
+Context:
+We are going live ASAP with customer Spaljisten. We already have an Excel-based competence gap analysis that has been converted into import-ready CSVs. Your job is to implement: (1) Daniel as Customer Admin + Data Owner, (2) robust CSV import with an import report, (3) Go-Live v1 dashboard (gap/risk) + export. No extra features.
+
+NON-NEGOTIABLE ACCOUNT SETUP
+1) Create / invite this user and make him Customer Admin + Data Owner:
+   - Name: Daniel Buhre
+   - Email: daniel.buhre@spaljisten.se
+   - Role: customer_admin
+   - Extra permission/flag: data_owner = true (or permissions JSON)
+2) Bind Daniel to Spaljisten tenant/org_id (multi-tenant safety):
+   - Daniel must see ONLY Spaljisten data, but ALL areas inside Spaljisten.
+
+FILES I WILL UPLOAD (CSV)
+You must support uploading these files via an Admin Import page:
+- skills_catalog.csv
+- employees.csv
+- employee_skill_ratings.csv
+- area_leaders.csv
+- rating_scales.csv
+
+IMPORT REQUIREMENTS (MUST HAVE)
+A) Idempotent imports (no duplicates). Use UPSERT:
+- employees: unique key = employee_id
+- skills: unique key = skill_id (or normalized station/skill key if you use names)
+- employee_skill_ratings: unique composite key = (employee_id, skill_id)
+- area_leaders: unique key = (area_name) or (org_unit_id)
+- rating_scales: unique key = scale_name or org_id + scale_name
+
+B) Validation:
+- Reject rows with missing required fields.
+- For ratings: accept 0–5. Treat “N” as NULL (not assessed), NOT 0.
+- Log invalid rows with row number + reason.
+
+C) Import Report:
+After each import show:
+- inserted_count
+- updated_count
+- failed_count
+- failed_rows list (row number + reason)
+Also write an import_log record in DB for traceability.
+
+D) Import order handling:
+- You must allow import in any order, but if dependencies are missing (e.g., rating references missing employee/skill), fail those rows with clear reasons.
+- Recommend the order: skills -> employees -> ratings -> area_leaders -> rating_scales.
+
+GO-LIVE V1 DASHBOARD (MUST HAVE)
+Create a page: /app/admin/go-live (or similar) visible to customer_admin.
+Filters:
+- Area (Ommantling, Bearbetning, Pack, Logistik, Underhåll)
+- Station/Skill (from skills_catalog)
+
+Core logic:
+- “Independent” = rating >= 3
+- For each station/skill calculate:
+  count_independent = number of employees with rating >=3
+  list_independent_names
+- Risk ranking: Top 10 stations/skills with LOWEST count_independent
+
+Dashboard UI:
+- KPI cards:
+  1) Total employees
+  2) Total stations/skills
+  3) Top 10 Risk Stations (lowest #independent)
+- Table:
+  station/skill | area | # independent (>=3) | names (expand/click)
+
+EXPORT (MUST HAVE)
+Add button: “Export current view”
+- Export the filtered gap table to CSV (station/skill, area, count>=3, names list)
+
+PERMISSIONS (MUST HAVE)
+- customer_admin + data_owner:
+  can import, manage users, view all dashboards, export
+- superuser:
+  can edit ratings in their area + export
+- viewer:
+  read-only
+
+DELIVERABLES (Definition of Done)
+1) Daniel can login and has customer_admin + data_owner access.
+2) Admin Import page supports uploading the 5 CSV files with UPSERT + import report.
+3) Go-Live v1 dashboard shows gaps/risks correctly using rating>=3 logic.
+4) Export to CSV works for the filtered view.
+5) Multi-tenant safety enforced: Daniel only sees Spaljisten org data.
+
+DO NOT DO
+- No redesign, no integrations, no extra workflows, no “nice-to-haves”.
+Ship v1.
+
+When you are ready, tell me exactly where to upload the CSVs in the app (path/page) and what DB tables/columns you expect (so I can align the file headers if needed).

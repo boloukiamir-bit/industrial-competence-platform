@@ -108,6 +108,25 @@ Customer admin: Daniel Buhre <daniel.buhre@spaljisten.se>
 
 **Architecture Note:** Uses direct PostgreSQL connection via `pg` library (lib/pgClient.ts) instead of Supabase REST API to bypass PostgREST schema cache issues with new tables.
 
+**Go-Live Setup Instructions:**
+1. Daniel signs up at /login with email: daniel.buhre@spaljisten.se
+2. Run SQL: `SELECT sp_setup_daniel_admin();` to make Daniel admin + data_owner
+3. Daniel imports CSVs at /app/spaljisten/import in order: Areas → Stations → Employees → Skills → Ratings
+4. Dashboard at /app/spaljisten/dashboard shows gap/risk analysis
+
+**CSV Import Order (recommended):**
+1. areas.csv (area_code, area_name)
+2. stations.csv (station_code, station_name, area_code)
+3. employees.csv (employee_id, employee_name, email, area_code)
+4. skills_catalog.csv (skill_id, skill_name, station_code, category)
+5. employee_skill_ratings.csv (employee_id, skill_id, rating 0-4 or N)
+
+**Rating Logic:**
+- "N" or null = not assessed
+- Rating 0-4 scale (0=none, 4=expert)
+- Independent = rating >= 3
+- Risk levels: critical (0 independent), warning (<2 independent), ok (>=2 independent)
+
 ## External Dependencies
 - **Supabase:** Used for database (PostgreSQL) and authentication services.
 - **pg Library:** Direct PostgreSQL connection for Spaljisten APIs (bypasses Supabase schema cache)
