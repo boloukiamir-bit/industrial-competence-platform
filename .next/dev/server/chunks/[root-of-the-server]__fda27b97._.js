@@ -109,34 +109,27 @@ async function importAreas(rows) {
         for(let i = 0; i < rows.length; i++){
             const row = rows[i];
             const lineNum = i + 2;
-            const areaCode = row["area_code"]?.trim() || row["code"]?.trim() || row["area"]?.trim();
-            const areaName = row["area_name"]?.trim() || row["name"]?.trim() || areaCode;
-            if (!areaCode) {
+            const rawAreaCode = row["area_code"]?.trim() || row["code"]?.trim() || row["area"]?.trim();
+            const areaName = row["area_name"]?.trim() || row["name"]?.trim() || rawAreaCode;
+            if (!rawAreaCode) {
                 failedRows.push({
                     line: lineNum,
                     reason: "Missing area_code or area"
                 });
                 continue;
             }
+            const areaCode = rawAreaCode.toLowerCase();
             try {
-                const existing = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [
+                const result = await client.query(`INSERT INTO sp_areas (org_id, area_code, area_name) 
+           VALUES ($1, $2, $3) 
+           ON CONFLICT (org_id, area_code) DO UPDATE SET area_name = EXCLUDED.area_name
+           RETURNING (xmax = 0) AS is_insert`, [
                     SPALJISTEN_ORG_ID,
-                    areaCode
+                    areaCode,
+                    areaName
                 ]);
-                if (existing.rows.length > 0) {
-                    await client.query("UPDATE sp_areas SET area_name = $1 WHERE id = $2", [
-                        areaName,
-                        existing.rows[0].id
-                    ]);
-                    updated++;
-                } else {
-                    await client.query("INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3)", [
-                        SPALJISTEN_ORG_ID,
-                        areaCode,
-                        areaName
-                    ]);
-                    inserted++;
-                }
+                if (result.rows[0]?.is_insert) inserted++;
+                else updated++;
             } catch (err) {
                 failedRows.push({
                     line: lineNum,
@@ -178,32 +171,24 @@ async function importStations(rows) {
             try {
                 let areaId = null;
                 if (areaCode) {
-                    const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [
+                    const normalizedAreaCode = areaCode.toLowerCase();
+                    const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", [
                         SPALJISTEN_ORG_ID,
-                        areaCode
+                        normalizedAreaCode
                     ]);
                     areaId = areaRes.rows[0]?.id || null;
                 }
-                const existing = await client.query("SELECT id FROM sp_stations WHERE org_id = $1 AND station_code = $2", [
+                const result = await client.query(`INSERT INTO sp_stations (org_id, station_code, station_name, area_id) 
+           VALUES ($1, $2, $3, $4) 
+           ON CONFLICT (org_id, station_code) DO UPDATE SET station_name = EXCLUDED.station_name, area_id = EXCLUDED.area_id
+           RETURNING (xmax = 0) AS is_insert`, [
                     SPALJISTEN_ORG_ID,
-                    stationCode
+                    stationCode,
+                    stationName,
+                    areaId
                 ]);
-                if (existing.rows.length > 0) {
-                    await client.query("UPDATE sp_stations SET station_name = $1, area_id = $2 WHERE id = $3", [
-                        stationName,
-                        areaId,
-                        existing.rows[0].id
-                    ]);
-                    updated++;
-                } else {
-                    await client.query("INSERT INTO sp_stations (org_id, station_code, station_name, area_id) VALUES ($1, $2, $3, $4)", [
-                        SPALJISTEN_ORG_ID,
-                        stationCode,
-                        stationName,
-                        areaId
-                    ]);
-                    inserted++;
-                }
+                if (result.rows[0]?.is_insert) inserted++;
+                else updated++;
             } catch (err) {
                 failedRows.push({
                     line: lineNum,
@@ -253,45 +238,37 @@ async function importEmployees(rows) {
             try {
                 let areaId = null;
                 if (areaName) {
-                    let areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [
+                    const normalizedAreaCode = areaName.trim().toLowerCase();
+                    // Upsert area first
+                    await client.query(`INSERT INTO sp_areas (org_id, area_code, area_name) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT (org_id, area_code) DO NOTHING`, [
                         SPALJISTEN_ORG_ID,
-                        areaName
+                        normalizedAreaCode,
+                        areaName.trim()
                     ]);
-                    if (areaRes.rows.length === 0) {
-                        await client.query("INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3)", [
-                            SPALJISTEN_ORG_ID,
-                            areaName,
-                            areaName
-                        ]);
-                        areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [
-                            SPALJISTEN_ORG_ID,
-                            areaName
-                        ]);
-                    }
+                    const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [
+                        SPALJISTEN_ORG_ID,
+                        normalizedAreaCode
+                    ]);
                     areaId = areaRes.rows[0]?.id || null;
                 }
-                const existing = await client.query("SELECT id FROM sp_employees WHERE org_id = $1 AND employee_id = $2", [
+                const result = await client.query(`INSERT INTO sp_employees (org_id, employee_id, employee_name, email, area_id) 
+           VALUES ($1, $2, $3, $4, $5) 
+           ON CONFLICT (org_id, employee_id) DO UPDATE SET 
+             employee_name = EXCLUDED.employee_name, 
+             email = EXCLUDED.email, 
+             area_id = EXCLUDED.area_id, 
+             updated_at = NOW()
+           RETURNING (xmax = 0) AS is_insert`, [
                     SPALJISTEN_ORG_ID,
-                    employeeId
+                    employeeId,
+                    employeeName,
+                    email,
+                    areaId
                 ]);
-                if (existing.rows.length > 0) {
-                    await client.query("UPDATE sp_employees SET employee_name = $1, email = $2, area_id = $3, updated_at = NOW() WHERE id = $4", [
-                        employeeName,
-                        email,
-                        areaId,
-                        existing.rows[0].id
-                    ]);
-                    updated++;
-                } else {
-                    await client.query("INSERT INTO sp_employees (org_id, employee_id, employee_name, email, area_id) VALUES ($1, $2, $3, $4, $5)", [
-                        SPALJISTEN_ORG_ID,
-                        employeeId,
-                        employeeName,
-                        email,
-                        areaId
-                    ]);
-                    inserted++;
-                }
+                if (result.rows[0]?.is_insert) inserted++;
+                else updated++;
             } catch (err) {
                 failedRows.push({
                     line: lineNum,
@@ -340,28 +317,21 @@ async function importSkillsCatalog(rows) {
                     ]);
                     stationId = stationRes.rows[0]?.id || null;
                 }
-                const existing = await client.query("SELECT id FROM sp_skills WHERE org_id = $1 AND skill_id = $2", [
+                const result = await client.query(`INSERT INTO sp_skills (org_id, skill_id, skill_name, station_id, category) 
+           VALUES ($1, $2, $3, $4, $5) 
+           ON CONFLICT (org_id, skill_id) DO UPDATE SET 
+             skill_name = EXCLUDED.skill_name, 
+             station_id = EXCLUDED.station_id, 
+             category = EXCLUDED.category
+           RETURNING (xmax = 0) AS is_insert`, [
                     SPALJISTEN_ORG_ID,
-                    skillId
+                    skillId,
+                    skillName,
+                    stationId,
+                    category
                 ]);
-                if (existing.rows.length > 0) {
-                    await client.query("UPDATE sp_skills SET skill_name = $1, station_id = $2, category = $3 WHERE id = $4", [
-                        skillName,
-                        stationId,
-                        category,
-                        existing.rows[0].id
-                    ]);
-                    updated++;
-                } else {
-                    await client.query("INSERT INTO sp_skills (org_id, skill_id, skill_name, station_id, category) VALUES ($1, $2, $3, $4, $5)", [
-                        SPALJISTEN_ORG_ID,
-                        skillId,
-                        skillName,
-                        stationId,
-                        category
-                    ]);
-                    inserted++;
-                }
+                if (result.rows[0]?.is_insert) inserted++;
+                else updated++;
             } catch (err) {
                 failedRows.push({
                     line: lineNum,
@@ -420,26 +390,19 @@ async function importEmployeeSkillRatings(rows) {
                 rating = parsed;
             }
             try {
-                const existing = await client.query("SELECT id FROM sp_employee_skills WHERE org_id = $1 AND employee_id = $2 AND skill_id = $3", [
+                const result = await client.query(`INSERT INTO sp_employee_skills (org_id, employee_id, skill_id, rating) 
+           VALUES ($1, $2, $3, $4) 
+           ON CONFLICT (org_id, employee_id, skill_id) DO UPDATE SET 
+             rating = EXCLUDED.rating, 
+             updated_at = NOW()
+           RETURNING (xmax = 0) AS is_insert`, [
                     SPALJISTEN_ORG_ID,
                     employeeId,
-                    skillId
+                    skillId,
+                    rating
                 ]);
-                if (existing.rows.length > 0) {
-                    await client.query("UPDATE sp_employee_skills SET rating = $1, updated_at = NOW() WHERE id = $2", [
-                        rating,
-                        existing.rows[0].id
-                    ]);
-                    updated++;
-                } else {
-                    await client.query("INSERT INTO sp_employee_skills (org_id, employee_id, skill_id, rating) VALUES ($1, $2, $3, $4)", [
-                        SPALJISTEN_ORG_ID,
-                        employeeId,
-                        skillId,
-                        rating
-                    ]);
-                    inserted++;
-                }
+                if (result.rows[0]?.is_insert) inserted++;
+                else updated++;
             } catch (err) {
                 failedRows.push({
                     line: lineNum,
@@ -470,7 +433,6 @@ async function importAreaLeaders(rows) {
             const lineNum = i + 2;
             const areaName = row["area"]?.trim() || row["area_code"]?.trim();
             const leaderName = row["leader_name"]?.trim() || row["employee_name"]?.trim();
-            const leaderTitle = row["leader_title"]?.trim() || "Leader";
             if (!areaName) {
                 failedRows.push({
                     line: lineNum,
@@ -486,9 +448,10 @@ async function importAreaLeaders(rows) {
                 continue;
             }
             try {
-                const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [
+                const normalizedAreaCode = areaName.toLowerCase();
+                const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", [
                     SPALJISTEN_ORG_ID,
-                    areaName
+                    normalizedAreaCode
                 ]);
                 if (areaRes.rows.length === 0) {
                     failedRows.push({
@@ -503,24 +466,16 @@ async function importAreaLeaders(rows) {
                     leaderName
                 ]);
                 const employeeId = empRes.rows[0]?.employee_id || leaderName;
-                const existing = await client.query("SELECT id FROM sp_area_leaders WHERE org_id = $1 AND area_id = $2 AND employee_id = $3", [
+                const result = await client.query(`INSERT INTO sp_area_leaders (org_id, area_id, employee_id, is_primary) 
+           VALUES ($1, $2, $3, true) 
+           ON CONFLICT (org_id, area_id, employee_id) DO UPDATE SET is_primary = true
+           RETURNING (xmax = 0) AS is_insert`, [
                     SPALJISTEN_ORG_ID,
                     areaId,
                     employeeId
                 ]);
-                if (existing.rows.length > 0) {
-                    await client.query("UPDATE sp_area_leaders SET is_primary = true WHERE id = $1", [
-                        existing.rows[0].id
-                    ]);
-                    updated++;
-                } else {
-                    await client.query("INSERT INTO sp_area_leaders (org_id, area_id, employee_id, is_primary) VALUES ($1, $2, $3, true)", [
-                        SPALJISTEN_ORG_ID,
-                        areaId,
-                        employeeId
-                    ]);
-                    inserted++;
-                }
+                if (result.rows[0]?.is_insert) inserted++;
+                else updated++;
             } catch (err) {
                 failedRows.push({
                     line: lineNum,
