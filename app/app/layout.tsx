@@ -24,7 +24,8 @@ import {
   Clipboard,
   Bug,
   Gauge,
-  Factory
+  Factory,
+  Target
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,6 +67,11 @@ const moreNavItems: NavItem[] = [
   { name: "Handbooks", href: "/app/handbooks", icon: BookOpen },
   { name: "Documents", href: "/app/documents", icon: FileText },
   { name: "News", href: "/app/news", icon: Newspaper },
+];
+
+const spaljistenNavItems: NavItem[] = [
+  { name: "SP Dashboard", href: "/app/spaljisten/dashboard", icon: Target },
+  { name: "SP Import", href: "/app/spaljisten/import", icon: Upload },
 ];
 
 const settingsNavItems: NavItem[] = [
@@ -178,6 +184,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </p>
                 <ul className="space-y-1">
                   {moreNavItems.map(renderNavItem)}
+                </ul>
+              </div>
+
+              <div className="mb-4">
+                <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  Spaljisten
+                </p>
+                <ul className="space-y-1">
+                  {spaljistenNavItems.map(renderNavItem)}
                 </ul>
               </div>
 
