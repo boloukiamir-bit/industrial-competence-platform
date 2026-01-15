@@ -1,0 +1,13 @@
+scale_group,rating_value,description
+production,0,Provanställd
+production,1,Tillsvidareanställd. Kan med support sköta delar av arbetet
+production,2,Kan med support hantera alla delar av arbetsuppgifterna korrekt med rätt kvalitet
+production,3,Helt självgående enligt beskrivna rutiner i alla arbetsuppgifter med rätt kvalitet och i rätt tid
+production,4,"Uppnår ""3"" samt utbildar kollegor eller utvecklar/bidrar med förbättringsarbete i flödet"
+production,5,"Uppnår ”3"" samt utbildar kollegor och utvecklar/bidrar med förbättringsarbete i flödet"
+maintenance,N,Nyanställd Mekaniker och Automationselektriker
+maintenance,1,Ny på avdelningen och kan med support sköta delar av arbetet
+maintenance,2,Kan med support hantera vanligt förekommande arbetsuppgifter med rätt kvalitet
+maintenance,3,Helt självgående i vanligt förekommande arbetsuppgifter med rätt kvalitet och i rätt tid
+maintenance,4,Helt självgående samt hanterar särskilt avancerade arbetsuppgifter
+maintenance,5,Helt självgående samt bidrar till avdelningens utveckling

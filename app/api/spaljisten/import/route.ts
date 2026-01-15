@@ -24,11 +24,10 @@ async function importAreas(rows: Record<string, string>[]): Promise<ImportResult
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const lineNum = i + 2;
-      const areaCode = row["area_code"]?.trim() || row["code"]?.trim();
-      const areaName = row["area_name"]?.trim() || row["name"]?.trim();
+      const areaCode = row["area_code"]?.trim() || row["code"]?.trim() || row["area"]?.trim();
+      const areaName = row["area_name"]?.trim() || row["name"]?.trim() || areaCode;
 
-      if (!areaCode) { failedRows.push({ line: lineNum, reason: "Missing area_code" }); continue; }
-      if (!areaName) { failedRows.push({ line: lineNum, reason: "Missing area_name" }); continue; }
+      if (!areaCode) { failedRows.push({ line: lineNum, reason: "Missing area_code or area" }); continue; }
 
       try {
         const existing = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaCode]);
@@ -58,17 +57,16 @@ async function importStations(rows: Record<string, string>[]): Promise<ImportRes
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const lineNum = i + 2;
-      const stationCode = row["station_code"]?.trim() || row["code"]?.trim();
-      const stationName = row["station_name"]?.trim() || row["name"]?.trim();
+      const stationCode = row["station_code"]?.trim() || row["code"]?.trim() || row["skill_code"]?.trim();
+      const stationName = row["station_name"]?.trim() || row["name"]?.trim() || row["skill_name"]?.trim() || stationCode;
       const areaCode = row["area_code"]?.trim() || row["area"]?.trim();
 
       if (!stationCode) { failedRows.push({ line: lineNum, reason: "Missing station_code" }); continue; }
-      if (!stationName) { failedRows.push({ line: lineNum, reason: "Missing station_name" }); continue; }
 
       try {
         let areaId = null;
         if (areaCode) {
-          const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaCode]);
+          const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [SPALJISTEN_ORG_ID, areaCode]);
           areaId = areaRes.rows[0]?.id || null;
         }
 
@@ -102,15 +100,19 @@ async function importEmployees(rows: Record<string, string>[]): Promise<ImportRe
       const employeeId = row["employee_id"]?.trim();
       const employeeName = row["employee_name"]?.trim() || row["name"]?.trim();
       const email = row["email"]?.trim() || null;
-      const areaCode = row["area"]?.trim() || row["area_code"]?.trim();
+      const areaName = row["source_sheet"]?.trim() || row["area"]?.trim() || row["area_code"]?.trim();
 
       if (!employeeId) { failedRows.push({ line: lineNum, reason: "Missing employee_id" }); continue; }
       if (!employeeName) { failedRows.push({ line: lineNum, reason: "Missing employee_name" }); continue; }
 
       try {
         let areaId = null;
-        if (areaCode) {
-          const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaCode]);
+        if (areaName) {
+          let areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [SPALJISTEN_ORG_ID, areaName]);
+          if (areaRes.rows.length === 0) {
+            await client.query("INSERT INTO sp_areas (org_id, area_code, area_name) VALUES ($1, $2, $3)", [SPALJISTEN_ORG_ID, areaName, areaName]);
+            areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaName]);
+          }
           areaId = areaRes.rows[0]?.id || null;
         }
 
@@ -141,13 +143,12 @@ async function importSkillsCatalog(rows: Record<string, string>[]): Promise<Impo
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const lineNum = i + 2;
-      const skillId = row["skill_id"]?.trim();
-      const skillName = row["skill_name"]?.trim() || row["name"]?.trim();
+      const skillId = row["skill_id"]?.trim() || row["skill_code"]?.trim();
+      const skillName = row["skill_name"]?.trim() || row["name"]?.trim() || skillId;
       const stationCode = row["station"]?.trim() || row["station_code"]?.trim();
-      const category = row["category"]?.trim() || null;
+      const category = row["category"]?.trim() || row["skill_type"]?.trim() || null;
 
-      if (!skillId) { failedRows.push({ line: lineNum, reason: "Missing skill_id" }); continue; }
-      if (!skillName) { failedRows.push({ line: lineNum, reason: "Missing skill_name" }); continue; }
+      if (!skillId) { failedRows.push({ line: lineNum, reason: "Missing skill_id or skill_code" }); continue; }
 
       try {
         let stationId = null;
@@ -184,17 +185,17 @@ async function importEmployeeSkillRatings(rows: Record<string, string>[]): Promi
       const row = rows[i];
       const lineNum = i + 2;
       const employeeId = row["employee_id"]?.trim();
-      const skillId = row["skill_id"]?.trim();
+      const skillId = row["skill_id"]?.trim() || row["skill_code"]?.trim();
       const ratingStr = row["rating"]?.trim();
 
       if (!employeeId) { failedRows.push({ line: lineNum, reason: "Missing employee_id" }); continue; }
-      if (!skillId) { failedRows.push({ line: lineNum, reason: "Missing skill_id" }); continue; }
+      if (!skillId) { failedRows.push({ line: lineNum, reason: "Missing skill_id or skill_code" }); continue; }
 
       let rating: number | null = null;
-      if (ratingStr && ratingStr !== "N" && ratingStr !== "" && ratingStr !== "-") {
+      if (ratingStr && ratingStr.toUpperCase() !== "N" && ratingStr !== "" && ratingStr !== "-") {
         const parsed = parseInt(ratingStr, 10);
-        if (isNaN(parsed) || parsed < 0 || parsed > 4) {
-          failedRows.push({ line: lineNum, reason: `Invalid rating: ${ratingStr}` });
+        if (isNaN(parsed) || parsed < 0 || parsed > 5) {
+          failedRows.push({ line: lineNum, reason: `Invalid rating: ${ratingStr} (must be 0-5 or N)` });
           continue;
         }
         rating = parsed;
@@ -228,28 +229,30 @@ async function importAreaLeaders(rows: Record<string, string>[]): Promise<Import
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const lineNum = i + 2;
-      const areaCode = row["area_code"]?.trim() || row["area"]?.trim();
-      const employeeId = row["employee_id"]?.trim() || row["leader_id"]?.trim();
-      const isPrimaryStr = row["is_primary"]?.trim() || "false";
+      const areaName = row["area"]?.trim() || row["area_code"]?.trim();
+      const leaderName = row["leader_name"]?.trim() || row["employee_name"]?.trim();
+      const leaderTitle = row["leader_title"]?.trim() || "Leader";
 
-      if (!areaCode) { failedRows.push({ line: lineNum, reason: "Missing area_code" }); continue; }
-      if (!employeeId) { failedRows.push({ line: lineNum, reason: "Missing employee_id" }); continue; }
+      if (!areaName) { failedRows.push({ line: lineNum, reason: "Missing area" }); continue; }
+      if (!leaderName) { failedRows.push({ line: lineNum, reason: "Missing leader_name" }); continue; }
 
       try {
-        const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [SPALJISTEN_ORG_ID, areaCode]);
+        const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR area_name = $2)", [SPALJISTEN_ORG_ID, areaName]);
         if (areaRes.rows.length === 0) {
-          failedRows.push({ line: lineNum, reason: `Area not found: ${areaCode}` });
+          failedRows.push({ line: lineNum, reason: `Area not found: ${areaName}` });
           continue;
         }
         const areaId = areaRes.rows[0].id;
-        const isPrimary = isPrimaryStr.toLowerCase() === "true" || isPrimaryStr === "1";
+
+        const empRes = await client.query("SELECT employee_id FROM sp_employees WHERE org_id = $1 AND employee_name = $2", [SPALJISTEN_ORG_ID, leaderName]);
+        const employeeId = empRes.rows[0]?.employee_id || leaderName;
 
         const existing = await client.query("SELECT id FROM sp_area_leaders WHERE org_id = $1 AND area_id = $2 AND employee_id = $3", [SPALJISTEN_ORG_ID, areaId, employeeId]);
         if (existing.rows.length > 0) {
-          await client.query("UPDATE sp_area_leaders SET is_primary = $1 WHERE id = $2", [isPrimary, existing.rows[0].id]);
+          await client.query("UPDATE sp_area_leaders SET is_primary = true WHERE id = $1", [existing.rows[0].id]);
           updated++;
         } else {
-          await client.query("INSERT INTO sp_area_leaders (org_id, area_id, employee_id, is_primary) VALUES ($1, $2, $3, $4)", [SPALJISTEN_ORG_ID, areaId, employeeId, isPrimary]);
+          await client.query("INSERT INTO sp_area_leaders (org_id, area_id, employee_id, is_primary) VALUES ($1, $2, $3, true)", [SPALJISTEN_ORG_ID, areaId, employeeId]);
           inserted++;
         }
       } catch (err) {
@@ -271,24 +274,32 @@ async function importRatingScales(rows: Record<string, string>[]): Promise<Impor
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const lineNum = i + 2;
-      const levelStr = row["level"]?.trim();
-      const label = row["label"]?.trim();
-      const description = row["description"]?.trim() || null;
-      const color = row["color"]?.trim() || null;
+      const scaleGroup = row["scale_group"]?.trim() || "default";
+      const levelStr = row["level"]?.trim() || row["rating_value"]?.trim();
+      const label = row["label"]?.trim() || row["description"]?.trim();
+      const description = row["description"]?.trim() || label || "";
 
-      if (!levelStr) { failedRows.push({ line: lineNum, reason: "Missing level" }); continue; }
-      if (!label) { failedRows.push({ line: lineNum, reason: "Missing label" }); continue; }
+      if (!levelStr) { failedRows.push({ line: lineNum, reason: "Missing level or rating_value" }); continue; }
 
-      const level = parseInt(levelStr, 10);
-      if (isNaN(level) || level < 0 || level > 4) { failedRows.push({ line: lineNum, reason: `Invalid level: ${levelStr}` }); continue; }
+      let level: number | null = null;
+      if (levelStr.toUpperCase() === "N") {
+        level = null;
+      } else {
+        const parsed = parseInt(levelStr, 10);
+        if (isNaN(parsed)) {
+          failedRows.push({ line: lineNum, reason: `Invalid level: ${levelStr}` });
+          continue;
+        }
+        level = parsed;
+      }
 
       try {
         const existing = await client.query("SELECT id FROM sp_rating_scales WHERE org_id = $1 AND level = $2", [SPALJISTEN_ORG_ID, level]);
         if (existing.rows.length > 0) {
-          await client.query("UPDATE sp_rating_scales SET label = $1, description = $2, color = $3 WHERE id = $4", [label, description, color, existing.rows[0].id]);
+          await client.query("UPDATE sp_rating_scales SET label = $1, description = $2 WHERE id = $3", [label || `Level ${level}`, description, existing.rows[0].id]);
           updated++;
-        } else {
-          await client.query("INSERT INTO sp_rating_scales (org_id, level, label, description, color) VALUES ($1, $2, $3, $4, $5)", [SPALJISTEN_ORG_ID, level, label, description, color]);
+        } else if (level !== null) {
+          await client.query("INSERT INTO sp_rating_scales (org_id, level, label, description) VALUES ($1, $2, $3, $4)", [SPALJISTEN_ORG_ID, level, label || `Level ${level}`, description]);
           inserted++;
         }
       } catch (err) {

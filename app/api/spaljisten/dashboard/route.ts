@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       const totalRatings = ratings.filter((r) => r.rating !== null).length;
       const averageIndependentRate = totalRatings > 0 ? Math.round((independentRatings.length / totalRatings) * 100) : 0;
 
-      const kpis = { totalEmployees, totalStations, totalSkills, averageIndependentRate };
+      const kpis = { totalEmployees, totalStations, totalSkills, totalRatings, averageIndependentRate };
 
       const stationRisks: { stationCode: string; stationName: string; independentCount: number; totalSkills: number; riskScore: number }[] = [];
       for (const station of stations) {
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
         stations: stations.map((s) => ({ id: s.id, stationCode: s.station_code, stationName: s.station_name, areaId: s.area_id })),
       };
 
-      return NextResponse.json({ kpis, topRiskStations, skillGapData, filterOptions });
+      return NextResponse.json({ kpis, topRiskStations, skillGapTable: skillGapData, filterOptions });
     } finally {
       client.release();
     }

@@ -143,6 +143,24 @@ export default function SpaljistenDashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3 mb-4" data-testid="banner-data-status">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <span className="font-medium text-blue-900 dark:text-blue-100">Spaljisten</span>
+          <span className="text-blue-700 dark:text-blue-300">
+            Areas: {data.filterOptions.areas.length}
+          </span>
+          <span className="text-blue-700 dark:text-blue-300">
+            Employees: {data.kpis.totalEmployees}
+          </span>
+          <span className="text-blue-700 dark:text-blue-300">
+            Skills: {data.skillGapTable.length}
+          </span>
+          <span className="text-blue-700 dark:text-blue-300">
+            Ratings: {data.kpis.totalRatings || 0}
+          </span>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="heading-dashboard">

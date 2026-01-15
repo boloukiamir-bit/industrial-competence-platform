@@ -1,0 +1,49 @@
+STOP-THE-LINE — DATA LEAK / WRONG TENANT + IMPORT FAILING (Spaljisten)
+
+Current situation is unacceptable:
+- When logging in with a NEW email, the UI still shows OLD demo data.
+- Import upload throws errors.
+This indicates broken tenant/org scoping OR API fallback to demo dataset.
+This is a CUSTOMER TRUST KILLER. Fix this before anything else.
+
+NON-NEGOTIABLE FIXES (in order)
+
+1) Tenant isolation must be bulletproof (NO demo fallback):
+   - Every Spaljisten page and API must be scoped by authenticated user's org_id.
+   - Remove ANY fallback that returns demo data when tables are empty or org is missing.
+   - If user has no org mapping, UI must show a hard error:
+     "No org assigned. Contact admin." (NOT demo data)
+
+2) Fix auth -> org mapping:
+   - Ensure new users are NOT defaulted to demo org.
+   - For Daniel:
+     Email: daniel.buhre@spaljisten.se
+     Must be customer_admin + data_owner and bound to Spaljisten org_id.
+   - Do NOT require me to run SQL manually. Provide a secure admin-setup endpoint or run it yourselves.
+
+3) Import must work end-to-end:
+   - Import page: /app/spaljisten/import
+   - APIs: /api/spaljisten/import
+   - Provide exact validation errors in UI (row number + reason).
+   - Confirm rating scale: earlier spec was 0–5, your current build says 0–4.
+     Decide ONE scale and enforce it. If 0–4 is final, reject 5 with clear message.
+     Treat "N" as NULL/not assessed.
+
+4) Eliminate "old data" contamination:
+   - Confirm the UI is not calling old endpoints or old tables.
+   - Confirm environment variables point to the correct database.
+   - Confirm no cached seed data in code.
+   - Confirm RLS policies are not blocking real data while demo bypasses RLS.
+
+5) Add a visible Tenant/Data banner to prevent silent failure:
+   - At top of /dashboard show:
+     org_name, org_id, dataset counts (employees/skills/ratings), last_import_at
+   This makes issues instantly obvious.
+
+DEFINITION OF DONE (must prove with screenshots/video):
+- Log in with a brand new email (not in DB) -> user sees "No org assigned" message (NOT demo data).
+- Log in as Daniel -> sees Spaljisten org banner + counts matching imported CSVs.
+- Import succeeds for all 5 CSVs and produces an import report (inserted/updated/failed + failed rows).
+- Dashboard shows ONLY Spaljisten data; no demo data anywhere.
+
+PRIORITY: P0. Everything else is blocked until this is fixed.

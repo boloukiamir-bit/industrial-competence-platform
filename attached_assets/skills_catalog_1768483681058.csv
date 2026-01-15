@@ -1,0 +1,27 @@
+skill_code,skill_name,weight,skill_type
+101.1,HGL 1,2.0,machine_station
+101.2,Combiline,2.0,machine_station
+105,HGL 2,4.0,machine_station
+201,IMA,2.0,machine_station
+202,Homag 5,1.5,machine_station
+204,Weeke,1.5,machine_station
+205,Schelling 2,1.0,machine_station
+206,Homag 7,2.0,machine_station
+207,Schelling 1,1.5,machine_station
+209,SMM,1.0,machine_station
+210,Folieskärare,1.0,machine_station
+212,Schelling 3,1.5,machine_station
+213,Homag 8,1.5,machine_station
+304,Frontpack,1.0,machine_station
+306,Flexline,1.5,machine_station
+308,Handpack,1.0,machine_station
+309,Semipack,1.0,machine_station
+315,Gladpack 1,1.5,machine_station
+349.1,Materialhantering / Internlogistik/Wellpall,1.0,machine_station
+349.2,Godsmottagning,1.0,machine_station
+349.3,Utlastning,1.0,machine_station
+14.1,Fastighetsskötare,,maintenance_category
+14.2,Fastighetstekniker,,maintenance_category
+14.3,Underhållstekniker,,maintenance_category
+14.4,Mekaniker,,maintenance_category
+14.5,Automationselektriker,,maintenance_category
