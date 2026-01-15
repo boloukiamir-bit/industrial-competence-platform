@@ -1,5 +1,9 @@
 {
   "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
+  "/app/competence-matrix/page": "app/app/competence-matrix/page.js",
+  "/app/gaps/page": "app/app/gaps/page.js",
+  "/app/hr/tasks/page": "app/app/hr/tasks/page.js",
+  "/app/org/overview/page": "app/app/org/overview/page.js",
   "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
   "/login/page": "app/login/page.js"
 }
