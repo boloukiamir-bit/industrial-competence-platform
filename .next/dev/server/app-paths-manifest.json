@@ -2,5 +2,6 @@
   "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
   "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
   "/login/page": "app/login/page.js",
-  "/page": "app/page.js"
+  "/page": "app/page.js",
+  "/signup/page": "app/signup/page.js"
 }
