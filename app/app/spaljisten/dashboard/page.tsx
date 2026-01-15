@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users,
-  Building2,
+  Layers,
   Wrench,
   TrendingUp,
   AlertTriangle,
@@ -17,39 +17,41 @@ import {
 } from "lucide-react";
 
 type SPArea = { id: string; areaCode: string; areaName: string };
-type SPStation = { id: string; stationCode: string; stationName: string; areaId: string | null };
 
 type DashboardKPIs = {
   totalEmployees: number;
-  totalStations: number;
   totalSkills: number;
+  totalAreas: number;
+  totalRatings: number;
   averageIndependentRate: number;
+  orgName: string;
+  orgId: string;
 };
 
-type TopRiskStation = {
-  stationCode: string;
-  stationName: string;
+type TopRiskSkill = {
+  skillId: string;
+  skillName: string;
+  category: string;
   independentCount: number;
-  totalSkills: number;
-  riskScore: number;
+  totalRated: number;
+  riskLevel: string;
 };
 
 type SkillGapData = {
-  stationCode: string;
-  stationName: string;
   skillId: string;
   skillName: string;
+  category: string;
   independentCount: number;
   totalEmployees: number;
-  employees: { employeeId: string; employeeName: string; rating: number | null }[];
+  employees: { employeeId: string; employeeName: string; areaName: string; rating: number | null }[];
   riskLevel: "ok" | "warning" | "critical";
 };
 
 type DashboardData = {
   kpis: DashboardKPIs;
-  topRiskStations: TopRiskStation[];
+  topRiskSkills: TopRiskSkill[];
   skillGapTable: SkillGapData[];
-  filterOptions: { areas: SPArea[]; stations: SPStation[] };
+  filterOptions: { areas: SPArea[] };
 };
 
 export default function SpaljistenDashboard() {
@@ -58,7 +60,6 @@ export default function SpaljistenDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedArea, setSelectedArea] = useState<string>("");
-  const [selectedStation, setSelectedStation] = useState<string>("");
   const [expandedSkills, setExpandedSkills] = useState<Set<string>>(new Set());
 
   const fetchData = async () => {
@@ -66,7 +67,6 @@ export default function SpaljistenDashboard() {
     try {
       const params = new URLSearchParams();
       if (selectedArea) params.set("areaId", selectedArea);
-      if (selectedStation) params.set("stationId", selectedStation);
 
       const response = await fetch(`/api/spaljisten/dashboard?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to load dashboard");
@@ -82,12 +82,11 @@ export default function SpaljistenDashboard() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedArea, selectedStation]);
+  }, [selectedArea]);
 
   const handleExport = () => {
     const params = new URLSearchParams();
     if (selectedArea) params.set("areaId", selectedArea);
-    if (selectedStation) params.set("stationId", selectedStation);
     window.open(`/api/spaljisten/export?${params.toString()}`, "_blank");
   };
 
@@ -111,10 +110,6 @@ export default function SpaljistenDashboard() {
         return <Badge className="bg-green-500 hover:bg-green-600">OK</Badge>;
     }
   };
-
-  const filteredStations = data?.filterOptions.stations.filter(
-    (s) => !selectedArea || s.areaId === selectedArea
-  ) || [];
 
   if (loading && !data) {
     return (
@@ -145,18 +140,19 @@ export default function SpaljistenDashboard() {
     <div className="p-6 space-y-6">
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3 mb-4" data-testid="banner-data-status">
         <div className="flex flex-wrap items-center gap-4 text-sm">
-          <span className="font-medium text-blue-900 dark:text-blue-100">Spaljisten</span>
+          <span className="font-bold text-blue-900 dark:text-blue-100">{data.kpis.orgName}</span>
+          <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">{data.kpis.orgId.slice(0, 8)}...</span>
           <span className="text-blue-700 dark:text-blue-300">
-            Areas: {data.filterOptions.areas.length}
+            Areas: {data.kpis.totalAreas}
           </span>
           <span className="text-blue-700 dark:text-blue-300">
             Employees: {data.kpis.totalEmployees}
           </span>
           <span className="text-blue-700 dark:text-blue-300">
-            Skills: {data.skillGapTable.length}
+            Skills: {data.kpis.totalSkills}
           </span>
           <span className="text-blue-700 dark:text-blue-300">
-            Ratings: {data.kpis.totalRatings || 0}
+            Ratings: {data.kpis.totalRatings}
           </span>
         </div>
       </div>
@@ -167,7 +163,7 @@ export default function SpaljistenDashboard() {
             Skill Matrix Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Gap and risk analysis for Spaljisten
+            Gap and risk analysis for {data.kpis.orgName}
           </p>
         </div>
         <Button onClick={handleExport} data-testid="button-export">
@@ -177,7 +173,7 @@ export default function SpaljistenDashboard() {
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <Select value={selectedArea || "all"} onValueChange={(v) => { setSelectedArea(v === "all" ? "" : v); setSelectedStation(""); }}>
+        <Select value={selectedArea || "all"} onValueChange={(v) => setSelectedArea(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[200px]" data-testid="select-area">
             <SelectValue placeholder="All Areas" />
           </SelectTrigger>
@@ -186,20 +182,6 @@ export default function SpaljistenDashboard() {
             {data.filterOptions.areas.map((area) => (
               <SelectItem key={area.id} value={area.id}>
                 {area.areaName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={selectedStation || "all"} onValueChange={(v) => setSelectedStation(v === "all" ? "" : v)}>
-          <SelectTrigger className="w-[200px]" data-testid="select-station">
-            <SelectValue placeholder="All Stations" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Stations</SelectItem>
-            {filteredStations.map((station) => (
-              <SelectItem key={station.id} value={station.id}>
-                {station.stationName}
               </SelectItem>
             ))}
           </SelectContent>
@@ -224,12 +206,12 @@ export default function SpaljistenDashboard() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <Building2 className="h-8 w-8 text-purple-500" />
+              <Layers className="h-8 w-8 text-purple-500" />
               <div>
-                <p className="text-2xl font-bold" data-testid="kpi-stations">
-                  {data.kpis.totalStations}
+                <p className="text-2xl font-bold" data-testid="kpi-areas">
+                  {data.kpis.totalAreas}
                 </p>
-                <p className="text-sm text-muted-foreground">Stations</p>
+                <p className="text-sm text-muted-foreground">Areas</p>
               </div>
             </div>
           </CardContent>
@@ -268,11 +250,11 @@ export default function SpaljistenDashboard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-500" />
-            Top 10 Risk Stations
+            Top 10 Risk Skills
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {data.topRiskStations.length === 0 ? (
+          {data.topRiskSkills.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No risk data available. Import skill ratings first.
             </p>
@@ -281,26 +263,26 @@ export default function SpaljistenDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2">Station</th>
-                    <th className="text-center p-2">Independent Count</th>
-                    <th className="text-center p-2">Total Skills</th>
-                    <th className="text-center p-2">Risk Score</th>
+                    <th className="text-left p-2">Skill</th>
+                    <th className="text-left p-2">Category</th>
+                    <th className="text-center p-2">Independent</th>
+                    <th className="text-center p-2">Total Rated</th>
+                    <th className="text-center p-2">Risk</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.topRiskStations.map((station, idx) => (
-                    <tr key={station.stationCode} className="border-b hover-elevate">
+                  {data.topRiskSkills.map((skill, idx) => (
+                    <tr key={skill.skillId} className="border-b hover-elevate">
                       <td className="p-2">
                         <span className="font-medium">{idx + 1}. </span>
-                        {station.stationName}
-                        <span className="text-muted-foreground ml-1">({station.stationCode})</span>
+                        {skill.skillName}
+                        <span className="text-muted-foreground ml-1">({skill.skillId})</span>
                       </td>
-                      <td className="text-center p-2">{station.independentCount}</td>
-                      <td className="text-center p-2">{station.totalSkills}</td>
+                      <td className="p-2 text-muted-foreground">{skill.category}</td>
+                      <td className="text-center p-2">{skill.independentCount}</td>
+                      <td className="text-center p-2">{skill.totalRated}</td>
                       <td className="text-center p-2">
-                        <Badge variant={station.riskScore > 5 ? "destructive" : "default"}>
-                          {station.riskScore}
-                        </Badge>
+                        {getRiskBadge(skill.riskLevel as "ok" | "warning" | "critical")}
                       </td>
                     </tr>
                   ))}
@@ -313,7 +295,7 @@ export default function SpaljistenDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Skill Gap Details</CardTitle>
+          <CardTitle>Skill Gap Details ({data.skillGapTable.length} skills with ratings)</CardTitle>
         </CardHeader>
         <CardContent>
           {data.skillGapTable.length === 0 ? (
@@ -324,24 +306,24 @@ export default function SpaljistenDashboard() {
             <div className="space-y-2">
               {data.skillGapTable.map((item) => (
                 <div
-                  key={`${item.stationCode}-${item.skillId}`}
+                  key={item.skillId}
                   className="border rounded-md overflow-hidden"
                 >
                   <button
                     className="w-full flex items-center justify-between p-3 hover-elevate text-left"
-                    onClick={() => toggleSkillExpand(`${item.stationCode}-${item.skillId}`)}
+                    onClick={() => toggleSkillExpand(item.skillId)}
                     data-testid={`button-expand-${item.skillId}`}
                   >
                     <div className="flex items-center gap-3">
-                      {expandedSkills.has(`${item.stationCode}-${item.skillId}`) ? (
+                      {expandedSkills.has(item.skillId) ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
                         <ChevronRight className="h-4 w-4" />
                       )}
                       <div>
                         <span className="font-medium">{item.skillName}</span>
-                        <span className="text-muted-foreground ml-2">
-                          ({item.stationName})
+                        <span className="text-muted-foreground ml-2 text-sm">
+                          ({item.skillId} • {item.category})
                         </span>
                       </div>
                     </div>
@@ -353,7 +335,7 @@ export default function SpaljistenDashboard() {
                     </div>
                   </button>
 
-                  {expandedSkills.has(`${item.stationCode}-${item.skillId}`) && (
+                  {expandedSkills.has(item.skillId) && (
                     <div className="border-t bg-muted/50 p-3">
                       {item.employees.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No employees rated for this skill.</p>
@@ -364,7 +346,10 @@ export default function SpaljistenDashboard() {
                               key={emp.employeeId}
                               className="flex items-center justify-between p-2 bg-background rounded border"
                             >
-                              <span className="text-sm truncate">{emp.employeeName}</span>
+                              <div className="truncate mr-2">
+                                <span className="text-sm">{emp.employeeName}</span>
+                                <span className="text-xs text-muted-foreground block">{emp.areaName}</span>
+                              </div>
                               <Badge
                                 variant={
                                   emp.rating === null

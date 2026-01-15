@@ -1849,9 +1849,14 @@ function AppLayout({ children }) {
             if (item.hrAdminOnly && user?.role !== "HR_ADMIN") return false;
             return true;
         });
-    const visibleCoreItems = filterItems(coreNavItems);
-    const visibleHrItems = filterItems(hrNavItems);
-    const visibleSettingsItems = filterItems(settingsNavItems);
+    const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
+    const isSpaljistenUser = authUser?.email?.endsWith("@spaljisten.se");
+    const showOnlySpaljisten = isSpaljistenPage || isSpaljistenUser;
+    const visibleCoreItems = showOnlySpaljisten ? [] : filterItems(coreNavItems);
+    const visibleHrItems = showOnlySpaljisten ? [] : filterItems(hrNavItems);
+    const visibleMoreItems = showOnlySpaljisten ? [] : moreNavItems;
+    const visibleSettingsItems = showOnlySpaljisten ? [] : filterItems(settingsNavItems);
+    const visibleSpaljistenItems = showOnlySpaljisten ? spaljistenNavItems : spaljistenNavItems;
     const renderNavItem = (item)=>{
         const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
         const Icon = item.icon;
@@ -1865,19 +1870,19 @@ function AppLayout({ children }) {
                         className: "h-4 w-4"
                     }, void 0, false, {
                         fileName: "[project]/app/app/layout.tsx",
-                        lineNumber: 140,
+                        lineNumber: 146,
                         columnNumber: 11
                     }, this),
                     item.name
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/layout.tsx",
-                lineNumber: 131,
+                lineNumber: 137,
                 columnNumber: 9
             }, this)
         }, item.name, false, {
             fileName: "[project]/app/app/layout.tsx",
-            lineNumber: 130,
+            lineNumber: 136,
             columnNumber: 7
         }, this);
     };
@@ -1885,7 +1890,7 @@ function AppLayout({ children }) {
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$GlobalErrorHandler$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["GlobalErrorHandler"], {}, void 0, false, {
                 fileName: "[project]/app/app/layout.tsx",
-                lineNumber: 149,
+                lineNumber: 155,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1893,7 +1898,7 @@ function AppLayout({ children }) {
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$DemoModeBanner$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["DemoModeBanner"], {}, void 0, false, {
                         fileName: "[project]/app/app/layout.tsx",
-                        lineNumber: 151,
+                        lineNumber: 157,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1910,7 +1915,7 @@ function AppLayout({ children }) {
                                                 children: "Industrial Competence"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 155,
+                                                lineNumber: 161,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1918,19 +1923,19 @@ function AppLayout({ children }) {
                                                 children: "Platform"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 158,
+                                                lineNumber: 164,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/layout.tsx",
-                                        lineNumber: 154,
+                                        lineNumber: 160,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("nav", {
                                         className: "flex-1 p-4 overflow-y-auto",
                                         children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            visibleCoreItems.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 className: "mb-4",
                                                 children: [
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1938,22 +1943,22 @@ function AppLayout({ children }) {
                                                         children: __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$copy$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["COPY"].nav.core
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 162,
-                                                        columnNumber: 17
+                                                        lineNumber: 169,
+                                                        columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
                                                         className: "space-y-1",
                                                         children: visibleCoreItems.map(renderNavItem)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 165,
-                                                        columnNumber: 17
+                                                        lineNumber: 172,
+                                                        columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 161,
-                                                columnNumber: 15
+                                                lineNumber: 168,
+                                                columnNumber: 17
                                             }, this),
                                             visibleHrItems.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 className: "mb-4",
@@ -1963,7 +1968,7 @@ function AppLayout({ children }) {
                                                         children: "HR Tools"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 172,
+                                                        lineNumber: 180,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
@@ -1971,16 +1976,16 @@ function AppLayout({ children }) {
                                                         children: visibleHrItems.map(renderNavItem)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 175,
+                                                        lineNumber: 183,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 171,
+                                                lineNumber: 179,
                                                 columnNumber: 17
                                             }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            visibleMoreItems.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 className: "mb-4",
                                                 children: [
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1988,24 +1993,24 @@ function AppLayout({ children }) {
                                                         children: "More"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 182,
-                                                        columnNumber: 17
+                                                        lineNumber: 191,
+                                                        columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
                                                         className: "space-y-1",
-                                                        children: moreNavItems.map(renderNavItem)
+                                                        children: visibleMoreItems.map(renderNavItem)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 185,
-                                                        columnNumber: 17
+                                                        lineNumber: 194,
+                                                        columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 181,
-                                                columnNumber: 15
+                                                lineNumber: 190,
+                                                columnNumber: 17
                                             }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            visibleSpaljistenItems.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 className: "mb-4",
                                                 children: [
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2013,48 +2018,48 @@ function AppLayout({ children }) {
                                                         children: "Spaljisten"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 191,
-                                                        columnNumber: 17
+                                                        lineNumber: 202,
+                                                        columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
                                                         className: "space-y-1",
-                                                        children: spaljistenNavItems.map(renderNavItem)
+                                                        children: visibleSpaljistenItems.map(renderNavItem)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 194,
-                                                        columnNumber: 17
+                                                        lineNumber: 205,
+                                                        columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 190,
-                                                columnNumber: 15
+                                                lineNumber: 201,
+                                                columnNumber: 17
                                             }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            visibleSettingsItems.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 className: "pt-4 border-t border-gray-200 dark:border-gray-700",
                                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
                                                     className: "space-y-1",
                                                     children: visibleSettingsItems.map(renderNavItem)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/layout.tsx",
-                                                    lineNumber: 200,
-                                                    columnNumber: 17
+                                                    lineNumber: 213,
+                                                    columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 199,
-                                                columnNumber: 15
+                                                lineNumber: 212,
+                                                columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/layout.tsx",
-                                        lineNumber: 160,
+                                        lineNumber: 166,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/layout.tsx",
-                                lineNumber: 153,
+                                lineNumber: 159,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2073,7 +2078,7 @@ function AppLayout({ children }) {
                                                 })
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 209,
+                                                lineNumber: 223,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2085,7 +2090,7 @@ function AppLayout({ children }) {
                                                         children: authUser?.email || user?.email || "User"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 218,
+                                                        lineNumber: 232,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2097,26 +2102,26 @@ function AppLayout({ children }) {
                                                                 className: "h-4 w-4"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/layout.tsx",
-                                                                lineNumber: 226,
+                                                                lineNumber: 240,
                                                                 columnNumber: 19
                                                             }, this),
                                                             "Sign out"
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/app/layout.tsx",
-                                                        lineNumber: 221,
+                                                        lineNumber: 235,
                                                         columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/layout.tsx",
-                                                lineNumber: 217,
+                                                lineNumber: 231,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/layout.tsx",
-                                        lineNumber: 208,
+                                        lineNumber: 222,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
@@ -2124,31 +2129,31 @@ function AppLayout({ children }) {
                                         children: children
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/layout.tsx",
-                                        lineNumber: 232,
+                                        lineNumber: 246,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/layout.tsx",
-                                lineNumber: 207,
+                                lineNumber: 221,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/layout.tsx",
-                        lineNumber: 152,
+                        lineNumber: 158,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/layout.tsx",
-                lineNumber: 150,
+                lineNumber: 156,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/app/layout.tsx",
-        lineNumber: 148,
+        lineNumber: 154,
         columnNumber: 5
     }, this);
 }

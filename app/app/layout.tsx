@@ -118,9 +118,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return true;
     });
 
-  const visibleCoreItems = filterItems(coreNavItems);
-  const visibleHrItems = filterItems(hrNavItems);
-  const visibleSettingsItems = filterItems(settingsNavItems);
+  const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
+  const isSpaljistenUser = authUser?.email?.endsWith("@spaljisten.se");
+  const showOnlySpaljisten = isSpaljistenPage || isSpaljistenUser;
+
+  const visibleCoreItems = showOnlySpaljisten ? [] : filterItems(coreNavItems);
+  const visibleHrItems = showOnlySpaljisten ? [] : filterItems(hrNavItems);
+  const visibleMoreItems = showOnlySpaljisten ? [] : moreNavItems;
+  const visibleSettingsItems = showOnlySpaljisten ? [] : filterItems(settingsNavItems);
+  const visibleSpaljistenItems = showOnlySpaljisten ? spaljistenNavItems : spaljistenNavItems;
 
   const renderNavItem = (item: NavItem) => {
     const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -158,14 +164,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Platform</p>
             </div>
             <nav className="flex-1 p-4 overflow-y-auto">
-              <div className="mb-4">
-                <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  {COPY.nav.core}
-                </p>
-                <ul className="space-y-1">
-                  {visibleCoreItems.map(renderNavItem)}
-                </ul>
-              </div>
+              {visibleCoreItems.length > 0 && (
+                <div className="mb-4">
+                  <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    {COPY.nav.core}
+                  </p>
+                  <ul className="space-y-1">
+                    {visibleCoreItems.map(renderNavItem)}
+                  </ul>
+                </div>
+              )}
 
               {visibleHrItems.length > 0 && (
                 <div className="mb-4">
@@ -178,29 +186,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
-              <div className="mb-4">
-                <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  More
-                </p>
-                <ul className="space-y-1">
-                  {moreNavItems.map(renderNavItem)}
-                </ul>
-              </div>
+              {visibleMoreItems.length > 0 && (
+                <div className="mb-4">
+                  <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    More
+                  </p>
+                  <ul className="space-y-1">
+                    {visibleMoreItems.map(renderNavItem)}
+                  </ul>
+                </div>
+              )}
 
-              <div className="mb-4">
-                <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  Spaljisten
-                </p>
-                <ul className="space-y-1">
-                  {spaljistenNavItems.map(renderNavItem)}
-                </ul>
-              </div>
+              {visibleSpaljistenItems.length > 0 && (
+                <div className="mb-4">
+                  <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    Spaljisten
+                  </p>
+                  <ul className="space-y-1">
+                    {visibleSpaljistenItems.map(renderNavItem)}
+                  </ul>
+                </div>
+              )}
 
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                <ul className="space-y-1">
-                  {visibleSettingsItems.map(renderNavItem)}
-                </ul>
-              </div>
+              {visibleSettingsItems.length > 0 && (
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <ul className="space-y-1">
+                    {visibleSettingsItems.map(renderNavItem)}
+                  </ul>
+                </div>
+              )}
             </nav>
           </aside>
 
