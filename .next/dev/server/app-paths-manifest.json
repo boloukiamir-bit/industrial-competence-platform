@@ -1,6 +1,10 @@
 {
   "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
+  "/api/spaljisten/export/route": "app/api/spaljisten/export/route.js",
+  "/api/spaljisten/import/route": "app/api/spaljisten/import/route.js",
+  "/api/spaljisten/reset/route": "app/api/spaljisten/reset/route.js",
   "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
+  "/app/spaljisten/import/page": "app/app/spaljisten/import/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js"
 }
