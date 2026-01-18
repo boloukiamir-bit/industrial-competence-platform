@@ -31,7 +31,27 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
 
   if (!accessToken) {
     const cookieStore = await cookies();
-    const sbAccessToken = cookieStore.get("sb-access-token")?.value;
+    
+    // Try standard cookie name first
+    let sbAccessToken = cookieStore.get("sb-access-token")?.value;
+    
+    // Try project-specific cookie (sb-<project-ref>-auth-token)
+    if (!sbAccessToken) {
+      const allCookies = cookieStore.getAll();
+      const authCookie = allCookies.find(c => 
+        c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
+      );
+      if (authCookie?.value) {
+        try {
+          // Supabase stores session as JSON with access_token field
+          const parsed = JSON.parse(authCookie.value);
+          sbAccessToken = parsed.access_token || parsed[0]?.access_token;
+        } catch {
+          // If not JSON, try using the value directly
+          sbAccessToken = authCookie.value;
+        }
+      }
+    }
     
     if (sbAccessToken) {
       accessToken = sbAccessToken;
