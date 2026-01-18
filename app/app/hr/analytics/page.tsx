@@ -5,8 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Users, AlertTriangle, Calendar, TrendingUp, Activity, BarChart3, Clock, Shield, UserMinus, Workflow } from "lucide-react";
-import { getHRAnalyticsV2 } from "@/services/analytics";
-import { getCurrentUser } from "@/lib/auth";
 import type { HRAnalyticsV2 } from "@/types/domain";
 
 function MetricCard({
@@ -53,20 +51,21 @@ function getRiskColor(riskIndex: number): "destructive" | "default" | "secondary
 export default function HRAnalyticsPage() {
   const [analytics, setAnalytics] = useState<HRAnalyticsV2 | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(true);
 
   useEffect(() => {
     async function loadData() {
-      const user = await getCurrentUser();
-      if (!user || user.role !== "HR_ADMIN") {
-        setAuthorized(false);
+      try {
+        const response = await fetch("/api/hr/analytics");
+        if (!response.ok) {
+          throw new Error("Failed to fetch analytics");
+        }
+        const data = await response.json();
+        setAnalytics(data);
+      } catch (err) {
+        console.error("Analytics fetch error:", err);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const data = await getHRAnalyticsV2();
-      setAnalytics(data);
-      setLoading(false);
     }
     loadData();
   }, []);
@@ -82,22 +81,6 @@ export default function HRAnalyticsPage() {
             ))}
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (!authorized) {
-    return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">Access Denied</h2>
-            <p className="text-muted-foreground">
-              This page is only accessible to HR Administrators.
-            </p>
-          </CardContent>
-        </Card>
       </div>
     );
   }

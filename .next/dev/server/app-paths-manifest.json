@@ -1,18 +1,5 @@
 {
-  "/api/employees/route": "app/api/employees/route.js",
-  "/api/spaljisten/areas/route": "app/api/spaljisten/areas/route.js",
-  "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
-  "/api/workflows/instances/[id]/route": "app/api/workflows/instances/[id]/route.js",
-  "/api/workflows/instances/[id]/tasks/route": "app/api/workflows/instances/[id]/tasks/route.js",
-  "/api/workflows/instances/route": "app/api/workflows/instances/route.js",
-  "/api/workflows/templates/[id]/route": "app/api/workflows/templates/[id]/route.js",
-  "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
+  "/api/hr/analytics/route": "app/api/hr/analytics/route.js",
   "/app/hr/analytics/page": "app/app/hr/analytics/page.js",
-  "/app/manager/risks/page": "app/app/manager/risks/page.js",
-  "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
-  "/app/workflows/instances/[id]/page": "app/app/workflows/instances/[id]/page.js",
-  "/app/workflows/instances/page": "app/app/workflows/instances/page.js",
-  "/app/workflows/templates/[id]/page": "app/app/workflows/templates/[id]/page.js",
-  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
   "/login/page": "app/login/page.js"
 }
