@@ -452,6 +452,42 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../app/app/workflows/instances/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/app/workflows/instances/[id]">> = Specific
+  const handler = {} as typeof import("../../../app/app/workflows/instances/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/app/workflows/instances/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/app/workflows/instances">> = Specific
+  const handler = {} as typeof import("../../../app/app/workflows/instances/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/app/workflows/templates/[id]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/app/workflows/templates/[id]">> = Specific
+  const handler = {} as typeof import("../../../app/app/workflows/templates/[id]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/app/workflows/templates/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/app/workflows/templates">> = Specific
+  const handler = {} as typeof import("../../../app/app/workflows/templates/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../app/competence/matrix/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/competence/matrix">> = Specific
