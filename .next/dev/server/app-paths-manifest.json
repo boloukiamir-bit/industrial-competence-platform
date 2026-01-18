@@ -1,9 +1,4 @@
 {
-  "/api/employees/route": "app/api/employees/route.js",
-  "/api/spaljisten/areas/route": "app/api/spaljisten/areas/route.js",
-  "/api/workflows/templates/[id]/route": "app/api/workflows/templates/[id]/route.js",
   "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
-  "/app/workflows/templates/[id]/page": "app/app/workflows/templates/[id]/page.js",
-  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
-  "/login/page": "app/login/page.js"
+  "/app/workflows/templates/page": "app/app/workflows/templates/page.js"
 }

@@ -58,7 +58,7 @@ const coreNavItems: NavItem[] = [
 const hrNavItems: NavItem[] = [
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
-  { name: "HR Workflows", href: "/app/hr/workflows", icon: Workflow, hrAdminOnly: true },
+  { name: "HR Workflows", href: "/app/workflows/templates", icon: Workflow, hrAdminOnly: true },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
 ];
 
