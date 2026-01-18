@@ -25,7 +25,9 @@ export async function GET(
     const instanceResult = await pool.query(
       `SELECT i.id, i.template_id, i.employee_id, i.employee_name, 
               i.status, i.start_date, i.due_date, i.completed_at, i.created_at,
-              i.shift_date, i.shift_type, i.area_code,
+              i.shift_date, i.shift_type, i.area_code, i.metadata,
+              i.supervisor_signed_by, i.supervisor_signed_at, i.supervisor_comment,
+              i.hr_signed_by, i.hr_signed_at, i.hr_comment, i.requires_hr_signoff,
               t.name as template_name, t.description as template_description, t.category as template_category
        FROM wf_instances i
        LEFT JOIN wf_templates t ON t.id = i.template_id
@@ -41,7 +43,7 @@ export async function GET(
 
     const tasksResult = await pool.query(
       `SELECT id, step_no, title, description, owner_role, owner_user_id, 
-              due_date, status, completed_at, completed_by
+              due_date, status, completed_at, completed_by, notes, evidence_url
        FROM wf_instance_tasks 
        WHERE instance_id = $1 
        ORDER BY step_no`,
@@ -72,11 +74,19 @@ export async function GET(
       shiftDate: inst.shift_date,
       shiftType: inst.shift_type,
       areaCode: inst.area_code,
+      metadata: inst.metadata,
       status: inst.status,
       startDate: inst.start_date,
       dueDate: inst.due_date,
       completedAt: inst.completed_at,
       createdAt: inst.created_at,
+      supervisorSignedBy: inst.supervisor_signed_by,
+      supervisorSignedAt: inst.supervisor_signed_at,
+      supervisorComment: inst.supervisor_comment,
+      hrSignedBy: inst.hr_signed_by,
+      hrSignedAt: inst.hr_signed_at,
+      hrComment: inst.hr_comment,
+      requiresHrSignoff: inst.requires_hr_signoff,
       tasks,
       progress: {
         total: totalTasks,

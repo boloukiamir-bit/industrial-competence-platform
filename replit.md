@@ -66,26 +66,36 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - `sql/008_plannja_demo_data.sql` - Demo data for Plannja Järnforsen organization
 - `sql/012_workflow_system.sql` - Workflow V1 tables (wf_templates, wf_template_steps, wf_instances, wf_instance_tasks, wf_audit_log) with RLS
 - `sql/013_workflow_seed_templates.sql` - Seed function for 3 workflow templates (Onboarding, Rehab, Offboarding)
+- `sql/016_workflow_v1_upgrades.sql` - Workflow V1.1 upgrades (task notes/evidence, sign-off columns, cross-training template)
 
-## Workflow System V1
+## Workflow System V1.1 (Demo-Ready)
 The Workflow System (`/app/workflows/*`) provides standardized HR process management:
-- **Templates (/app/workflows/templates):** Browse workflow templates (Onboarding, Rehab 30/60/90, Offboarding)
+- **Templates (/app/workflows/templates):** Browse workflow templates (Onboarding, Rehab 30/60/90, Offboarding, Cross-training)
 - **Template Detail (/app/workflows/templates/[id]):** View steps, start workflow for employee with selector
 - **Instances (/app/workflows/instances):** View active/completed workflows with progress tracking
-- **Instance Detail (/app/workflows/instances/[id]):** Task management, status updates, audit log
+- **Instance Detail (/app/workflows/instances/[id]):** Task management with notes/evidence fields, status updates, sign-off, audit log
+- **Dashboard (/app/workflows/dashboard):** KPIs (active workflows, overdue tasks, completed today), workflows by template, recent activity
+- **My Tasks (/app/workflows/my-tasks):** All pending tasks with overdue/due-today badges, quick actions
+
+**V1.1 Features (Jan 2026):**
+- **Task Step Forms:** Notes (text), evidence_url fields on each task, editable via expandable panel
+- **Workflow Sign-off:** Supervisor sign-off required after all tasks complete; optional HR sign-off for specific templates
+- **Lock on Completion:** Completed/signed-off workflows prevent further task edits (API-enforced)
+- **My Tasks Page:** Organization-wide task queue with overdue badges and quick note/status actions
+- **Risk-to-Workflow Integration:** "Cross-train" button on Spaljisten risk rows creates workflow with pre-filled metadata
 
 **Database Tables:**
 - `wf_templates` - Workflow templates per organization
 - `wf_template_steps` - Steps within templates (step_no, title, owner_role, due_days)
-- `wf_instances` - Running workflow instances (employee, status, dates)
-- `wf_instance_tasks` - Tasks copied from template steps (status: todo/in_progress/done/blocked)
+- `wf_instances` - Running workflow instances (employee, status, dates, sign-off fields)
+- `wf_instance_tasks` - Tasks with status, notes, evidence_url fields
 - `wf_audit_log` - Audit trail for all workflow actions
 
 **Architecture Note:** Uses direct PostgreSQL connection via `lib/pgClient.ts` to bypass Supabase schema cache issues.
 
 **Task Statuses:** todo, in_progress, done, blocked
 **Instance Statuses:** active, completed, cancelled
-**Auto-completion:** Instance automatically completes when all tasks are done
+**Sign-off Flow:** All tasks done → Supervisor sign-off → (Optional) HR sign-off → Completed & Locked
 
 **Seed Templates:** Run `SELECT seed_production_workflow_templates('org-id');` to create 4 production templates
 

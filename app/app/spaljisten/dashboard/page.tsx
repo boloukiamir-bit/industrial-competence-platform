@@ -14,7 +14,11 @@ import {
   Download,
   ChevronDown,
   ChevronRight,
+  Play,
+  Loader2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useOrg } from "@/hooks/useOrg";
 
 type SPArea = { id: string; areaCode: string; areaName: string };
 
@@ -55,10 +59,16 @@ type DashboardData = {
   filterOptions: { areas: SPArea[] };
 };
 
+const CROSS_TRAINING_TEMPLATE_ID = "cccc0001-0001-0001-0001-000000000001";
+const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
 export default function SpaljistenDashboard() {
+  const router = useRouter();
+  const { currentOrg } = useOrg();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [startingWorkflow, setStartingWorkflow] = useState<string | null>(null);
 
   const [selectedArea, setSelectedArea] = useState<string>("");
   const [expandedSkills, setExpandedSkills] = useState<Set<string>>(new Set());
@@ -89,6 +99,44 @@ export default function SpaljistenDashboard() {
     const params = new URLSearchParams();
     if (selectedArea) params.set("areaCode", selectedArea);
     window.open(`/api/spaljisten/export?${params.toString()}`, "_blank");
+  };
+
+  const handleStartCrossTraining = async (skill: SkillGapData) => {
+    const orgId = currentOrg?.id || SPALJISTEN_ORG_ID;
+    setStartingWorkflow(skill.skillId);
+    
+    try {
+      const res = await fetch("/api/workflows/instances", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-org-id": orgId,
+        },
+        body: JSON.stringify({
+          templateId: CROSS_TRAINING_TEMPLATE_ID,
+          employeeName: `Cross-training: ${skill.skillName}`,
+          areaCode: selectedArea || undefined,
+          metadata: {
+            skillId: skill.skillId,
+            skillName: skill.skillName,
+            category: skill.category,
+            riskLevel: skill.riskLevel,
+            independentCount: skill.independentCount,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to start workflow");
+      }
+
+      const result = await res.json();
+      router.push(`/app/workflows/instances/${result.instance.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start workflow");
+      setStartingWorkflow(null);
+    }
   };
 
   const toggleSkillExpand = (skillId: string) => {
@@ -332,12 +380,12 @@ export default function SpaljistenDashboard() {
                   key={item.skillId}
                   className="border rounded-md overflow-hidden"
                 >
-                  <button
-                    className="w-full flex items-center justify-between p-3 hover-elevate text-left"
-                    onClick={() => toggleSkillExpand(item.skillId)}
-                    data-testid={`button-expand-${item.skillId}`}
-                  >
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between p-3 hover-elevate">
+                    <button
+                      className="flex items-center gap-3 text-left flex-1"
+                      onClick={() => toggleSkillExpand(item.skillId)}
+                      data-testid={`button-expand-${item.skillId}`}
+                    >
                       {expandedSkills.has(item.skillId) ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
@@ -349,14 +397,35 @@ export default function SpaljistenDashboard() {
                           ({item.skillId} • {item.category})
                         </span>
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-3">
                       <span className="text-sm">
                         {item.independentCount} / {item.totalEmployees} independent
                       </span>
                       {getRiskBadge(item.riskLevel, item.independentCount)}
+                      {(item.riskLevel === "critical" || item.riskLevel === "warning") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartCrossTraining(item);
+                          }}
+                          disabled={startingWorkflow === item.skillId}
+                          data-testid={`button-start-crosstraining-${item.skillId}`}
+                        >
+                          {startingWorkflow === item.skillId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Play className="h-4 w-4 mr-1" />
+                              Cross-train
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </div>
-                  </button>
+                  </div>
 
                   {expandedSkills.has(item.skillId) && (
                     <div className="border-t bg-muted/50 p-3">

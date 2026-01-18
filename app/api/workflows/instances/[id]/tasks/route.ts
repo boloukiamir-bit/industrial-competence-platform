@@ -23,19 +23,24 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { taskId, status, ownerUserId } = body;
+    const { taskId, status, ownerUserId, notes, evidenceUrl, dueDate } = body;
 
     if (!taskId) {
       return NextResponse.json({ error: "taskId is required" }, { status: 400 });
     }
 
     const instanceResult = await pool.query(
-      `SELECT id, org_id FROM wf_instances WHERE id = $1 AND org_id = $2`,
+      `SELECT id, org_id, status, supervisor_signed_at FROM wf_instances WHERE id = $1 AND org_id = $2`,
       [instanceId, orgId]
     );
 
     if (instanceResult.rows.length === 0) {
       return NextResponse.json({ error: "Instance not found" }, { status: 404 });
+    }
+
+    const instance = instanceResult.rows[0];
+    if (instance.status === "completed" || instance.supervisor_signed_at) {
+      return NextResponse.json({ error: "Workflow is locked - cannot update tasks after sign-off" }, { status: 403 });
     }
 
     if (status && !["todo", "in_progress", "done", "blocked"].includes(status)) {
@@ -63,7 +68,25 @@ export async function PATCH(
       paramIndex++;
     }
 
-    updateQuery += ` WHERE id = $${paramIndex} AND instance_id = $${paramIndex + 1} RETURNING id, title, status`;
+    if (notes !== undefined) {
+      updateQuery += `, notes = $${paramIndex}`;
+      updateParams.push(notes);
+      paramIndex++;
+    }
+
+    if (evidenceUrl !== undefined) {
+      updateQuery += `, evidence_url = $${paramIndex}`;
+      updateParams.push(evidenceUrl);
+      paramIndex++;
+    }
+
+    if (dueDate !== undefined) {
+      updateQuery += `, due_date = $${paramIndex}`;
+      updateParams.push(dueDate);
+      paramIndex++;
+    }
+
+    updateQuery += ` WHERE id = $${paramIndex} AND instance_id = $${paramIndex + 1} RETURNING id, title, status, notes, evidence_url, due_date`;
     updateParams.push(taskId, instanceId);
 
     const taskResult = await pool.query(updateQuery, updateParams);
