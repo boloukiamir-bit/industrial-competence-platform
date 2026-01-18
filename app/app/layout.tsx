@@ -34,6 +34,7 @@ import { OrgProvider } from "@/components/OrgProvider";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import { COPY } from "@/lib/copy";
+import { getSpaliDevMode } from "@/lib/spaliDevMode";
 
 type NavItem = {
   name: string;
@@ -79,15 +80,13 @@ const settingsNavItems: NavItem[] = [
   { name: "Debug", href: "/app/debug", icon: Bug },
 ];
 
-// Dev mode flag - when true, all authenticated users can access Spaljisten pages
-const SPALI_DEV_MODE = process.env.NEXT_PUBLIC_SPALI_DEV_MODE === "true";
-
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user: authUser, loading: authLoading, isAuthenticated } = useAuth(true);
   const [user, setUser] = useState<CurrentUser | null>(null);
-
+  
+  const isDevMode = getSpaliDevMode();
   const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
 
   useEffect(() => {
@@ -95,10 +94,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       getCurrentUser().then(setUser);
     }
   }, [isAuthenticated]);
-
-  // In dev mode, no route guards - all authenticated users can access everything
-  // In production mode, would check org membership in DB (not email domain)
-  // For now, dev mode removes all restrictions
 
   async function handleSignOut() {
     try {
@@ -127,15 +122,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return true;
     });
 
-  // In dev mode: show all navigation including Spaljisten
-  // On Spaljisten pages: show only Spaljisten nav (focused experience)
-  const showOnlySpaljisten = !SPALI_DEV_MODE && isSpaljistenPage;
-  const showSpaljistenNav = SPALI_DEV_MODE || isSpaljistenPage;
+  // DEV MODE: Show ALL navigation including Spaljisten to ALL authenticated users
+  // PROD MODE: Would check DB membership for Spaljisten org (not email domain)
+  const showSpaljistenNav = isDevMode || isSpaljistenPage;
 
-  const visibleCoreItems = showOnlySpaljisten ? [] : filterItems(coreNavItems);
-  const visibleHrItems = showOnlySpaljisten ? [] : filterItems(hrNavItems);
-  const visibleMoreItems = showOnlySpaljisten ? [] : moreNavItems;
-  const visibleSettingsItems = showOnlySpaljisten ? [] : filterItems(settingsNavItems);
+  const visibleCoreItems = filterItems(coreNavItems);
+  const visibleHrItems = filterItems(hrNavItems);
+  const visibleMoreItems = moreNavItems;
+  const visibleSettingsItems = filterItems(settingsNavItems);
   const visibleSpaljistenItems = showSpaljistenNav ? spaljistenNavItems : [];
 
   const renderNavItem = (item: NavItem) => {
