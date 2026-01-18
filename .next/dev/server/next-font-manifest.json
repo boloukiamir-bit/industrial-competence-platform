@@ -3,18 +3,6 @@
     "[project]/app/app/spaljisten/import/page": [
       "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
       "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
-    ],
-    "[project]/app/app/workflows/templates/page": [
-      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
-      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
-    ],
-    "[project]/app/login/page": [
-      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
-      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
-    ],
-    "[project]/app/page": [
-      "static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2",
-      "static/media/03fc1b4a8d284b5e-s.p.af4fcd24.woff2"
     ]
   },
   "appUsingSizeAdjust": true,

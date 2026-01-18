@@ -1,0 +1,143 @@
+BUILD 4 WORKFLOWS (TEMPLATES + RUNNING INSTANCES) — READY TO DEMO TO DANIEL (NO EXCUSES)
+
+Goal:
+Daniel wants to SEE workflows/templates actually working. We must be able to:
+- open templates
+- start a workflow for a person/shift
+- see tasks with owners + due dates
+- change task status
+- see audit log update
+This must be demo-safe. No “it’s coming”. It must work.
+
+Scope (V1, minimal but real):
+- Workflow Templates (seeded)
+- Start Workflow -> creates Instance + Tasks
+- Instances list + Instance detail page
+- Task status updates (TODO / IN_PROGRESS / DONE / BLOCKED)
+- Audit log records key actions
+
+NO:
+- drag-drop builder
+- integrations (email/AD)
+- redesign
+- anything outside workflows module
+
+DATA MODEL (Supabase, org-scoped, RLS):
+Tables:
+1) wf_templates (org_id, id, name, category, is_active, created_at)
+2) wf_template_steps (template_id, step_no, title, owner_role, default_due_days, required)
+3) wf_instances (org_id, id, template_id, employee_id nullable, shift_date nullable, shift_type nullable, area_code nullable, status, start_date, due_date)
+4) wf_instance_tasks (instance_id, step_no, title, owner_role, owner_user_id nullable, due_date, status, completed_at)
+5) wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, created_at, metadata json)
+
+Rules:
+- org_id scoping everywhere
+- RLS: org members can READ; HR/admin can CREATE/UPDATE
+- Starting workflow:
+  - copy template steps into wf_instance_tasks
+  - due_date = start_date + default_due_days
+- Changing status:
+  - updates wf_instance_tasks
+  - writes wf_audit_log (task_status_changed)
+- Completing all required tasks -> instance status auto becomes DONE
+
+UI (minimal, clean, reliable):
+Routes:
+- /app/workflows/templates
+- /app/workflows/templates/[id]
+- /app/workflows/instances
+- /app/workflows/instances/[id]
+
+On /templates:
+- list templates (4 required)
+- open template details (steps)
+- “Start workflow” button
+
+Start workflow modal:
+- Choose Employee (dropdown from employees table) OR allow none
+- If template is Shift Handover: require shift_date + shift_type + area_code
+- If template is Daily Production: require shift_date + area_code
+- default start_date = today
+
+On /instances/[id]:
+- Show header: template name, status, start_date, due_date, linked employee (if any), linked shift/area (if any)
+- Show tasks table: step_no, title, owner_role, due_date, status, action buttons to change status
+- Show audit log panel: newest first
+
+MANDATORY: Seed these 4 templates exactly (names + steps)
+
+TEMPLATE 1 — “Skiftöverlämning – Standard (Logg + Risker)”
+Category: Production
+Steps:
+1) Produktionsstatus (SQDCP snapshot) — Owner: Supervisor — Due: 0 days
+2) Stopp & avvikelser (Top 3) — Owner: Supervisor — Due: 0 days
+3) Risker nästa skift (Top 5) — Owner: Supervisor — Due: 0 days
+4) Åtgärdslista nästa skift (Top 5) — Owner: Supervisor — Due: 0 days
+5) Säkerhetsnotis (incident/LOTO/riskzon) — Owner: Supervisor — Due: 0 days
+6) Sign-off (Avgående + Tillträdande) — Owner: Supervisor — Due: 0 days
+
+Instance must capture:
+- shift_date
+- shift_type (Day/Evening/Night)
+- area_code
+
+TEMPLATE 2 — “Daglig Produktionsstyrning – SQCDP Tavla (15 min)”
+Category: Production
+Steps:
+1) Safety (S) — Owner: Supervisor — Due: 0 days
+2) Quality (Q) — Owner: Quality — Due: 0 days
+3) Delivery (D) — Owner: Supervisor — Due: 0 days
+4) People (P) — Owner: Supervisor — Due: 0 days
+5) Action List (max 5 actions) — Owner: Supervisor — Due: 0 days
+6) Eskalering (vid behov) — Owner: Supervisor — Due: 0 days
+
+Instance must capture:
+- shift_date
+- area_code
+
+TEMPLATE 3 — “Kompetensåtgärd – 2 personer per kritisk station (Cross-training)”
+Category: Competence
+Steps:
+1) Välj kritisk station (Top risk) — Owner: Supervisor — Due: 0 days
+2) Identifiera trainees (2 kandidater) — Owner: Supervisor — Due: 2 days
+3) Skapa träningsplan + mentor — Owner: Supervisor — Due: 7 days
+4) Schemalägg träning i produktion — Owner: Supervisor — Due: 7 days
+5) Verifiering/Bedömning (nivå) — Owner: Supervisor — Due: 14 days
+6) Uppdatera skill rating i systemet — Owner: HR — Due: 14 days
+7) Close: coverage >=2 (nivå >=3) — Owner: Supervisor — Due: 14 days
+
+Instance must capture:
+- employee_id (optional if plan is per group)
+- area_code
+
+TEMPLATE 4 — “Incident/Near-miss – Åtgärd & Uppföljning”
+Category: Safety
+Steps:
+1) Registrera händelse (kort beskrivning) — Owner: Supervisor — Due: 0 days
+2) Säkerställ omedelbar åtgärd (containment) — Owner: Supervisor — Due: 0 days
+3) Rotorsak (5 Why / Fishbone) — Owner: Supervisor — Due: 3 days
+4) Korrigerande åtgärder (CAPA) — Owner: Supervisor — Due: 7 days
+5) Verifiera effekt — Owner: Quality — Due: 14 days
+6) Stäng ärendet + kommunicera lärdom — Owner: Supervisor — Due: 14 days
+
+Instance must capture:
+- employee_id (reporter or involved)
+- area_code
+
+DEMO DEFINITION OF DONE (NON-NEGOTIABLE):
+1) I can open /app/workflows/templates and see all 4 templates.
+2) I can start “Skiftöverlämning” with shift_date + shift_type + Bearbetning.
+3) It creates an instance with tasks.
+4) I can mark one task DONE and see audit log entry.
+5) I can export/print the instance page (basic browser print is fine).
+6) No errors, no missing routes, no hidden nav.
+
+DELIVERY REQUIREMENTS:
+- Create SQL migrations for tables + RLS
+- Seed templates + steps via migration or seed script
+- Push to GitHub (no Replit-only state)
+- Provide a 60-second screen recording:
+  templates -> start workflow -> instance tasks -> mark done -> show audit log
+- Provide 3 screenshots for proof.
+
+Do not ask me questions. If anything is unclear, make reasonable defaults and ship.
