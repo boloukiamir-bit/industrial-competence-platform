@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSupabase } from "@/lib/supabaseServer";
+import pool from "@/lib/pgClient";
 import { cookies } from "next/headers";
 
 async function getOrgId(request: NextRequest): Promise<string | null> {
@@ -29,93 +29,86 @@ export async function PATCH(
       return NextResponse.json({ error: "taskId is required" }, { status: 400 });
     }
 
-    const supabase = getServerSupabase();
+    const instanceResult = await pool.query(
+      `SELECT id, org_id FROM wf_instances WHERE id = $1 AND org_id = $2`,
+      [instanceId, orgId]
+    );
 
-    const { data: instance, error: instanceError } = await supabase
-      .from("wf_instances")
-      .select("id, org_id")
-      .eq("id", instanceId)
-      .eq("org_id", orgId)
-      .single();
-
-    if (instanceError || !instance) {
+    if (instanceResult.rows.length === 0) {
       return NextResponse.json({ error: "Instance not found" }, { status: 404 });
     }
 
-    const updates: any = { updated_at: new Date().toISOString() };
-    
+    if (status && !["todo", "in_progress", "done", "blocked"].includes(status)) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    const completedAt = status === "done" ? new Date().toISOString() : null;
+
+    let updateQuery = `UPDATE wf_instance_tasks SET updated_at = NOW()`;
+    const updateParams: any[] = [];
+    let paramIndex = 1;
+
     if (status) {
-      if (!["todo", "in_progress", "done", "blocked"].includes(status)) {
-        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-      }
-      updates.status = status;
-      if (status === "done") {
-        updates.completed_at = new Date().toISOString();
-      } else {
-        updates.completed_at = null;
-      }
+      updateQuery += `, status = $${paramIndex}`;
+      updateParams.push(status);
+      paramIndex++;
+      updateQuery += `, completed_at = $${paramIndex}`;
+      updateParams.push(completedAt);
+      paramIndex++;
     }
-    
+
     if (ownerUserId !== undefined) {
-      updates.owner_user_id = ownerUserId;
+      updateQuery += `, owner_user_id = $${paramIndex}`;
+      updateParams.push(ownerUserId);
+      paramIndex++;
     }
 
-    const { data: task, error: taskError } = await supabase
-      .from("wf_instance_tasks")
-      .update(updates)
-      .eq("id", taskId)
-      .eq("instance_id", instanceId)
-      .select()
-      .single();
+    updateQuery += ` WHERE id = $${paramIndex} AND instance_id = $${paramIndex + 1} RETURNING id, title, status`;
+    updateParams.push(taskId, instanceId);
 
-    if (taskError) {
-      console.error("Task update error:", taskError);
-      return NextResponse.json({ error: taskError.message }, { status: 500 });
+    const taskResult = await pool.query(updateQuery, updateParams);
+
+    if (taskResult.rows.length === 0) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    await supabase.from("wf_audit_log").insert({
-      org_id: orgId,
-      entity_type: "task",
-      entity_id: taskId,
-      action: status ? `status_changed_to_${status}` : "updated",
-      metadata: {
-        instanceId,
-        taskTitle: task.title,
-        newStatus: status,
-        ownerUserId,
-      },
-    });
+    const task = taskResult.rows[0];
 
-    const { data: allTasks } = await supabase
-      .from("wf_instance_tasks")
-      .select("status")
-      .eq("instance_id", instanceId);
+    await pool.query(
+      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
+       VALUES ($1, 'task', $2, $3, $4)`,
+      [
+        orgId,
+        taskId,
+        status ? `status_changed_to_${status}` : "updated",
+        JSON.stringify({ instanceId, taskTitle: task.title, newStatus: status, ownerUserId }),
+      ]
+    );
 
-    const allDone = allTasks && allTasks.length > 0 && allTasks.every((t: any) => t.status === "done");
-    
+    const allTasksResult = await pool.query(
+      `SELECT status FROM wf_instance_tasks WHERE instance_id = $1`,
+      [instanceId]
+    );
+
+    const allDone = allTasksResult.rows.length > 0 && allTasksResult.rows.every((t: any) => t.status === "done");
+
     if (allDone) {
-      await supabase
-        .from("wf_instances")
-        .update({ 
-          status: "completed", 
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", instanceId);
+      await pool.query(
+        `UPDATE wf_instances SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [instanceId]
+      );
 
-      await supabase.from("wf_audit_log").insert({
-        org_id: orgId,
-        entity_type: "instance",
-        entity_id: instanceId,
-        action: "auto_completed",
-        metadata: { reason: "All tasks completed" },
-      });
+      await pool.query(
+        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
+         VALUES ($1, 'instance', $2, 'auto_completed', $3)`,
+        [orgId, instanceId, JSON.stringify({ reason: "All tasks completed" })]
+      );
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       task,
-      instanceAutoCompleted: allDone
+      instanceAutoCompleted: allDone,
     });
   } catch (err) {
     console.error("Task update error:", err);

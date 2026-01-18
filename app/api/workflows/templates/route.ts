@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSupabase } from "@/lib/supabaseServer";
+import pool from "@/lib/pgClient";
 import { cookies } from "next/headers";
-import { createClient } from "@supabase/supabase-js";
 
 async function getOrgId(request: NextRequest): Promise<string | null> {
   const orgId = request.headers.get("x-org-id");
@@ -19,42 +18,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
     }
 
-    const supabase = getServerSupabase();
-    
-    const { data: templates, error } = await supabase
-      .from("wf_templates")
-      .select(`
-        id,
-        name,
-        description,
-        category,
-        is_active,
-        created_at,
-        wf_template_steps (
-          id,
-          step_no,
-          title,
-          owner_role,
-          default_due_days,
-          required
-        )
-      `)
-      .eq("org_id", orgId)
-      .eq("is_active", true)
-      .order("name");
+    const templatesResult = await pool.query(
+      `SELECT id, name, description, category, is_active, created_at 
+       FROM wf_templates 
+       WHERE org_id = $1 AND is_active = true 
+       ORDER BY name`,
+      [orgId]
+    );
 
-    if (error) {
-      console.error("Templates fetch error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const templates = await Promise.all(
+      templatesResult.rows.map(async (template) => {
+        const stepsResult = await pool.query(
+          `SELECT id, step_no, title, owner_role, default_due_days, required 
+           FROM wf_template_steps 
+           WHERE template_id = $1 
+           ORDER BY step_no`,
+          [template.id]
+        );
+        return {
+          ...template,
+          stepCount: stepsResult.rows.length,
+          steps: stepsResult.rows,
+        };
+      })
+    );
 
-    const templatesWithCount = (templates || []).map((t: any) => ({
-      ...t,
-      stepCount: t.wf_template_steps?.length || 0,
-      steps: t.wf_template_steps?.sort((a: any, b: any) => a.step_no - b.step_no) || [],
-    }));
-
-    return NextResponse.json({ templates: templatesWithCount });
+    return NextResponse.json({ templates });
   } catch (err) {
     console.error("Templates error:", err);
     return NextResponse.json(

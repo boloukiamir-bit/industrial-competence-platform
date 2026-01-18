@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSupabase } from "@/lib/supabaseServer";
+import pool from "@/lib/pgClient";
 import { cookies } from "next/headers";
 
 async function getOrgId(request: NextRequest): Promise<string | null> {
@@ -22,39 +22,30 @@ export async function GET(
       return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
     }
 
-    const supabase = getServerSupabase();
-    
-    const { data: template, error } = await supabase
-      .from("wf_templates")
-      .select(`
-        id,
-        name,
-        description,
-        category,
-        is_active,
-        created_at,
-        wf_template_steps (
-          id,
-          step_no,
-          title,
-          description,
-          owner_role,
-          default_due_days,
-          required
-        )
-      `)
-      .eq("id", id)
-      .eq("org_id", orgId)
-      .single();
+    const templateResult = await pool.query(
+      `SELECT id, name, description, category, is_active, created_at 
+       FROM wf_templates 
+       WHERE id = $1 AND org_id = $2`,
+      [id, orgId]
+    );
 
-    if (error) {
-      console.error("Template fetch error:", error);
-      return NextResponse.json({ error: error.message }, { status: 404 });
+    if (templateResult.rows.length === 0) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
     }
+
+    const template = templateResult.rows[0];
+
+    const stepsResult = await pool.query(
+      `SELECT id, step_no, title, description, owner_role, default_due_days, required 
+       FROM wf_template_steps 
+       WHERE template_id = $1 
+       ORDER BY step_no`,
+      [id]
+    );
 
     return NextResponse.json({
       ...template,
-      steps: template.wf_template_steps?.sort((a: any, b: any) => a.step_no - b.step_no) || [],
+      steps: stepsResult.rows,
     });
   } catch (err) {
     console.error("Template error:", err);

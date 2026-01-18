@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSupabase } from "@/lib/supabaseServer";
+import pool from "@/lib/pgClient";
 import { cookies } from "next/headers";
 
 async function getOrgId(request: NextRequest): Promise<string | null> {
@@ -22,85 +22,64 @@ export async function GET(
       return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
     }
 
-    const supabase = getServerSupabase();
-    
-    const { data: instance, error } = await supabase
-      .from("wf_instances")
-      .select(`
-        id,
-        template_id,
-        employee_id,
-        employee_name,
-        status,
-        start_date,
-        due_date,
-        completed_at,
-        created_at,
-        wf_templates (
-          id,
-          name,
-          description,
-          category
-        ),
-        wf_instance_tasks (
-          id,
-          step_no,
-          title,
-          description,
-          owner_role,
-          owner_user_id,
-          due_date,
-          status,
-          completed_at,
-          completed_by
-        )
-      `)
-      .eq("id", id)
-      .eq("org_id", orgId)
-      .single();
+    const instanceResult = await pool.query(
+      `SELECT i.id, i.template_id, i.employee_id, i.employee_name, 
+              i.status, i.start_date, i.due_date, i.completed_at, i.created_at,
+              t.name as template_name, t.description as template_description, t.category as template_category
+       FROM wf_instances i
+       LEFT JOIN wf_templates t ON t.id = i.template_id
+       WHERE i.id = $1 AND i.org_id = $2`,
+      [id, orgId]
+    );
 
-    if (error) {
-      console.error("Instance fetch error:", error);
-      return NextResponse.json({ error: error.message }, { status: 404 });
+    if (instanceResult.rows.length === 0) {
+      return NextResponse.json({ error: "Instance not found" }, { status: 404 });
     }
 
-    const { data: auditLog, error: auditError } = await supabase
-      .from("wf_audit_log")
-      .select("*")
-      .eq("entity_id", id)
-      .order("created_at", { ascending: false })
-      .limit(50);
+    const inst = instanceResult.rows[0];
 
-    if (auditError) {
-      console.warn("Audit log fetch error:", auditError);
-    }
+    const tasksResult = await pool.query(
+      `SELECT id, step_no, title, description, owner_role, owner_user_id, 
+              due_date, status, completed_at, completed_by
+       FROM wf_instance_tasks 
+       WHERE instance_id = $1 
+       ORDER BY step_no`,
+      [id]
+    );
 
-    const tasks = (instance.wf_instance_tasks || [])
-      .sort((a: any, b: any) => a.step_no - b.step_no);
+    const auditResult = await pool.query(
+      `SELECT id, action, actor_email, metadata, created_at 
+       FROM wf_audit_log 
+       WHERE entity_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 50`,
+      [id]
+    );
 
+    const tasks = tasksResult.rows;
     const totalTasks = tasks.length;
     const doneTasks = tasks.filter((t: any) => t.status === "done").length;
 
     return NextResponse.json({
-      id: instance.id,
-      templateId: instance.template_id,
-      templateName: instance.wf_templates?.name || "Unknown",
-      templateDescription: instance.wf_templates?.description,
-      templateCategory: instance.wf_templates?.category,
-      employeeId: instance.employee_id,
-      employeeName: instance.employee_name,
-      status: instance.status,
-      startDate: instance.start_date,
-      dueDate: instance.due_date,
-      completedAt: instance.completed_at,
-      createdAt: instance.created_at,
+      id: inst.id,
+      templateId: inst.template_id,
+      templateName: inst.template_name || "Unknown",
+      templateDescription: inst.template_description,
+      templateCategory: inst.template_category,
+      employeeId: inst.employee_id,
+      employeeName: inst.employee_name,
+      status: inst.status,
+      startDate: inst.start_date,
+      dueDate: inst.due_date,
+      completedAt: inst.completed_at,
+      createdAt: inst.created_at,
       tasks,
       progress: {
         total: totalTasks,
         done: doneTasks,
         percent: totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0,
       },
-      auditLog: auditLog || [],
+      auditLog: auditResult.rows,
     });
   } catch (err) {
     console.error("Instance error:", err);
@@ -129,34 +108,27 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const supabase = getServerSupabase();
+    const completedAt = status === "completed" ? new Date().toISOString() : null;
 
-    const updates: any = { status, updated_at: new Date().toISOString() };
-    if (status === "completed") {
-      updates.completed_at = new Date().toISOString();
+    const result = await pool.query(
+      `UPDATE wf_instances 
+       SET status = $1, completed_at = $2, updated_at = NOW()
+       WHERE id = $3 AND org_id = $4
+       RETURNING id, status`,
+      [status, completedAt, id, orgId]
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: "Instance not found" }, { status: 404 });
     }
 
-    const { data: instance, error } = await supabase
-      .from("wf_instances")
-      .update(updates)
-      .eq("id", id)
-      .eq("org_id", orgId)
-      .select()
-      .single();
+    await pool.query(
+      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
+       VALUES ($1, 'instance', $2, $3, $4)`,
+      [orgId, id, `status_changed_to_${status}`, JSON.stringify({ newStatus: status })]
+    );
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    await supabase.from("wf_audit_log").insert({
-      org_id: orgId,
-      entity_type: "instance",
-      entity_id: id,
-      action: `status_changed_to_${status}`,
-      metadata: { newStatus: status },
-    });
-
-    return NextResponse.json({ success: true, instance });
+    return NextResponse.json({ success: true, instance: result.rows[0] });
   } catch (err) {
     console.error("Instance update error:", err);
     return NextResponse.json(
