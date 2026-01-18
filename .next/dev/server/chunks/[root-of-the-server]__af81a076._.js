@@ -118,6 +118,7 @@ async function GET(request) {
         let query = `
       SELECT i.id, i.template_id, i.employee_id, i.employee_name, 
              i.status, i.start_date, i.due_date, i.completed_at, i.created_at,
+             i.shift_date, i.shift_type, i.area_code,
              t.name as template_name, t.category as template_category
       FROM wf_instances i
       LEFT JOIN wf_templates t ON t.id = i.template_id
@@ -145,6 +146,9 @@ async function GET(request) {
                 templateCategory: inst.template_category || "general",
                 employeeId: inst.employee_id,
                 employeeName: inst.employee_name,
+                shiftDate: inst.shift_date,
+                shiftType: inst.shift_type,
+                areaCode: inst.area_code,
                 status: inst.status,
                 startDate: inst.start_date,
                 dueDate: inst.due_date,
@@ -193,10 +197,10 @@ async function POST(request) {
             });
         }
         const body = await request.json();
-        const { templateId, employeeId, employeeName, startDate } = body;
-        if (!templateId || !employeeId || !employeeName) {
+        const { templateId, employeeId, employeeName, startDate, shiftDate, shiftType, areaCode } = body;
+        if (!templateId) {
             return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
-                error: "templateId, employeeId, and employeeName are required"
+                error: "templateId is required"
             }, {
                 status: 400
             });
@@ -223,15 +227,18 @@ async function POST(request) {
         const start = startDate ? new Date(startDate) : new Date();
         const maxDueDays = steps.length > 0 ? Math.max(...steps.map((s)=>s.default_due_days)) : 30;
         const dueDate = new Date(start.getTime() + maxDueDays * 24 * 60 * 60 * 1000);
-        const instanceResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(`INSERT INTO wf_instances (org_id, template_id, employee_id, employee_name, status, start_date, due_date)
-       VALUES ($1, $2, $3, $4, 'active', $5, $6)
+        const instanceResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(`INSERT INTO wf_instances (org_id, template_id, employee_id, employee_name, status, start_date, due_date, shift_date, shift_type, area_code)
+       VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9)
        RETURNING id`, [
             orgId,
             templateId,
-            employeeId,
-            employeeName,
+            employeeId || null,
+            employeeName || null,
             start.toISOString().split("T")[0],
-            dueDate.toISOString().split("T")[0]
+            dueDate.toISOString().split("T")[0],
+            shiftDate || null,
+            shiftType || null,
+            areaCode || null
         ]);
         const instanceId = instanceResult.rows[0].id;
         for (const step of steps){
