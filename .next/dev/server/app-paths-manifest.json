@@ -1,1 +1,8 @@
-{}
+{
+  "/api/workflows/instances/route": "app/api/workflows/instances/route.js",
+  "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
+  "/app/hr/tasks/page": "app/app/hr/tasks/page.js",
+  "/app/workflows/instances/page": "app/app/workflows/instances/page.js",
+  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
+  "/login/page": "app/login/page.js"
+}

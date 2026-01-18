@@ -78,8 +78,6 @@ __turbopack_async_result__();
 "[project]/lib/orgSession.ts [app-route] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
-return __turbopack_context__.a(async (__turbopack_handle_async_dependencies__, __turbopack_async_result__) => { try {
-
 __turbopack_context__.s([
     "getOrgIdFromSession",
     ()=>getOrgIdFromSession,
@@ -88,12 +86,6 @@ __turbopack_context__.s([
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$esm$2f$wrapper$2e$mjs__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/@supabase/supabase-js/dist/esm/wrapper.mjs [app-route] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/headers.js [app-route] (ecmascript)");
-var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/pgClient.ts [app-route] (ecmascript)");
-var __turbopack_async_dependencies__ = __turbopack_handle_async_dependencies__([
-    __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__
-]);
-[__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__] = __turbopack_async_dependencies__.then ? (await __turbopack_async_dependencies__)() : __turbopack_async_dependencies__;
-;
 ;
 ;
 async function getOrgIdFromSession(request) {
@@ -166,51 +158,29 @@ async function getOrgIdFromSession(request) {
     console.log("[orgSession] Authenticated user ID:", userId, "email:", user.email);
     const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
     const preferredOrgId = cookieStore.get("current_org_id")?.value;
-    let membershipQuery;
-    let membershipParams;
+    // Query memberships from Supabase (not local pg)
+    let membershipQuery = supabase.from("memberships").select("org_id, role").eq("user_id", userId).eq("status", "active").order("created_at", {
+        ascending: true
+    }).limit(1);
     if (preferredOrgId) {
-        membershipQuery = `
-      SELECT org_id, role 
-      FROM memberships 
-      WHERE user_id = $1 AND status = 'active' AND org_id = $2
-      LIMIT 1
-    `;
-        membershipParams = [
-            userId,
-            preferredOrgId
-        ];
-    } else {
-        membershipQuery = `
-      SELECT org_id, role 
-      FROM memberships 
-      WHERE user_id = $1 AND status = 'active'
-      ORDER BY created_at ASC
-      LIMIT 1
-    `;
-        membershipParams = [
-            userId
-        ];
+        membershipQuery = membershipQuery.eq("org_id", preferredOrgId);
     }
-    const membershipResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(membershipQuery, membershipParams);
-    console.log("[orgSession] Membership query result:", membershipResult.rows.length, "rows");
-    if (membershipResult.rows.length === 0) {
+    const { data: memberships, error: membershipError } = await membershipQuery;
+    console.log("[orgSession] Membership query result:", memberships?.length || 0, "rows", membershipError?.message || "");
+    if (!memberships || memberships.length === 0) {
+        // Fallback: try without preferred org filter
         if (preferredOrgId) {
-            const fallbackResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(`SELECT org_id, role FROM memberships WHERE user_id = $1 AND status = 'active' ORDER BY created_at ASC LIMIT 1`, [
-                userId
-            ]);
-            if (fallbackResult.rows.length === 0) {
+            const { data: fallbackMemberships } = await supabase.from("memberships").select("org_id, role").eq("user_id", userId).eq("status", "active").order("created_at", {
+                ascending: true
+            }).limit(1);
+            if (fallbackMemberships && fallbackMemberships.length > 0) {
                 return {
-                    success: false,
-                    error: "No active organization membership",
-                    status: 403
+                    success: true,
+                    userId,
+                    orgId: fallbackMemberships[0].org_id,
+                    role: fallbackMemberships[0].role
                 };
             }
-            return {
-                success: true,
-                userId,
-                orgId: fallbackResult.rows[0].org_id,
-                role: fallbackResult.rows[0].role
-            };
         }
         return {
             success: false,
@@ -221,15 +191,14 @@ async function getOrgIdFromSession(request) {
     return {
         success: true,
         userId,
-        orgId: membershipResult.rows[0].org_id,
-        role: membershipResult.rows[0].role
+        orgId: memberships[0].org_id,
+        role: memberships[0].role
     };
 }
 function isAdminOrHr(role) {
     return role === "admin" || role === "hr";
 }
-__turbopack_async_result__();
-} catch(e) { __turbopack_async_result__(e); } }, false);}),
+}),
 "[project]/app/api/workflows/templates/route.ts [app-route] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
@@ -245,10 +214,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$serv
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/pgClient.ts [app-route] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$orgSession$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/orgSession.ts [app-route] (ecmascript)");
 var __turbopack_async_dependencies__ = __turbopack_handle_async_dependencies__([
-    __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__,
-    __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$orgSession$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__
+    __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__
 ]);
-[__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$orgSession$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__] = __turbopack_async_dependencies__.then ? (await __turbopack_async_dependencies__)() : __turbopack_async_dependencies__;
+[__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__] = __turbopack_async_dependencies__.then ? (await __turbopack_async_dependencies__)() : __turbopack_async_dependencies__;
 ;
 ;
 ;
