@@ -1,4 +1,3 @@
 {
-  "/app/hr/tasks/page": "app/app/hr/tasks/page.js",
-  "/login/page": "app/login/page.js"
+  "/app/hr/tasks/page": "app/app/hr/tasks/page.js"
 }

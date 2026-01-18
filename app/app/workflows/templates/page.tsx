@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Users, Clock, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiGet } from "@/lib/apiClient";
 
 type WorkflowTemplate = {
   id: string;
@@ -29,11 +30,7 @@ export default function WorkflowTemplatesPage() {
     
     async function fetchTemplates() {
       try {
-        const res = await fetch("/api/workflows/templates", {
-          headers: { "x-org-id": currentOrg!.id },
-        });
-        if (!res.ok) throw new Error("Failed to fetch templates");
-        const data = await res.json();
+        const data = await apiGet<{ templates: WorkflowTemplate[] }>("/api/workflows/templates");
         setTemplates(data.templates || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load templates");

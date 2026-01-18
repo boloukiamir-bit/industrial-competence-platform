@@ -31,24 +31,38 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
 
   if (!accessToken) {
     const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
     
     // Try standard cookie name first
     let sbAccessToken = cookieStore.get("sb-access-token")?.value;
     
     // Try project-specific cookie (sb-<project-ref>-auth-token)
     if (!sbAccessToken) {
-      const allCookies = cookieStore.getAll();
       const authCookie = allCookies.find(c => 
         c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
       );
       if (authCookie?.value) {
         try {
-          // Supabase stores session as JSON with access_token field
           const parsed = JSON.parse(authCookie.value);
           sbAccessToken = parsed.access_token || parsed[0]?.access_token;
         } catch {
-          // If not JSON, try using the value directly
           sbAccessToken = authCookie.value;
+        }
+      }
+    }
+    
+    // Also try base64 encoded session cookie format
+    if (!sbAccessToken) {
+      const sessionCookie = allCookies.find(c => 
+        c.name.includes("supabase") || (c.name.startsWith("sb-") && c.name.includes("auth"))
+      );
+      if (sessionCookie?.value) {
+        try {
+          const decoded = Buffer.from(sessionCookie.value, 'base64').toString('utf-8');
+          const parsed = JSON.parse(decoded);
+          sbAccessToken = parsed.access_token;
+        } catch {
+          // Not base64 encoded
         }
       }
     }

@@ -18,6 +18,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiGet } from "@/lib/apiClient";
 
 type TemplateCount = {
   templateName: string;
@@ -62,11 +63,7 @@ export default function WorkflowDashboardPage() {
       if (!currentOrg?.id) return;
 
       try {
-        const res = await fetch("/api/workflows/dashboard", {
-          headers: { "x-org-id": currentOrg.id },
-        });
-        if (!res.ok) throw new Error("Failed to fetch dashboard");
-        const result = await res.json();
+        const result = await apiGet<DashboardData>("/api/workflows/dashboard");
         setData(result);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load dashboard");

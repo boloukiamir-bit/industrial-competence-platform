@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Play, Clock, User, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiGet } from "@/lib/apiClient";
 
 type WorkflowInstance = {
   id: string;
@@ -55,14 +56,12 @@ export default function WorkflowInstancesPage() {
 
     async function fetchInstances() {
       try {
-        const params = new URLSearchParams();
-        if (statusFilter !== "all") params.set("status", statusFilter);
+        const queryParams = new URLSearchParams();
+        if (statusFilter !== "all") queryParams.set("status", statusFilter);
 
-        const res = await fetch(`/api/workflows/instances?${params.toString()}`, {
-          headers: { "x-org-id": currentOrg!.id },
-        });
-        if (!res.ok) throw new Error("Failed to fetch instances");
-        const data = await res.json();
+        const data = await apiGet<{ instances: WorkflowInstance[]; statusCounts: StatusCounts }>(
+          `/api/workflows/instances?${queryParams.toString()}`
+        );
         setInstances(data.instances || []);
         setStatusCounts(data.statusCounts || { active: 0, completed: 0, cancelled: 0 });
       } catch (err) {

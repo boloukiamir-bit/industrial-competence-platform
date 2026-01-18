@@ -108,7 +108,41 @@ async function getOrgIdFromSession(request) {
     }
     if (!accessToken) {
         const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
-        const sbAccessToken = cookieStore.get("sb-access-token")?.value;
+        const allCookies = cookieStore.getAll();
+        // Debug: log all cookie names
+        console.log("[orgSession] Available cookies:", allCookies.map((c)=>c.name));
+        // Try standard cookie name first
+        let sbAccessToken = cookieStore.get("sb-access-token")?.value;
+        // Try project-specific cookie (sb-<project-ref>-auth-token)
+        if (!sbAccessToken) {
+            const authCookie = allCookies.find((c)=>c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
+            if (authCookie?.value) {
+                console.log("[orgSession] Found auth cookie:", authCookie.name);
+                try {
+                    // Supabase stores session as JSON with access_token field
+                    const parsed = JSON.parse(authCookie.value);
+                    sbAccessToken = parsed.access_token || parsed[0]?.access_token;
+                    console.log("[orgSession] Parsed access_token:", sbAccessToken ? "found" : "not found");
+                } catch  {
+                    // If not JSON, try using the value directly
+                    sbAccessToken = authCookie.value;
+                }
+            }
+        }
+        // Also try base64 encoded session cookie format
+        if (!sbAccessToken) {
+            const sessionCookie = allCookies.find((c)=>c.name.includes("supabase") || c.name.startsWith("sb-") && c.name.includes("auth"));
+            if (sessionCookie?.value) {
+                console.log("[orgSession] Trying session cookie:", sessionCookie.name);
+                try {
+                    const decoded = Buffer.from(sessionCookie.value, 'base64').toString('utf-8');
+                    const parsed = JSON.parse(decoded);
+                    sbAccessToken = parsed.access_token;
+                } catch  {
+                // Not base64 encoded
+                }
+            }
+        }
         if (sbAccessToken) {
             accessToken = sbAccessToken;
         }

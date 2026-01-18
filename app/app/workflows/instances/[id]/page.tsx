@@ -44,6 +44,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiGet, apiPatch, apiPost } from "@/lib/apiClient";
 
 type Task = {
   id: string;
@@ -122,11 +123,7 @@ export default function InstanceDetailPage() {
     if (!currentOrg?.id || !params.id) return;
 
     try {
-      const res = await fetch(`/api/workflows/instances/${params.id}`, {
-        headers: { "x-org-id": currentOrg.id },
-      });
-      if (!res.ok) throw new Error("Failed to fetch instance");
-      const data = await res.json();
+      const data = await apiGet<WorkflowInstance>(`/api/workflows/instances/${params.id}`);
       setInstance(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load instance");
@@ -144,17 +141,7 @@ export default function InstanceDetailPage() {
 
     setUpdatingTask(taskId);
     try {
-      const res = await fetch(`/api/workflows/instances/${params.id}/tasks`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg.id,
-        },
-        body: JSON.stringify({ taskId, status: newStatus }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update task");
-
+      await apiPatch(`/api/workflows/instances/${params.id}/tasks`, { taskId, status: newStatus });
       await fetchInstance();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update task");
@@ -168,22 +155,12 @@ export default function InstanceDetailPage() {
 
     setUpdatingTask(editingTask.id);
     try {
-      const res = await fetch(`/api/workflows/instances/${params.id}/tasks`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg.id,
-        },
-        body: JSON.stringify({
-          taskId: editingTask.id,
-          notes: editingTask.notes,
-          evidenceUrl: editingTask.evidenceUrl,
-          dueDate: editingTask.dueDate || null,
-        }),
+      await apiPatch(`/api/workflows/instances/${params.id}/tasks`, {
+        taskId: editingTask.id,
+        notes: editingTask.notes,
+        evidenceUrl: editingTask.evidenceUrl,
+        dueDate: editingTask.dueDate || null,
       });
-
-      if (!res.ok) throw new Error("Failed to update task");
-
       await fetchInstance();
       setEditingTask(null);
     } catch (err) {
@@ -198,17 +175,7 @@ export default function InstanceDetailPage() {
 
     setSigningOff(true);
     try {
-      const res = await fetch(`/api/workflows/instances/${params.id}/signoff`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg.id,
-        },
-        body: JSON.stringify({ type, comment: signoffComment }),
-      });
-
-      if (!res.ok) throw new Error("Failed to sign off");
-
+      await apiPost(`/api/workflows/instances/${params.id}/signoff`, { type, comment: signoffComment });
       await fetchInstance();
       setSignoffComment("");
     } catch (err) {

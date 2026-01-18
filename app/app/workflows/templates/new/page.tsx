@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiPost } from "@/lib/apiClient";
 
 const CATEGORIES = ["Production", "Safety", "HR", "Quality", "Maintenance", "Competence"];
 const OWNER_ROLES = ["HR", "Supervisor", "IT", "Quality", "Maintenance", "Employee"];
@@ -124,32 +125,19 @@ export default function NewTemplatePage() {
     setSaving(true);
 
     try {
-      const res = await fetch("/api/workflows/templates", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg?.id || "",
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          category,
-          description: description.trim() || null,
-          steps: steps.map((s) => ({
-            step_no: s.step_no,
-            title: s.title.trim(),
-            description: s.description.trim() || null,
-            owner_role: s.owner_role,
-            default_due_days: s.default_due_days,
-            required: s.required,
-          })),
-        }),
+      const data = await apiPost<{ templateId: string }>("/api/workflows/templates", {
+        name: name.trim(),
+        category,
+        description: description.trim() || null,
+        steps: steps.map((s) => ({
+          step_no: s.step_no,
+          title: s.title.trim(),
+          description: s.description.trim() || null,
+          owner_role: s.owner_role,
+          default_due_days: s.default_due_days,
+          required: s.required,
+        })),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create template");
-      }
 
       router.push(`/app/workflows/templates/${data.templateId}`);
     } catch (err) {

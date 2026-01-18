@@ -36,6 +36,7 @@ import {
   Save,
 } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiGet, apiPatch } from "@/lib/apiClient";
 
 type Task = {
   id: string;
@@ -75,11 +76,7 @@ export default function MyTasksPage() {
     if (!currentOrg?.id) return;
 
     try {
-      const res = await fetch("/api/workflows/my-tasks", {
-        headers: { "x-org-id": currentOrg.id },
-      });
-      if (!res.ok) throw new Error("Failed to fetch tasks");
-      const data = await res.json();
+      const data = await apiGet<{ tasks: Task[]; summary: { total: number; overdue: number; dueToday: number } }>("/api/workflows/my-tasks");
       setTasks(data.tasks);
       setSummary(data.summary);
     } catch (err) {
@@ -98,16 +95,7 @@ export default function MyTasksPage() {
 
     setUpdatingTask(task.id);
     try {
-      const res = await fetch(`/api/workflows/instances/${task.instanceId}/tasks`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg.id,
-        },
-        body: JSON.stringify({ taskId: task.id, status: newStatus }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update task");
+      await apiPatch(`/api/workflows/instances/${task.instanceId}/tasks`, { taskId: task.id, status: newStatus });
       await fetchTasks();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update task");
@@ -121,16 +109,7 @@ export default function MyTasksPage() {
 
     setUpdatingTask(editingTask.id);
     try {
-      const res = await fetch(`/api/workflows/instances/${editingTask.instanceId}/tasks`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg.id,
-        },
-        body: JSON.stringify({ taskId: editingTask.id, notes: editNotes }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update task");
+      await apiPatch(`/api/workflows/instances/${editingTask.instanceId}/tasks`, { taskId: editingTask.id, notes: editNotes });
       await fetchTasks();
       setEditingTask(null);
     } catch (err) {

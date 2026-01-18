@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Play, Clock, User, Loader2, Search, Calendar, MapPin } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import { apiGet, apiPost } from "@/lib/apiClient";
 
 type TemplateStep = {
   id: string;
@@ -87,26 +88,21 @@ export default function TemplateDetailPage() {
 
     async function fetchData() {
       try {
-        const [templateRes, employeesRes, areasRes] = await Promise.all([
-          fetch(`/api/workflows/templates/${params.id}`, {
-            headers: { "x-org-id": currentOrg!.id },
-          }),
-          fetch(`/api/employees?org_id=${currentOrg!.id}`),
-          fetch(`/api/spaljisten/areas`).catch(() => ({ ok: false })),
-        ]);
-
-        if (!templateRes.ok) throw new Error("Failed to fetch template");
-        const templateData = await templateRes.json();
+        const templateData = await apiGet<WorkflowTemplate>(`/api/workflows/templates/${params.id}`);
         setTemplate(templateData);
 
-        if (employeesRes.ok) {
-          const employeesData = await employeesRes.json();
-          setEmployees(employeesData.employees || employeesData || []);
+        try {
+          const employeesData = await apiGet<{ employees: Employee[] }>(`/api/employees?org_id=${currentOrg!.id}`);
+          setEmployees(employeesData.employees || []);
+        } catch {
+          // Employees fetch failed, continue
         }
 
-        if (areasRes && "ok" in areasRes && areasRes.ok) {
-          const areasData = await (areasRes as Response).json();
+        try {
+          const areasData = await apiGet<{ areas: Area[] }>(`/api/spaljisten/areas`);
           setAreas(areasData.areas || []);
+        } catch {
+          // Areas fetch failed, continue
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load template");
@@ -147,25 +143,15 @@ export default function TemplateDetailPage() {
 
     setStarting(true);
     try {
-      const res = await fetch("/api/workflows/instances", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-org-id": currentOrg!.id,
-        },
-        body: JSON.stringify({
-          templateId: template.id,
-          employeeId: selectedEmployee?.id || null,
-          employeeName: selectedEmployee?.name || null,
-          shiftDate: shiftDate || null,
-          shiftType: shiftType || null,
-          areaCode: areaCode || null,
-        }),
+      const data = await apiPost<{ instance: { id: string } }>("/api/workflows/instances", {
+        templateId: template.id,
+        employeeId: selectedEmployee?.id || null,
+        employeeName: selectedEmployee?.name || null,
+        shiftDate: shiftDate || null,
+        shiftType: shiftType || null,
+        areaCode: areaCode || null,
       });
 
-      if (!res.ok) throw new Error("Failed to start workflow");
-
-      const data = await res.json();
       router.push(`/app/workflows/instances/${data.instance.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start workflow");
