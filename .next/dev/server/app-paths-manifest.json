@@ -1,3 +1,14 @@
 {
-  "/app/hr/tasks/page": "app/app/hr/tasks/page.js"
+  "/api/hr/analytics/route": "app/api/hr/analytics/route.js",
+  "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
+  "/api/workflows/instances/route": "app/api/workflows/instances/route.js",
+  "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
+  "/app/admin/page": "app/app/admin/page.js",
+  "/app/gaps/page": "app/app/gaps/page.js",
+  "/app/hr/analytics/page": "app/app/hr/analytics/page.js",
+  "/app/hr/tasks/page": "app/app/hr/tasks/page.js",
+  "/app/setup/page": "app/app/setup/page.js",
+  "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
+  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
+  "/login/page": "app/login/page.js"
 }

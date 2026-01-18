@@ -108,7 +108,34 @@ async function getOrgIdFromSession(request) {
     }
     if (!accessToken) {
         const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
-        const sbAccessToken = cookieStore.get("sb-access-token")?.value;
+        const allCookies = cookieStore.getAll();
+        // Try standard cookie name first
+        let sbAccessToken = cookieStore.get("sb-access-token")?.value;
+        // Try project-specific cookie (sb-<project-ref>-auth-token)
+        if (!sbAccessToken) {
+            const authCookie = allCookies.find((c)=>c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
+            if (authCookie?.value) {
+                try {
+                    const parsed = JSON.parse(authCookie.value);
+                    sbAccessToken = parsed.access_token || parsed[0]?.access_token;
+                } catch  {
+                    sbAccessToken = authCookie.value;
+                }
+            }
+        }
+        // Also try base64 encoded session cookie format
+        if (!sbAccessToken) {
+            const sessionCookie = allCookies.find((c)=>c.name.includes("supabase") || c.name.startsWith("sb-") && c.name.includes("auth"));
+            if (sessionCookie?.value) {
+                try {
+                    const decoded = Buffer.from(sessionCookie.value, 'base64').toString('utf-8');
+                    const parsed = JSON.parse(decoded);
+                    sbAccessToken = parsed.access_token;
+                } catch  {
+                // Not base64 encoded
+                }
+            }
+        }
         if (sbAccessToken) {
             accessToken = sbAccessToken;
         }
