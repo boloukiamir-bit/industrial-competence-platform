@@ -1,4 +1,8 @@
 {
+  "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
   "/api/spaljisten/reset/route": "app/api/spaljisten/reset/route.js",
+  "/app/hr/tasks/page": "app/app/hr/tasks/page.js",
+  "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
+  "/login/page": "app/login/page.js",
   "/page": "app/page.js"
 }
