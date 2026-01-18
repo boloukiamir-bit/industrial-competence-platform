@@ -86,12 +86,13 @@ async function importStations(rows: Record<string, string>[]): Promise<ImportRes
         let areaId = null;
         if (rawAreaCode) {
           const normalizedAreaCode = normalizeAreaCode(rawAreaCode);
+          // Look up by area_code OR area_name (case-insensitive)
           const areaRes = await client.query(
-            "SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", 
-            [SPALJISTEN_ORG_ID, normalizedAreaCode]
+            "SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = LOWER($3))", 
+            [SPALJISTEN_ORG_ID, normalizedAreaCode, rawAreaCode.trim()]
           );
           if (areaRes.rows.length === 0) {
-            failedRows.push({ line: lineNum, reason: `Unknown area_code: ${rawAreaCode}. Import areas.csv first.` });
+            failedRows.push({ line: lineNum, reason: `Unknown area: ${rawAreaCode}. Import areas.csv first.` });
             continue;
           }
           areaId = areaRes.rows[0].id;
@@ -136,12 +137,13 @@ async function importEmployees(rows: Record<string, string>[]): Promise<ImportRe
         let areaId = null;
         if (rawAreaCode) {
           const normalizedAreaCode = normalizeAreaCode(rawAreaCode);
+          // Look up by area_code OR area_name (case-insensitive)
           const areaRes = await client.query(
-            "SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2",
-            [SPALJISTEN_ORG_ID, normalizedAreaCode]
+            "SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = LOWER($3))",
+            [SPALJISTEN_ORG_ID, normalizedAreaCode, rawAreaCode.trim()]
           );
           if (areaRes.rows.length === 0) {
-            failedRows.push({ line: lineNum, reason: `Unknown area_code: ${rawAreaCode}. Import areas.csv first.` });
+            failedRows.push({ line: lineNum, reason: `Unknown area: ${rawAreaCode}. Import areas.csv first.` });
             continue;
           }
           areaId = areaRes.rows[0].id;
