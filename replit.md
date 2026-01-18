@@ -87,7 +87,13 @@ The Workflow System (`/app/workflows/*`) provides standardized HR process manage
 **Instance Statuses:** active, completed, cancelled
 **Auto-completion:** Instance automatically completes when all tasks are done
 
-**Seed Templates:** Run `SELECT seed_workflow_templates('org-id');` to create 3 demo templates
+**Seed Templates:** Run `SELECT seed_production_workflow_templates('org-id');` to create 4 production templates
+
+**Production Templates (Spaljisten):**
+1. Skiftöverlämning – Standard (Logg + Risker) - 6 steps, requires shift_date, shift_type, area_code
+2. Daglig Produktionsstyrning – SQCDP Tavla (15 min) - 6 steps, requires shift_date, area_code
+3. Kompetensåtgärd – 2 personer per kritisk station - 7 steps, optional employee, requires area_code
+4. Incident/Near-miss – Åtgärd & Uppföljning - 6 steps, requires employee, area_code
 
 ## Testing Infrastructure
 - **Unit Tests:** Jest with ts-jest for TypeScript support (jest.config.cjs)
