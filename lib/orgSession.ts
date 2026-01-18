@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import pool from "@/lib/pgClient";
 
 export type OrgSessionResult = {
   success: true;
@@ -96,58 +95,51 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
   const cookieStore = await cookies();
   const preferredOrgId = cookieStore.get("current_org_id")?.value;
 
-  let membershipQuery: string;
-  let membershipParams: (string | undefined)[];
+  // Query memberships from Supabase (not local pg)
+  let membershipQuery = supabase
+    .from("memberships")
+    .select("org_id, role")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .limit(1);
 
   if (preferredOrgId) {
-    membershipQuery = `
-      SELECT org_id, role 
-      FROM memberships 
-      WHERE user_id = $1 AND status = 'active' AND org_id = $2
-      LIMIT 1
-    `;
-    membershipParams = [userId, preferredOrgId];
-  } else {
-    membershipQuery = `
-      SELECT org_id, role 
-      FROM memberships 
-      WHERE user_id = $1 AND status = 'active'
-      ORDER BY created_at ASC
-      LIMIT 1
-    `;
-    membershipParams = [userId];
+    membershipQuery = membershipQuery.eq("org_id", preferredOrgId);
   }
 
-  const membershipResult = await pool.query(membershipQuery, membershipParams);
-  console.log("[orgSession] Membership query result:", membershipResult.rows.length, "rows");
+  const { data: memberships, error: membershipError } = await membershipQuery;
+  console.log("[orgSession] Membership query result:", memberships?.length || 0, "rows", membershipError?.message || "");
 
-  if (membershipResult.rows.length === 0) {
+  if (!memberships || memberships.length === 0) {
+    // Fallback: try without preferred org filter
     if (preferredOrgId) {
-      const fallbackResult = await pool.query(
-        `SELECT org_id, role FROM memberships WHERE user_id = $1 AND status = 'active' ORDER BY created_at ASC LIMIT 1`,
-        [userId]
-      );
-      
-      if (fallbackResult.rows.length === 0) {
-        return { success: false, error: "No active organization membership", status: 403 };
+      const { data: fallbackMemberships } = await supabase
+        .from("memberships")
+        .select("org_id, role")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (fallbackMemberships && fallbackMemberships.length > 0) {
+        return {
+          success: true,
+          userId,
+          orgId: fallbackMemberships[0].org_id,
+          role: fallbackMemberships[0].role,
+        };
       }
-      
-      return {
-        success: true,
-        userId,
-        orgId: fallbackResult.rows[0].org_id,
-        role: fallbackResult.rows[0].role,
-      };
     }
-    
+
     return { success: false, error: "No active organization membership", status: 403 };
   }
 
   return {
     success: true,
     userId,
-    orgId: membershipResult.rows[0].org_id,
-    role: membershipResult.rows[0].role,
+    orgId: memberships[0].org_id,
+    role: memberships[0].role,
   };
 }
 

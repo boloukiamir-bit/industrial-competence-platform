@@ -1,8 +1,1 @@
-{
-  "/api/hr/analytics/route": "app/api/hr/analytics/route.js",
-  "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
-  "/app/hr/analytics/page": "app/app/hr/analytics/page.js",
-  "/app/hr/tasks/page": "app/app/hr/tasks/page.js",
-  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
-  "/login/page": "app/login/page.js"
-}
+{}
