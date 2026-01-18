@@ -1,0 +1,152 @@
+P0 WAR MODE — DELIVER IN ONE PUSH (DAYS 2–6) — Spaljisten Go-Live Thu 22nd 15:00
+
+Context:
+Customer meeting booked: Thu 22nd 15:00. We MUST have a demo-safe Go-Live v1.
+Scope is frozen: SP Dashboard + SP Import + Export only. No new modules. No redesign.
+
+Objective:
+Make the system demo-proof with:
+- Correct counts (no duplicates)
+- Truthful filtering
+- Export matches dashboard 1:1
+- Clear “Warning” meaning (single point of failure)
+- A repeatable demo script and proof artifacts
+
+DO THIS ENTIRE LIST NOW. NO QUESTIONS. NO “TASK LIST RESTART”. SHIP.
+
+========================================
+DAY 2 — DATA INTEGRITY (GATE 1)
+========================================
+
+P0-2.1 UNIQUE CONSTRAINTS (org-scoped)
+Ensure UNIQUE constraints exist and are used by UPSERT for all sp_* tables:
+- sp_areas(org_id, area_code)
+- sp_stations(org_id, station_code)
+- sp_employees(org_id, employee_id)
+- sp_skills(org_id, skill_id)
+- sp_employee_skills(org_id, employee_id, skill_id)
+
+P0-2.2 IMPORT MUST BE PURE UPSERT
+All imports must use INSERT ... ON CONFLICT DO UPDATE (no SELECT+INSERT).
+Imports must be idempotent: importing the same CSV twice must NOT increase counts.
+
+P0-2.3 RESET MUST BE ORG-SCOPED
+Reset endpoint/button must ONLY delete sp_* data for the CURRENT org_id (never global delete).
+After reset, counts must show 0 for that org.
+
+P0-2.4 STOP EMPLOYEES IMPORT CREATING AREAS
+Employees import must NOT create new areas.
+If employee row references missing area_code -> FAIL that row with reason:
+“Unknown area_code. Import areas.csv first.”
+
+Proof required (GATE 1):
+- 60s screen recording: reset -> import 5 files -> counts -> import again -> counts unchanged.
+- Screenshot of counts banner: org_id + Areas/Stations/Employees/Skills/Ratings + last_import_at.
+
+========================================
+DAY 3 — TRUST: FILTER + EXPORT MUST MATCH (GATE 2)
+========================================
+
+P0-3.1 FILTER LOGIC MUST BE TRUTHFUL
+Area filter must restrict data via join chain:
+skill -> station -> area
+(sp_skills.station_code -> sp_stations.station_code -> sp_stations.area_code)
+No cross-area skills in results when filter applied.
+
+P0-3.2 EXPORT MUST MATCH DASHBOARD 1:1
+Export endpoint must use identical filter and sorting logic as dashboard.
+Also match the same inclusion condition (e.g. totalEmployees > 0) if used on dashboard.
+If dashboard filters out zero-coverage skills, export must too.
+
+Proof required (GATE 2):
+- Screenshots showing:
+  - Filter Bearbetning => results only Bearbetning
+  - Export CSV row count equals visible rows
+- 30s recording: change filter -> export -> open CSV -> show same rows.
+
+========================================
+DAY 4 — UX CLARITY: “WARNING” CONFUSION FIX (GATE 3)
+========================================
+
+Problem:
+UI shows “1/1 independent” but labels “Warning”. This is logically correct but confusing.
+
+Fix (minimal):
+Show explicit meaning + thresholds:
+- CRITICAL: independent_count == 0  => “No independent coverage”
+- WARNING: independent_count == 1  => “Single point of failure (only 1 person)”
+- OK: independent_count >= 2        => “Coverage OK (>=2 people)”
+Add text: “Independent = rating >= 3” and “Recommended minimum coverage = 2”.
+
+Proof required (GATE 3):
+- Screenshot of a WARNING item that includes the text “Single point of failure”.
+
+========================================
+DAY 5 — DEMO PACK + FALLBACK PACK (CUSTOMER READY)
+========================================
+
+P0-5.1 CREATE A DEMO SAFE FLOW (NO CORE DEMO MODULES)
+For Spaljisten users in production mode:
+- Only SP nav visible (SP Dashboard + SP Import).
+- Hide/disable core/demo modules to avoid confusion.
+
+P0-5.2 TENANT BANNER ALWAYS VISIBLE
+At top of SP Dashboard show:
+org_name, org_id, Areas/Stations/Employees/Skills/Ratings, last_import_at.
+This prevents silent failures.
+
+P0-5.3 PRODUCE CUSTOMER ARTIFACTS (FILES)
+Create in the repo (or /public/downloads):
+- /docs/spaljisten_demo_script.md (7-minute script)
+- /docs/spaljisten_acceptance_checklist.md (Gates 1–3)
+- /docs/spaljisten_planB_fallback.md (what to show if UI fails: screenshots + export)
+
+Proof required:
+- Provide these files as committed changes (not only in Replit state).
+
+========================================
+DAY 6 — FINAL PRE-MEETING TEST (GO/NO-GO)
+========================================
+
+P0-6.1 ONE-CLICK SMOKE TEST
+Add a simple “Smoke Test” page or command output that verifies:
+- User authenticated
+- org_id resolved
+- counts loaded
+- filter query returns only area
+- export returns same row count
+
+P0-6.2 PROOF PACKAGE (MANDATORY)
+Deliver:
+1) Screenshots:
+   - Dashboard banner with counts
+   - Filter Bearbetning view (no cross-area)
+   - Export CSV opened showing same rows
+2) 1–2 minute screen recording:
+   reset -> import -> dashboard -> filter -> export
+
+========================================
+DEFINITION OF DONE (NON-NEGOTIABLE)
+========================================
+
+By end of this push:
+- Areas must be exactly 5 (no duplicates).
+- Reimport does not change counts.
+- Area filter is truthful.
+- Export matches dashboard 1:1.
+- WARNING wording clearly indicates single point of failure.
+- SP pages do not disappear for testing (dev flag already handled).
+- All changes are committed (no “magic state” only in Replit).
+
+DO NOT:
+- No new features
+- No redesign
+- No refactor unrelated code
+- No questions, no “architect review”
+Just ship and provide proof.
+
+Reply format required:
+1) List of files changed
+2) List of SQL migrations/constraints added
+3) Exact test steps you ran
+4) Links/paths to the proof screenshots + recording + docs files

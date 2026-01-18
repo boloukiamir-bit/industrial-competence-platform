@@ -1,3 +1,4 @@
 {
+  "/api/spaljisten/reset/route": "app/api/spaljisten/reset/route.js",
   "/page": "app/page.js"
 }

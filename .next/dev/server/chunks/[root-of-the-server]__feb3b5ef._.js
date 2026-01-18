@@ -100,11 +100,11 @@ async function GET(request) {
         const stationId = searchParams.get("stationId") || undefined;
         const client = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].connect();
         try {
-            const [stationsRes, skillsRes, ratingsRes, employeesRes] = await Promise.all([
+            const [stationsRes, skillsRes, ratingsRes, employeesRes, areasRes] = await Promise.all([
                 client.query("SELECT id, area_id, station_code, station_name FROM sp_stations WHERE org_id = $1", [
                     SPALJISTEN_ORG_ID
                 ]),
-                client.query("SELECT skill_id, skill_name, station_id FROM sp_skills WHERE org_id = $1", [
+                client.query("SELECT skill_id, skill_name, station_id, category FROM sp_skills WHERE org_id = $1", [
                     SPALJISTEN_ORG_ID
                 ]),
                 client.query("SELECT employee_id, skill_id, rating FROM sp_employee_skills WHERE org_id = $1", [
@@ -112,21 +112,36 @@ async function GET(request) {
                 ]),
                 client.query("SELECT employee_id, employee_name FROM sp_employees WHERE org_id = $1 AND is_active = true", [
                     SPALJISTEN_ORG_ID
+                ]),
+                client.query("SELECT id, area_code, area_name FROM sp_areas WHERE org_id = $1", [
+                    SPALJISTEN_ORG_ID
                 ])
             ]);
             const stations = stationsRes.rows;
             const skills = skillsRes.rows;
             const ratings = ratingsRes.rows;
             const employees = employeesRes.rows;
-            let filteredStations = stations;
-            if (areaId) filteredStations = filteredStations.filter((s)=>s.area_id === areaId);
-            if (stationId) filteredStations = filteredStations.filter((s)=>s.id === stationId);
-            const filteredStationIds = new Set(filteredStations.map((s)=>s.id));
-            const filteredSkills = skills.filter((s)=>filteredStationIds.has(s.station_id));
+            const areas = areasRes.rows;
             const stationMap = new Map(stations.map((s)=>[
                     s.id,
                     s
                 ]));
+            const areaMap = new Map(areas.map((a)=>[
+                    a.id,
+                    a.area_name
+                ]));
+            const getSkillAreaId = (skill)=>{
+                if (!skill.station_id) return null;
+                const station = stationMap.get(skill.station_id);
+                return station?.area_id || null;
+            };
+            let filteredSkills = skills;
+            if (areaId) {
+                filteredSkills = skills.filter((skill)=>getSkillAreaId(skill) === areaId);
+            }
+            if (stationId) {
+                filteredSkills = filteredSkills.filter((s)=>s.station_id === stationId);
+            }
             const employeeMap = new Map(employees.map((e)=>[
                     e.employee_id,
                     e.employee_name
@@ -154,6 +169,14 @@ async function GET(request) {
                     employees: employeeDetails,
                     riskLevel
                 };
+            }).filter((s)=>s.totalEmployees > 0).sort((a, b)=>{
+                const order = {
+                    critical: 0,
+                    warning: 1,
+                    ok: 2
+                };
+                if (a.riskLevel !== b.riskLevel) return order[a.riskLevel] - order[b.riskLevel];
+                return a.independentCount - b.independentCount;
             });
             const headers = [
                 "Station Code",

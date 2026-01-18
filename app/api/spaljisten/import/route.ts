@@ -115,18 +115,16 @@ async function importEmployees(rows: Record<string, string>[]): Promise<ImportRe
         let areaId = null;
         if (areaName) {
           const normalizedAreaCode = areaName.trim().toLowerCase();
-          // Upsert area first
-          await client.query(
-            `INSERT INTO sp_areas (org_id, area_code, area_name) 
-             VALUES ($1, $2, $3) 
-             ON CONFLICT (org_id, area_code) DO NOTHING`,
-            [SPALJISTEN_ORG_ID, normalizedAreaCode, areaName.trim()]
-          );
+          // Look up existing area - DO NOT create new areas from employees import
           const areaRes = await client.query(
-            "SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2",
+            "SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)",
             [SPALJISTEN_ORG_ID, normalizedAreaCode]
           );
-          areaId = areaRes.rows[0]?.id || null;
+          if (areaRes.rows.length === 0) {
+            failedRows.push({ line: lineNum, reason: `Unknown area_code: ${areaName}. Import areas.csv first.` });
+            continue;
+          }
+          areaId = areaRes.rows[0].id;
         }
 
         const result = await client.query(

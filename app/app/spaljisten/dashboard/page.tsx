@@ -100,14 +100,29 @@ export default function SpaljistenDashboard() {
     setExpandedSkills(newExpanded);
   };
 
-  const getRiskBadge = (level: "ok" | "warning" | "critical") => {
+  const getRiskBadge = (level: "ok" | "warning" | "critical", independentCount?: number) => {
     switch (level) {
       case "critical":
-        return <Badge variant="destructive">Critical</Badge>;
+        return (
+          <span className="flex flex-col items-end gap-0.5">
+            <Badge variant="destructive">Critical</Badge>
+            <span className="text-xs text-destructive">No independent coverage</span>
+          </span>
+        );
       case "warning":
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Warning</Badge>;
+        return (
+          <span className="flex flex-col items-end gap-0.5">
+            <Badge className="bg-yellow-500 hover:bg-yellow-600">Warning</Badge>
+            <span className="text-xs text-yellow-600 dark:text-yellow-400">Single point of failure</span>
+          </span>
+        );
       default:
-        return <Badge className="bg-green-500 hover:bg-green-600">OK</Badge>;
+        return (
+          <span className="flex flex-col items-end gap-0.5">
+            <Badge className="bg-green-500 hover:bg-green-600">OK</Badge>
+            <span className="text-xs text-green-600 dark:text-green-400">Coverage OK ({independentCount}+ people)</span>
+          </span>
+        );
     }
   };
 
@@ -154,6 +169,10 @@ export default function SpaljistenDashboard() {
           <span className="text-blue-700 dark:text-blue-300">
             Ratings: {data.kpis.totalRatings}
           </span>
+        </div>
+        <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 flex flex-wrap gap-4">
+          <span>Independent = rating &ge; 3</span>
+          <span>Recommended minimum coverage = 2</span>
         </div>
       </div>
 
@@ -282,7 +301,7 @@ export default function SpaljistenDashboard() {
                       <td className="text-center p-2">{skill.independentCount}</td>
                       <td className="text-center p-2">{skill.totalRated}</td>
                       <td className="text-center p-2">
-                        {getRiskBadge(skill.riskLevel as "ok" | "warning" | "critical")}
+                        {getRiskBadge(skill.riskLevel as "ok" | "warning" | "critical", skill.independentCount)}
                       </td>
                     </tr>
                   ))}
@@ -331,7 +350,7 @@ export default function SpaljistenDashboard() {
                       <span className="text-sm">
                         {item.independentCount} / {item.totalEmployees} independent
                       </span>
-                      {getRiskBadge(item.riskLevel)}
+                      {getRiskBadge(item.riskLevel, item.independentCount)}
                     </div>
                   </button>
 
