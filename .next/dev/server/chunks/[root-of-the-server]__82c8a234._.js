@@ -154,21 +154,24 @@ async function GET(request) {
                     a.id,
                     a.area_name
                 ]));
-            const getSkillAreaId = (skill)=>{
-                if (!skill.station_id) return null;
-                const station = stationMap.get(skill.station_id);
-                return station?.area_id || null;
-            };
+            const areaCodeToIdMap = new Map(areas.map((a)=>[
+                    a.area_code,
+                    a.id
+                ]));
             let filteredSkills = skills;
+            let filteredRatings = ratings;
             if (areaCode) {
-                const matchedArea = areas.find((a)=>a.area_code === areaCode);
-                if (matchedArea) {
-                    filteredSkills = skills.filter((skill)=>getSkillAreaId(skill) === matchedArea.id);
+                const matchedAreaId = areaCodeToIdMap.get(areaCode);
+                if (matchedAreaId) {
+                    const employeesInArea = new Set(employees.filter((e)=>e.area_id === matchedAreaId).map((e)=>e.employee_id));
+                    filteredRatings = ratings.filter((r)=>employeesInArea.has(r.employee_id));
+                    const skillsWithRatingsInArea = new Set(filteredRatings.map((r)=>r.skill_id));
+                    filteredSkills = skills.filter((s)=>skillsWithRatingsInArea.has(s.skill_id));
                 }
             }
             const skillRisks = [];
             for (const skill of filteredSkills){
-                const skillRatings = ratings.filter((r)=>r.skill_id === skill.skill_id);
+                const skillRatings = filteredRatings.filter((r)=>r.skill_id === skill.skill_id);
                 const independentCount = skillRatings.filter((r)=>r.rating !== null && r.rating >= 3).length;
                 const totalRated = skillRatings.filter((r)=>r.rating !== null).length;
                 let riskLevel = "ok";
@@ -193,7 +196,7 @@ async function GET(request) {
                 return a.independentCount - b.independentCount;
             }).slice(0, 10);
             const skillGapData = filteredSkills.map((skill)=>{
-                const skillRatings = ratings.filter((r)=>r.skill_id === skill.skill_id);
+                const skillRatings = filteredRatings.filter((r)=>r.skill_id === skill.skill_id);
                 const independentCount = skillRatings.filter((r)=>r.rating !== null && r.rating >= 3).length;
                 const totalEmployeesForSkill = skillRatings.length;
                 const employeeDetails = skillRatings.map((r)=>{
