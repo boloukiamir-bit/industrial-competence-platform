@@ -64,6 +64,30 @@ The platform is built using Next.js 15 with the App Router, TypeScript, and Tail
 - `sql/002_multi_tenant_rls.sql` - Organizations, memberships, invites, audit_logs with RLS
 - `sql/007_production_leader_schema.sql` - Production Leader OS tables with RLS (departments, lines, machines, employees, shifts, crews, attendance, assignments)
 - `sql/008_plannja_demo_data.sql` - Demo data for Plannja Järnforsen organization
+- `sql/012_workflow_system.sql` - Workflow V1 tables (wf_templates, wf_template_steps, wf_instances, wf_instance_tasks, wf_audit_log) with RLS
+- `sql/013_workflow_seed_templates.sql` - Seed function for 3 workflow templates (Onboarding, Rehab, Offboarding)
+
+## Workflow System V1
+The Workflow System (`/app/workflows/*`) provides standardized HR process management:
+- **Templates (/app/workflows/templates):** Browse workflow templates (Onboarding, Rehab 30/60/90, Offboarding)
+- **Template Detail (/app/workflows/templates/[id]):** View steps, start workflow for employee with selector
+- **Instances (/app/workflows/instances):** View active/completed workflows with progress tracking
+- **Instance Detail (/app/workflows/instances/[id]):** Task management, status updates, audit log
+
+**Database Tables:**
+- `wf_templates` - Workflow templates per organization
+- `wf_template_steps` - Steps within templates (step_no, title, owner_role, due_days)
+- `wf_instances` - Running workflow instances (employee, status, dates)
+- `wf_instance_tasks` - Tasks copied from template steps (status: todo/in_progress/done/blocked)
+- `wf_audit_log` - Audit trail for all workflow actions
+
+**Architecture Note:** Uses direct PostgreSQL connection via `lib/pgClient.ts` to bypass Supabase schema cache issues.
+
+**Task Statuses:** todo, in_progress, done, blocked
+**Instance Statuses:** active, completed, cancelled
+**Auto-completion:** Instance automatically completes when all tasks are done
+
+**Seed Templates:** Run `SELECT seed_workflow_templates('org-id');` to create 3 demo templates
 
 ## Testing Infrastructure
 - **Unit Tests:** Jest with ts-jest for TypeScript support (jest.config.cjs)

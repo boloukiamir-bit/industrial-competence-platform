@@ -14,7 +14,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Play, Clock, User, CheckCircle, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowLeft, Play, Clock, User, CheckCircle, Loader2, Search } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
 
 type TemplateStep = {
@@ -35,29 +42,44 @@ type WorkflowTemplate = {
   steps: TemplateStep[];
 };
 
+type Employee = {
+  id: string;
+  name: string;
+};
+
 export default function TemplateDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { currentOrg } = useOrg();
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showStartDialog, setShowStartDialog] = useState(false);
-  const [employeeId, setEmployeeId] = useState("");
-  const [employeeName, setEmployeeName] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [starting, setStarting] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
 
   useEffect(() => {
     if (!currentOrg?.id || !params.id) return;
 
-    async function fetchTemplate() {
+    async function fetchData() {
       try {
-        const res = await fetch(`/api/workflows/templates/${params.id}`, {
-          headers: { "x-org-id": currentOrg!.id },
-        });
-        if (!res.ok) throw new Error("Failed to fetch template");
-        const data = await res.json();
-        setTemplate(data);
+        const [templateRes, employeesRes] = await Promise.all([
+          fetch(`/api/workflows/templates/${params.id}`, {
+            headers: { "x-org-id": currentOrg!.id },
+          }),
+          fetch(`/api/employees?org_id=${currentOrg!.id}`),
+        ]);
+
+        if (!templateRes.ok) throw new Error("Failed to fetch template");
+        const templateData = await templateRes.json();
+        setTemplate(templateData);
+
+        if (employeesRes.ok) {
+          const employeesData = await employeesRes.json();
+          setEmployees(employeesData.employees || employeesData || []);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load template");
       } finally {
@@ -65,11 +87,22 @@ export default function TemplateDetailPage() {
       }
     }
 
-    fetchTemplate();
+    fetchData();
   }, [currentOrg?.id, params.id]);
 
+  const handleEmployeeSelect = (employeeId: string) => {
+    const emp = employees.find((e) => e.id === employeeId);
+    if (emp) {
+      setSelectedEmployee(emp);
+    }
+  };
+
+  const filteredEmployees = employees.filter((emp) =>
+    emp.name.toLowerCase().includes(employeeSearch.toLowerCase())
+  );
+
   const handleStartWorkflow = async () => {
-    if (!employeeId || !employeeName || !template) return;
+    if (!selectedEmployee || !template) return;
 
     setStarting(true);
     try {
@@ -81,8 +114,8 @@ export default function TemplateDetailPage() {
         },
         body: JSON.stringify({
           templateId: template.id,
-          employeeId,
-          employeeName,
+          employeeId: selectedEmployee.id,
+          employeeName: selectedEmployee.name,
         }),
       });
 
@@ -195,24 +228,45 @@ export default function TemplateDetailPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="employeeId">Employee ID</Label>
-              <Input
-                id="employeeId"
-                placeholder="e.g., EMP-001"
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                data-testid="input-employee-id"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="employeeName">Employee Name</Label>
-              <Input
-                id="employeeName"
-                placeholder="e.g., John Smith"
-                value={employeeName}
-                onChange={(e) => setEmployeeName(e.target.value)}
-                data-testid="input-employee-name"
-              />
+              <Label>Select Employee</Label>
+              {employees.length > 5 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search employees..."
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-employee-search"
+                  />
+                </div>
+              )}
+              <Select
+                value={selectedEmployee?.id || ""}
+                onValueChange={handleEmployeeSelect}
+              >
+                <SelectTrigger data-testid="select-employee">
+                  <SelectValue placeholder="Choose an employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredEmployees.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No employees found
+                    </div>
+                  ) : (
+                    filteredEmployees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedEmployee && (
+                <p className="text-sm text-muted-foreground">
+                  Selected: {selectedEmployee.name}
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -221,7 +275,7 @@ export default function TemplateDetailPage() {
             </Button>
             <Button
               onClick={handleStartWorkflow}
-              disabled={!employeeId || !employeeName || starting}
+              disabled={!selectedEmployee || starting}
               data-testid="button-confirm-start"
             >
               {starting ? (
