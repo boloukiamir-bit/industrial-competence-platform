@@ -1,5 +1,5 @@
 {
   "/api/hr/analytics/route": "app/api/hr/analytics/route.js",
   "/app/hr/analytics/page": "app/app/hr/analytics/page.js",
-  "/login/page": "app/login/page.js"
+  "/page": "app/page.js"
 }
