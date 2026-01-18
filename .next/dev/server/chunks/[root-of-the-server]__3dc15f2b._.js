@@ -163,6 +163,7 @@ async function getOrgIdFromSession(request) {
         };
     }
     const userId = user.id;
+    console.log("[orgSession] Authenticated user ID:", userId, "email:", user.email);
     const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
     const preferredOrgId = cookieStore.get("current_org_id")?.value;
     let membershipQuery;
@@ -191,6 +192,7 @@ async function getOrgIdFromSession(request) {
         ];
     }
     const membershipResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(membershipQuery, membershipParams);
+    console.log("[orgSession] Membership query result:", membershipResult.rows.length, "rows");
     if (membershipResult.rows.length === 0) {
         if (preferredOrgId) {
             const fallbackResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(`SELECT org_id, role FROM memberships WHERE user_id = $1 AND status = 'active' ORDER BY created_at ASC LIMIT 1`, [

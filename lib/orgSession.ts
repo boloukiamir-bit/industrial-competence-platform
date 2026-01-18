@@ -91,6 +91,7 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
   }
 
   const userId = user.id;
+  console.log("[orgSession] Authenticated user ID:", userId, "email:", user.email);
 
   const cookieStore = await cookies();
   const preferredOrgId = cookieStore.get("current_org_id")?.value;
@@ -118,6 +119,7 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
   }
 
   const membershipResult = await pool.query(membershipQuery, membershipParams);
+  console.log("[orgSession] Membership query result:", membershipResult.rows.length, "rows");
 
   if (membershipResult.rows.length === 0) {
     if (preferredOrgId) {
