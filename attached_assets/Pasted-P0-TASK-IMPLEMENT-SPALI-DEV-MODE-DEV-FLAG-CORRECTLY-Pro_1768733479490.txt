@@ -1,0 +1,53 @@
+P0 TASK — IMPLEMENT SPALI_DEV_MODE (DEV FLAG) CORRECTLY
+
+Problem:
+Spaljisten navigation/pages keep disappearing or redirecting based on email domain (@spaljisten.se). This breaks testing and causes "back to demo" behavior.
+
+Goal:
+Add a DEV flag so I (amir@bolouki.se) can always access /app/spaljisten/* during development/testing, without relying on email domain hacks.
+
+REQUIREMENTS (NON-NEGOTIABLE)
+
+1) Add environment flag support:
+- SPALI_DEV_MODE=true/false
+- Also support NEXT_PUBLIC_SPALI_DEV_MODE=true/false for client-side nav rendering (Next.js).
+
+2) Behavior rules:
+A) If DEV MODE is TRUE:
+- Show Spaljisten navigation to ALL authenticated users.
+- Allow access to /app/spaljisten/* routes for ALL authenticated users (no redirect away).
+- IMPORTANT: APIs must still be protected properly (see #3). DEV MODE should not make APIs public.
+
+B) If DEV MODE is FALSE (production):
+- Show Spaljisten nav ONLY if user is a member of the Spaljisten org in DB (membership/org_id check).
+- Block access to /app/spaljisten/* for non-members (redirect to /app/dashboard or show "No org assigned").
+
+3) NO email-domain authorization:
+- Do NOT use @spaljisten.se to authorize or gate access.
+- Authorization must be based on DB membership: session.user_id -> membership -> org_id + role.
+
+4) Proof required (Definition of Done):
+- With SPALI_DEV_MODE=true:
+  - Login as amir@bolouki.se -> SP nav visible -> /app/spaljisten/dashboard loads.
+- With SPALI_DEV_MODE=false:
+  - amir@bolouki.se without Spaljisten membership -> SP nav hidden + cannot access /app/spaljisten/* (shows "No org assigned" or redirects).
+- Provide screenshots of both modes.
+
+Implementation hints (do it clean):
+- Add a shared helper:
+  getSpaliDevMode(): boolean
+  - server: process.env.SPALI_DEV_MODE === 'true'
+  - client: process.env.NEXT_PUBLIC_SPALI_DEV_MODE === 'true'
+- Apply it in:
+  - navigation rendering
+  - route guards (middleware/server components) for /app/spaljisten/*
+- Keep API route auth strict and membership-based (never domain-based).
+
+DO NOT:
+- Do not remove Spaljisten sections.
+- Do not refactor unrelated modules.
+- Do not add new features.
+
+Deliver:
+- List of files changed
+- Short note on how to toggle the env vars in Replit
