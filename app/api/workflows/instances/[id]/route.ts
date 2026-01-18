@@ -25,6 +25,7 @@ export async function GET(
     const instanceResult = await pool.query(
       `SELECT i.id, i.template_id, i.employee_id, i.employee_name, 
               i.status, i.start_date, i.due_date, i.completed_at, i.created_at,
+              i.shift_date, i.shift_type, i.area_code,
               t.name as template_name, t.description as template_description, t.category as template_category
        FROM wf_instances i
        LEFT JOIN wf_templates t ON t.id = i.template_id
@@ -68,6 +69,9 @@ export async function GET(
       templateCategory: inst.template_category,
       employeeId: inst.employee_id,
       employeeName: inst.employee_name,
+      shiftDate: inst.shift_date,
+      shiftType: inst.shift_type,
+      areaCode: inst.area_code,
       status: inst.status,
       startDate: inst.start_date,
       dueDate: inst.due_date,

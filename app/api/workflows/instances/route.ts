@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     let query = `
       SELECT i.id, i.template_id, i.employee_id, i.employee_name, 
              i.status, i.start_date, i.due_date, i.completed_at, i.created_at,
+             i.shift_date, i.shift_type, i.area_code,
              t.name as template_name, t.category as template_category
       FROM wf_instances i
       LEFT JOIN wf_templates t ON t.id = i.template_id
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
           templateCategory: inst.template_category || "general",
           employeeId: inst.employee_id,
           employeeName: inst.employee_name,
+          shiftDate: inst.shift_date,
+          shiftType: inst.shift_type,
+          areaCode: inst.area_code,
           status: inst.status,
           startDate: inst.start_date,
           dueDate: inst.due_date,
@@ -102,11 +106,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { templateId, employeeId, employeeName, startDate } = body;
+    const { templateId, employeeId, employeeName, startDate, shiftDate, shiftType, areaCode } = body;
 
-    if (!templateId || !employeeId || !employeeName) {
+    if (!templateId) {
       return NextResponse.json(
-        { error: "templateId, employeeId, and employeeName are required" },
+        { error: "templateId is required" },
         { status: 400 }
       );
     }
@@ -136,10 +140,20 @@ export async function POST(request: NextRequest) {
     const dueDate = new Date(start.getTime() + maxDueDays * 24 * 60 * 60 * 1000);
 
     const instanceResult = await pool.query(
-      `INSERT INTO wf_instances (org_id, template_id, employee_id, employee_name, status, start_date, due_date)
-       VALUES ($1, $2, $3, $4, 'active', $5, $6)
+      `INSERT INTO wf_instances (org_id, template_id, employee_id, employee_name, status, start_date, due_date, shift_date, shift_type, area_code)
+       VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9)
        RETURNING id`,
-      [orgId, templateId, employeeId, employeeName, start.toISOString().split("T")[0], dueDate.toISOString().split("T")[0]]
+      [
+        orgId, 
+        templateId, 
+        employeeId || null, 
+        employeeName || null, 
+        start.toISOString().split("T")[0], 
+        dueDate.toISOString().split("T")[0],
+        shiftDate || null,
+        shiftType || null,
+        areaCode || null
+      ]
     );
 
     const instanceId = instanceResult.rows[0].id;

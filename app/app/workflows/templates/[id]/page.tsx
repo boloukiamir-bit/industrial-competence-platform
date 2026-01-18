@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Play, Clock, User, CheckCircle, Loader2, Search } from "lucide-react";
+import { ArrowLeft, Play, Clock, User, Loader2, Search, Calendar, MapPin } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
 
 type TemplateStep = {
@@ -47,29 +47,52 @@ type Employee = {
   name: string;
 };
 
+type Area = {
+  area_code: string;
+  area_name: string;
+};
+
+const SHIFT_TYPES = ["Day", "Evening", "Night"];
+
+function getTemplateType(name: string): "shift" | "daily" | "competence" | "incident" | "standard" {
+  const lowerName = name.toLowerCase();
+  if (lowerName.includes("skiftöverlämning") || lowerName.includes("shift")) return "shift";
+  if (lowerName.includes("daglig") || lowerName.includes("sqcdp")) return "daily";
+  if (lowerName.includes("kompetens") || lowerName.includes("cross-training")) return "competence";
+  if (lowerName.includes("incident") || lowerName.includes("near-miss")) return "incident";
+  return "standard";
+}
+
 export default function TemplateDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { currentOrg } = useOrg();
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showStartDialog, setShowStartDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [shiftDate, setShiftDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [shiftType, setShiftType] = useState<string>("");
+  const [areaCode, setAreaCode] = useState<string>("");
   const [starting, setStarting] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
+
+  const templateType = template ? getTemplateType(template.name) : "standard";
 
   useEffect(() => {
     if (!currentOrg?.id || !params.id) return;
 
     async function fetchData() {
       try {
-        const [templateRes, employeesRes] = await Promise.all([
+        const [templateRes, employeesRes, areasRes] = await Promise.all([
           fetch(`/api/workflows/templates/${params.id}`, {
             headers: { "x-org-id": currentOrg!.id },
           }),
           fetch(`/api/employees?org_id=${currentOrg!.id}`),
+          fetch(`/api/spaljisten/areas`).catch(() => ({ ok: false })),
         ]);
 
         if (!templateRes.ok) throw new Error("Failed to fetch template");
@@ -79,6 +102,11 @@ export default function TemplateDetailPage() {
         if (employeesRes.ok) {
           const employeesData = await employeesRes.json();
           setEmployees(employeesData.employees || employeesData || []);
+        }
+
+        if (areasRes && "ok" in areasRes && areasRes.ok) {
+          const areasData = await (areasRes as Response).json();
+          setAreas(areasData.areas || []);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load template");
@@ -92,17 +120,30 @@ export default function TemplateDetailPage() {
 
   const handleEmployeeSelect = (employeeId: string) => {
     const emp = employees.find((e) => e.id === employeeId);
-    if (emp) {
-      setSelectedEmployee(emp);
-    }
+    if (emp) setSelectedEmployee(emp);
   };
 
   const filteredEmployees = employees.filter((emp) =>
     emp.name.toLowerCase().includes(employeeSearch.toLowerCase())
   );
 
+  const canStartWorkflow = (): boolean => {
+    switch (templateType) {
+      case "shift":
+        return !!shiftDate && !!shiftType && !!areaCode;
+      case "daily":
+        return !!shiftDate && !!areaCode;
+      case "competence":
+        return !!areaCode;
+      case "incident":
+        return !!selectedEmployee && !!areaCode;
+      default:
+        return !!selectedEmployee;
+    }
+  };
+
   const handleStartWorkflow = async () => {
-    if (!selectedEmployee || !template) return;
+    if (!template || !canStartWorkflow()) return;
 
     setStarting(true);
     try {
@@ -114,8 +155,11 @@ export default function TemplateDetailPage() {
         },
         body: JSON.stringify({
           templateId: template.id,
-          employeeId: selectedEmployee.id,
-          employeeName: selectedEmployee.name,
+          employeeId: selectedEmployee?.id || null,
+          employeeName: selectedEmployee?.name || null,
+          shiftDate: shiftDate || null,
+          shiftType: shiftType || null,
+          areaCode: areaCode || null,
         }),
       });
 
@@ -128,6 +172,15 @@ export default function TemplateDetailPage() {
     } finally {
       setStarting(false);
     }
+  };
+
+  const resetDialog = () => {
+    setSelectedEmployee(null);
+    setShiftDate(new Date().toISOString().split("T")[0]);
+    setShiftType("");
+    setAreaCode("");
+    setEmployeeSearch("");
+    setShowStartDialog(false);
   };
 
   if (loading) {
@@ -185,7 +238,7 @@ export default function TemplateDetailPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {template.steps.map((step, idx) => (
+            {template.steps.map((step) => (
               <div
                 key={step.id}
                 className="flex items-start gap-4 p-4 border rounded-lg"
@@ -221,61 +274,122 @@ export default function TemplateDetailPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showStartDialog} onOpenChange={setShowStartDialog}>
-        <DialogContent>
+      <Dialog open={showStartDialog} onOpenChange={(open) => !open && resetDialog()}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Start Workflow: {template.name}</DialogTitle>
+            <DialogTitle>Start: {template.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Select Employee</Label>
-              {employees.length > 5 && (
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search employees..."
-                    value={employeeSearch}
-                    onChange={(e) => setEmployeeSearch(e.target.value)}
-                    className="pl-9"
-                    data-testid="input-employee-search"
-                  />
-                </div>
-              )}
-              <Select
-                value={selectedEmployee?.id || ""}
-                onValueChange={handleEmployeeSelect}
-              >
-                <SelectTrigger data-testid="select-employee">
-                  <SelectValue placeholder="Choose an employee..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredEmployees.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground text-center">
-                      No employees found
-                    </div>
-                  ) : (
-                    filteredEmployees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {selectedEmployee && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {selectedEmployee.name}
-                </p>
-              )}
-            </div>
+            {(templateType === "shift" || templateType === "daily") && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Shift Date *
+                </Label>
+                <Input
+                  type="date"
+                  value={shiftDate}
+                  onChange={(e) => setShiftDate(e.target.value)}
+                  data-testid="input-shift-date"
+                />
+              </div>
+            )}
+
+            {templateType === "shift" && (
+              <div className="space-y-2">
+                <Label>Shift Type *</Label>
+                <Select value={shiftType} onValueChange={setShiftType}>
+                  <SelectTrigger data-testid="select-shift-type">
+                    <SelectValue placeholder="Select shift..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SHIFT_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {(templateType === "shift" || templateType === "daily" || templateType === "competence" || templateType === "incident") && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Area *
+                </Label>
+                <Select value={areaCode} onValueChange={setAreaCode}>
+                  <SelectTrigger data-testid="select-area">
+                    <SelectValue placeholder="Select area..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {areas.length > 0 ? (
+                      areas.map((area) => (
+                        <SelectItem key={area.area_code} value={area.area_code}>
+                          {area.area_name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="bea">Bearbetning</SelectItem>
+                        <SelectItem value="omm">Ommantling</SelectItem>
+                        <SelectItem value="pac">Packen</SelectItem>
+                        <SelectItem value="log">Logistik</SelectItem>
+                        <SelectItem value="und">Underhåll</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {(templateType === "incident" || templateType === "standard" || templateType === "competence") && (
+              <div className="space-y-2">
+                <Label>
+                  {templateType === "incident" ? "Reporter / Involved Employee *" : "Employee (optional)"}
+                </Label>
+                {employees.length > 5 && (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search employees..."
+                      value={employeeSearch}
+                      onChange={(e) => setEmployeeSearch(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-employee-search"
+                    />
+                  </div>
+                )}
+                <Select
+                  value={selectedEmployee?.id || ""}
+                  onValueChange={handleEmployeeSelect}
+                >
+                  <SelectTrigger data-testid="select-employee">
+                    <SelectValue placeholder="Choose an employee..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredEmployees.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        No employees found
+                      </div>
+                    ) : (
+                      filteredEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowStartDialog(false)}>
+            <Button variant="outline" onClick={resetDialog}>
               Cancel
             </Button>
             <Button
               onClick={handleStartWorkflow}
-              disabled={!selectedEmployee || starting}
+              disabled={!canStartWorkflow() || starting}
               data-testid="button-confirm-start"
             >
               {starting ? (

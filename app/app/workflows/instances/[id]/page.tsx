@@ -23,6 +23,11 @@ import {
   AlertCircle,
   Loader2,
   History,
+  Calendar,
+  MapPin,
+  Sun,
+  Moon,
+  Sunset,
 } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
 
@@ -52,8 +57,11 @@ type WorkflowInstance = {
   templateName: string;
   templateDescription: string;
   templateCategory: string;
-  employeeId: string;
-  employeeName: string;
+  employeeId: string | null;
+  employeeName: string | null;
+  shiftDate: string | null;
+  shiftType: string | null;
+  areaCode: string | null;
   status: string;
   startDate: string;
   dueDate: string;
@@ -207,11 +215,33 @@ export default function InstanceDetailPage() {
               {instance.status}
             </Badge>
           </div>
-          <div className="flex items-center gap-4 text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <User className="h-4 w-4" />
-              {instance.employeeName}
-            </span>
+          <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
+            {instance.employeeName && (
+              <span className="flex items-center gap-1">
+                <User className="h-4 w-4" />
+                {instance.employeeName}
+              </span>
+            )}
+            {instance.shiftDate && (
+              <span className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                {formatDate(instance.shiftDate)}
+              </span>
+            )}
+            {instance.shiftType && (
+              <span className="flex items-center gap-1">
+                {instance.shiftType === "Day" ? <Sun className="h-4 w-4" /> : 
+                 instance.shiftType === "Evening" ? <Sunset className="h-4 w-4" /> : 
+                 <Moon className="h-4 w-4" />}
+                {instance.shiftType}
+              </span>
+            )}
+            {instance.areaCode && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-4 w-4" />
+                {instance.areaCode}
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
               Started {formatDate(instance.startDate)}
