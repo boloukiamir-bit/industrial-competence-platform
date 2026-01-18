@@ -1,5 +1,11 @@
 {
+  "/api/line-overview/route": "app/api/line-overview/route.js",
   "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
+  "/api/spaljisten/import/route": "app/api/spaljisten/import/route.js",
+  "/api/spaljisten/reset/route": "app/api/spaljisten/reset/route.js",
+  "/app/cockpit/page": "app/app/cockpit/page.js",
+  "/app/line-overview/page": "app/app/line-overview/page.js",
   "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
+  "/app/spaljisten/import/page": "app/app/spaljisten/import/page.js",
   "/login/page": "app/login/page.js"
 }
