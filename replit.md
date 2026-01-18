@@ -1,7 +1,7 @@
 # Industrial Competence Platform
 
 ## Overview
-This project is an enterprise-grade competency management platform designed for industrial organizations. Its primary purpose is to streamline HR processes, manage employee competencies, and ensure compliance within Swedish/EU industrial contexts, with a strong focus on GDPR. The platform aims to provide comprehensive tools for HR and management to track skills, identify gaps, manage performance, and oversee operational aspects related to personnel and equipment.
+This project is an enterprise-grade competency management platform for industrial organizations. Its core purpose is to streamline HR processes, manage employee competencies, and ensure compliance within Swedish/EU industrial contexts, specifically focusing on GDPR. The platform offers comprehensive tools for HR and management to track skills, identify gaps, manage performance, and oversee operational aspects related to personnel and equipment.
 
 ## User Preferences
 I want iterative development. Ask before making major changes.
@@ -10,163 +10,75 @@ I want iterative development. Ask before making major changes.
 The platform is built using Next.js 15 with the App Router, TypeScript, and TailwindCSS for styling. Supabase (PostgreSQL) serves as the primary database.
 
 **UI/UX Decisions:**
-- **Design System:** Utilizes custom UI primitives (Button, Card, Badge, Input, Select, Textarea, Switch, Progress, Tabs, Checkbox) for a consistent look and feel.
-- **Layouts:** Features a root layout and a dedicated application layout with a sidebar for navigation.
-- **Dashboards:** Role-based dashboards (HR_ADMIN, MANAGER, EMPLOYEE) provide tailored views of relevant information, emphasizing key metrics, tasks, and risks.
-- **Employee Hub:** A refactored "Person Hub" uses a left-side navigation pattern (Huma-style) for comprehensive employee management.
-- **Color Schemes:** Critical risk badges use a specific `.hr-risk-pill--critical` CSS class.
+- **Design System:** Custom UI primitives ensure a consistent look and feel.
+- **Layouts:** Features a root layout and an application layout with a sidebar for navigation.
+- **Dashboards:** Role-based dashboards (HR_ADMIN, MANAGER, EMPLOYEE) provide tailored views, emphasizing key metrics and tasks.
+- **Employee Hub:** A "Person Hub" utilizes a left-side navigation for comprehensive employee management.
+- **Color Schemes:** Specific CSS classes are used for critical risk indicators.
 
 **Technical Implementations:**
-- **Core Functionality:** Includes modules for Competence Management (matrix, gap analysis, certifications), HR Core (employee data, performance reviews, salary, digital handbooks), and Operations (manager risk dashboard, equipment tracking, person events).
-- **GDPR Support:** Implements access logging, data export, and anonymization utilities to ensure compliance.
-- **API Routes:** Dedicated API routes for GDPR functionalities like employee data export.
-- **Authentication/Authorization:** Supabase Auth with email/password login. Protected routes under `/app/*` redirect unauthenticated users to `/login`. Role-Based Access Control (RBAC) helpers are implemented for user management and role-based content visibility.
-- **Multi-Tenant Architecture:** Organizations, memberships, and invites with full RLS (Row Level Security) enforcement. All data access is scoped by organization membership and enforced at the database level.
-- **Org Context:** `useOrg` hook and `OrgProvider` manage current organization selection. `OrgGuard` component protects org-scoped pages.
-- **HR Workflow Engine:** Manages standardized processes (e.g., sick leave, parental leave, onboarding) with templates, step tracking, due dates, and completion statuses.
-- **Gap Analysis Engine:** Identifies critical skill gaps, training priorities, and overstaffed skills. "Tomorrow's Gaps v1" provides position-based risk/coverage analysis, calculating fully competent employee counts against minimum headcount requirements.
+- **Core Functionality:** Modules for Competence Management (matrix, gap analysis, certifications), HR Core (employee data, performance reviews, salary, digital handbooks), and Operations (manager risk dashboard, equipment tracking, person events).
+- **GDPR Support:** Includes access logging, data export, and anonymization utilities for compliance.
+- **Authentication/Authorization:** Supabase Auth with email/password login and Role-Based Access Control (RBAC) for user management and content visibility.
+- **Multi-Tenant Architecture:** Supports organizations, memberships, and invites with Row Level Security (RLS) enforcement at the database level.
+- **Org Context:** A `useOrg` hook and `OrgProvider` manage current organization selection, with `OrgGuard` protecting org-scoped pages.
+- **HR Workflow Engine:** Manages standardized processes with templates, step tracking, due dates, and completion statuses.
+- **Gap Analysis Engine:** Identifies skill gaps, training priorities, and provides position-based risk/coverage analysis.
 - **Notification Engine:** Features an email outbox and a cron endpoint for daily notifications.
 
 **Feature Specifications:**
-- **Competence Management:** Competency Matrix, Gap Analysis (position-based risk levels, coverage percentage), Safety/Certificates Tracking.
-- **HR Core:** Employee Master Data, Performance Reviews (structured with templates), Salary Management (history, revisions), Digital Handbooks.
-- **Operations:** Manager Risk Dashboard (tracking people events), Equipment Tracking, Unified Person Events (onboarding, offboarding).
+- **Competence Management:** Competency Matrix, Gap Analysis, Safety/Certificates Tracking.
+- **HR Core:** Employee Master Data, Performance Reviews, Salary Management, Digital Handbooks.
+- **Operations:** Manager Risk Dashboard, Equipment Tracking, Unified Person Events.
 - **Platform:** News Management, Document Library, CSV Employee Import, GDPR Support.
-- **Advanced HR:** 1:1 Meetings System, Organization Overview (hierarchical chart), HR Analytics Dashboard (workforce metrics, attrition risk, workflows), HR Tasks dashboard.
+- **Advanced HR:** 1:1 Meetings System, Organization Overview, HR Analytics Dashboard, HR Tasks dashboard.
 
 **System Design Choices:**
-- **Modular Services:** Functionality is encapsulated in dedicated services (e.g., `competenceService.ts`, `gaps.ts`, `employees.ts`, `gdpr.ts`) for better organization and maintainability.
+- **Modular Services:** Functionality is encapsulated in dedicated services (e.g., `competenceService.ts`, `gdpr.ts`).
 - **Database Schema:** Designed with tables for employees, skills, reviews, salaries, equipment, person events, news, documents, GDPR logs, 1:1 meetings, organization units, absences, email outbox, and HR workflow instances.
-- **Date-Awareness:** Competence profile and position coverage analysis functions are designed to be date-aware, allowing for historical or future analysis.
+- **Date-Awareness:** Competence profile and position coverage analysis functions support historical or future analysis.
 
-## Admin Console
-- **Competence Admin (/admin/competence):** CRUD for competence groups and competences
-- **Positions Admin (/admin/positions):** CRUD for positions
-- **Position Requirements (/admin/positions/[id]/requirements):** Manage competence requirements per position
-- **User Management (/app/admin/users):** Invite users, change roles, disable members (org admin only)
-- **Audit Log (/app/admin/audit):** View organization activity history (org admin only)
-
-## Multi-Tenant System
-- **Organizations:** Each organization has a unique slug and is created by authenticated users
-- **Memberships:** Users can belong to multiple orgs with roles: admin, hr, manager, user
-- **Invites:** Pending invites auto-claimed when user signs up with matching email (via DB trigger)
-- **RLS Policies:** All data tables enforce access via `is_org_member()` and `is_org_admin()` helper functions
-- **Audit Logging:** All admin actions (org create, invite, role change, disable) are logged
-
-## Server Routes (Protected, Service Role)
-- `POST /api/org/create` - Create new organization (creator becomes admin)
-- `POST /api/admin/invite` - Invite user by email (org admin only)
-- `POST /api/admin/membership/role` - Change user role (org admin only)
-- `POST /api/admin/membership/disable` - Disable user (org admin only)
-
-## SQL Migrations
-- `sql/create_profiles_table.sql` - User profiles table
-- `sql/002_multi_tenant_rls.sql` - Organizations, memberships, invites, audit_logs with RLS
-- `sql/007_production_leader_schema.sql` - Production Leader OS tables with RLS (departments, lines, machines, employees, shifts, crews, attendance, assignments)
-- `sql/008_plannja_demo_data.sql` - Demo data for Plannja Järnforsen organization
-- `sql/012_workflow_system.sql` - Workflow V1 tables (wf_templates, wf_template_steps, wf_instances, wf_instance_tasks, wf_audit_log) with RLS
-- `sql/013_workflow_seed_templates.sql` - Seed function for 3 workflow templates (Onboarding, Rehab, Offboarding)
-- `sql/016_workflow_v1_upgrades.sql` - Workflow V1.1 upgrades (task notes/evidence, sign-off columns, cross-training template)
-
-## Workflow System V1.1 (Demo-Ready)
-The Workflow System (`/app/workflows/*`) provides standardized HR process management:
-- **Templates (/app/workflows/templates):** Browse workflow templates (Onboarding, Rehab 30/60/90, Offboarding, Cross-training)
-- **Template Detail (/app/workflows/templates/[id]):** View steps, start workflow for employee with selector
+**Workflow System V1.1 (Demo-Ready):**
+- **Templates (/app/workflows/templates):** Browse workflow templates with category colors
+- **Template Builder (/app/workflows/templates/new):** Create custom templates with reorderable steps
+- **Template Detail (/app/workflows/templates/[id]):** View steps, start workflow for employee
 - **Instances (/app/workflows/instances):** View active/completed workflows with progress tracking
-- **Instance Detail (/app/workflows/instances/[id]):** Task management with notes/evidence fields, status updates, sign-off, audit log
-- **Dashboard (/app/workflows/dashboard):** KPIs (active workflows, overdue tasks, completed today), workflows by template, recent activity
-- **My Tasks (/app/workflows/my-tasks):** All pending tasks with overdue/due-today badges, quick actions
+- **Instance Detail (/app/workflows/instances/[id]):** Task management with notes/evidence fields, sign-off, audit log
+- **Dashboard (/app/workflows/dashboard):** KPIs (active workflows, overdue tasks, completed today), recent activity
+- **My Tasks (/app/workflows/my-tasks):** Pending tasks with overdue/due-today badges
 
-**V1.1 Features (Jan 2026):**
-- **Task Step Forms:** Notes (text), evidence_url fields on each task, editable via expandable panel
-- **Workflow Sign-off:** Supervisor sign-off required after all tasks complete; optional HR sign-off for specific templates
-- **Lock on Completion:** Completed/signed-off workflows prevent further task edits (API-enforced)
-- **My Tasks Page:** Organization-wide task queue with overdue badges and quick note/status actions
-- **Risk-to-Workflow Integration:** "Cross-train" button on Spaljisten risk rows creates workflow with pre-filled metadata
+**V1.1 Features:**
+- Task step forms with notes and evidence_url fields
+- Supervisor/HR sign-off system with lock enforcement
+- Template Builder: categories (Production, Safety, HR, Quality, Maintenance, Competence), owner roles, step management
+- Risk-to-workflow integration: "Cross-train" button on Spaljisten risk rows
 
-**Database Tables:**
-- `wf_templates` - Workflow templates per organization
-- `wf_template_steps` - Steps within templates (step_no, title, owner_role, due_days)
-- `wf_instances` - Running workflow instances (employee, status, dates, sign-off fields)
-- `wf_instance_tasks` - Tasks with status, notes, evidence_url fields
-- `wf_audit_log` - Audit trail for all workflow actions
+**Workflow API Routes:**
+- `GET/POST /api/workflows/templates` - List/create templates
+- `GET /api/workflows/templates/[id]` - Template details
+- `POST /api/workflows/instances` - Start workflow
+- `GET /api/workflows/instances/[id]` - Instance with tasks
+- `PATCH /api/workflows/instances/[id]/tasks` - Update task
+- `POST /api/workflows/instances/[id]/signoff` - Sign-off
+- `GET /api/workflows/my-tasks` - Pending tasks
+- `GET /api/workflows/dashboard` - KPIs
 
-**Architecture Note:** Uses direct PostgreSQL connection via `lib/pgClient.ts` to bypass Supabase schema cache issues.
-
+**Database Tables:** wf_templates, wf_template_steps, wf_instances, wf_instance_tasks, wf_audit_log
 **Task Statuses:** todo, in_progress, done, blocked
-**Instance Statuses:** active, completed, cancelled
-**Sign-off Flow:** All tasks done → Supervisor sign-off → (Optional) HR sign-off → Completed & Locked
+**Sign-off Flow:** All tasks done → Supervisor sign-off → (Optional) HR sign-off → Locked
 
-**Seed Templates:** Run `SELECT seed_production_workflow_templates('org-id');` to create 4 production templates
+**Admin Console:**
+- Provides CRUD operations for competence groups, competences, positions, and user management.
+- Includes an audit log for organization activity history.
 
-**Production Templates (Spaljisten):**
-1. Skiftöverlämning – Standard (Logg + Risker) - 6 steps, requires shift_date, shift_type, area_code
-2. Daglig Produktionsstyrning – SQCDP Tavla (15 min) - 6 steps, requires shift_date, area_code
-3. Kompetensåtgärd – 2 personer per kritisk station - 7 steps, optional employee, requires area_code
-4. Incident/Near-miss – Åtgärd & Uppföljning - 6 steps, requires employee, area_code
+**Production Leader OS - Line Overview:**
+- A "God Mode" visualization of production lines, machines, and staffing.
+- Displays KPIs, machine grids with status indicators, and an assignment drawer.
 
-## Testing Infrastructure
-- **Unit Tests:** Jest with ts-jest for TypeScript support (jest.config.cjs)
-- **E2E Tests:** Playwright (playwright.config.ts) for browser testing
-- **Accessibility Tests:** axe-core integration with Playwright for WCAG 2.0 AA compliance
-- **Linting:** ESLint (eslint.config.mjs) for code quality
-- **Formatting:** Prettier (.prettierrc) for consistent code style
-- **Demo Mode:** Enabled via NEXT_PUBLIC_DEMO_MODE=true env var OR ?demo=true query param
-- **Documentation:** See README_TESTING.md for full testing guide
-
-## Competence Matrix Features
-- **KPI Cards:** Total employees, at-risk count, top gap skill, average readiness percentage
-- **Status Types:** OK (meets requirement), GAP (1 level below), RISK (2+ levels below or missing), N/A
-- **Accessible Colors:** Theme tokens for status colors with AA contrast compliance
-- **Premium Styling:** Sticky headers, zebra rows, hover effects, CSV export
-
-## Known Limitations
-- **Supabase Schema Cache:** The `min_headcount` column exists in the `positions` table but Supabase's PostgREST schema cache doesn't recognize it. This requires refreshing the schema cache through the Supabase dashboard (Database > API > Reload). The admin console currently excludes this field as a workaround.
-- **Supabase Schema Cache for other columns:** Same issue may affect `sort_order` on competence_groups and `active` on competences if the schema cache is stale.
-
-## Production Leader OS - Line Overview
-The Line Overview page (`/app/line-overview`) provides a "God Mode" visualization of all production lines, machines, and staffing:
-- **Top Bar:** Date picker, shift selector (Day/Evening/Night), Day/Week toggle
-- **KPI Chips:** Coverage %, Gap hours, Overtime hours, Present/Absent counts
-- **Lines as Sections:** Collapsible line cards with total metrics
-- **Machine Grid:** Cards showing required/assigned hours, gap, status (green/yellow/red), assigned people chips
-- **Assignment Drawer:** Right-side sheet for CRUD on pl_assignment_segments
-- **Auto-Suggest Modal:** V1 algorithm recommending top 3 available employees based on workload
-
-Data from pl_* tables (pl_lines, pl_machines, pl_machine_demand, pl_attendance, pl_assignment_segments, pl_employees, pl_overtime_overrides).
-Hardcoded org_id: f607f244-da91-41d9-a648-d02a1591105c
-
-## Spaljisten Go-Live MVP
-The Spaljisten Go-Live system (`/app/spaljisten/*`) provides skill matrix and gap analysis for customer Spaljisten:
-- **Dashboard (/app/spaljisten/dashboard):** KPIs, top risk stations, skill gap table with filters
-- **Import (/app/spaljisten/import):** CSV import for areas, stations, employees, skills, ratings
-- **Export (/api/spaljisten/export):** CSV export of filtered skill gap data
-
-Data from sp_* tables (sp_areas, sp_stations, sp_employees, sp_skills, sp_employee_skills, sp_area_leaders, sp_rating_scales).
-Hardcoded org_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-Customer admin: Daniel Buhre <daniel.buhre@spaljisten.se>
-
-**Architecture Note:** Uses direct PostgreSQL connection via `pg` library (lib/pgClient.ts) instead of Supabase REST API to bypass PostgREST schema cache issues with new tables.
-
-**Go-Live Setup Instructions:**
-1. Daniel signs up at /login with email: daniel.buhre@spaljisten.se
-2. Run SQL: `SELECT sp_setup_daniel_admin();` to make Daniel admin + data_owner
-3. Daniel imports CSVs at /app/spaljisten/import in order: Areas → Stations → Employees → Skills → Ratings
-4. Dashboard at /app/spaljisten/dashboard shows gap/risk analysis
-
-**CSV Import Order (recommended):**
-1. areas.csv (area_code, area_name)
-2. stations.csv (station_code, station_name, area_code)
-3. employees.csv (employee_id, employee_name, email, area_code)
-4. skills_catalog.csv (skill_id, skill_name, station_code, category)
-5. employee_skill_ratings.csv (employee_id, skill_id, rating 0-4 or N)
-
-**Rating Logic:**
-- "N" or null = not assessed
-- Rating 0-4 scale (0=none, 4=expert)
-- Independent = rating >= 3
-- Risk levels: critical (0 independent), warning (<2 independent), ok (>=2 independent)
+**Spaljisten Go-Live MVP:**
+- Provides skill matrix and gap analysis specifically for the customer Spaljisten.
+- Includes a dashboard, CSV import functionality for areas, stations, employees, skills, and ratings, and CSV export of skill gap data.
 
 ## External Dependencies
 - **Supabase:** Used for database (PostgreSQL) and authentication services.
-- **pg Library:** Direct PostgreSQL connection for Spaljisten APIs (bypasses Supabase schema cache)
+- **pg Library:** Direct PostgreSQL connection for specific APIs to bypass Supabase schema cache issues.
