@@ -731,10 +731,55 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../app/api/workflows/instances/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/workflows/instances/[id]">> = Specific
+  const handler = {} as typeof import("../../../app/api/workflows/instances/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/workflows/instances/[id]/tasks/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/workflows/instances/[id]/tasks">> = Specific
+  const handler = {} as typeof import("../../../app/api/workflows/instances/[id]/tasks/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/workflows/instances/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/workflows/instances">> = Specific
+  const handler = {} as typeof import("../../../app/api/workflows/instances/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../app/api/workflows/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/workflows">> = Specific
   const handler = {} as typeof import("../../../app/api/workflows/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/workflows/templates/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/workflows/templates/[id]">> = Specific
+  const handler = {} as typeof import("../../../app/api/workflows/templates/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/workflows/templates/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/workflows/templates">> = Specific
+  const handler = {} as typeof import("../../../app/api/workflows/templates/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
