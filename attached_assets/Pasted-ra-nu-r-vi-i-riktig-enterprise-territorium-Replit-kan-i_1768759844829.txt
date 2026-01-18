@@ -1,0 +1,176 @@
+ra — nu är vi i riktig enterprise-territorium: Replit kan inte köra Supabase-migrationer utan PAT/CLI, så du måste köra SQL i Supabase Dashboard. Det är helt normalt.
+
+Men: deras SQL som de skickade innehåller en bomb: en hårdkodad org_id a1b2c3d4-e5f6-7890-abcd-ef1234567890. Det får inte gå in “som det är” om ni vill vara seriösa.
+
+0) Board verdict
+
+✅ Kör RLS-migrationen i Supabase SQL Editor
+❌ Kör inte deras setup-funktion med hårdkodad org_id
+✅ Vi separerar: (A) Security migration + (B) Admin setup som är dynamisk
+
+Confidence: High
+
+1) Gör så här NU (15–25 min, inga Replit-builds, inga kostnader)
+Steg A — Öppna Supabase SQL Editor
+
+Gå till Supabase-projektet (den länk de gav).
+
+Öppna SQL Editor.
+
+Steg B — Kör ENDAST “security migration”
+
+I Replit, öppna filen:
+supabase/migrations/20260118173000_spaljisten_rls_fix.sql
+
+Innan du klistrar in: gör en snabb “CTRL+F” i filen efter:
+
+sp_setup_test_admin
+
+a1b2c3d4
+
+INSERT INTO public.organizations (om den skapar org automatiskt)
+
+SECURITY DEFINER (ok för helper-funktioner, men ska vara korrekt)
+
+✅ Du ska köra delarna som:
+
+lägger till memberships.permissions
+
+skapar/uppdaterar helper functions (is_org_member, ev is_org_admin)
+
+ändrar RLS policies för sp_*
+
+❌ Du ska INTE köra någon del som:
+
+skapar test-admin via hårdkodad org_id
+
+skapar organization med en fast uuid
+
+Praktiskt: om filen blandar allt i samma fil, klistra in bara sektionen för RLS/policies, inte setup-blocket.
+
+Confidence: High
+
+2) Verifiera direkt i Supabase (copy/paste)
+
+Kör dessa queries efter migration:
+
+A) Kolla policies på sp_* tabeller
+SELECT tablename, policyname, cmd
+FROM pg_policies
+WHERE schemaname='public' AND tablename LIKE 'sp_%'
+ORDER BY tablename, policyname;
+
+B) Kolla att RLS är aktiverat på sp_* tabeller
+SELECT relname AS table_name, relrowsecurity AS rls_enabled
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname='public' AND relname LIKE 'sp_%'
+ORDER BY relname;
+
+
+Pass-kriterium: policies finns och RLS är TRUE på sp_*.
+
+Confidence: High
+
+3) Admin/Data-owner setup: använd den här säkra funktionen istället
+
+Det du vill ha är:
+
+Daniel blir admin + data_owner i rätt org (slug = spaljisten)
+
+Ingen hårdkodad UUID
+
+Ingen “skapa org med random” under demo
+
+Kör detta i SQL Editor (copy/paste)
+-- Add permissions column (safe if already exists)
+ALTER TABLE public.memberships
+ADD COLUMN IF NOT EXISTS permissions jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- Safer setup function: uses org slug, no hardcoded org_id
+CREATE OR REPLACE FUNCTION public.sp_setup_admin_by_slug(p_email text, p_org_slug text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id uuid;
+  v_org_id uuid;
+BEGIN
+  SELECT id INTO v_user_id
+  FROM auth.users
+  WHERE lower(email) = lower(p_email);
+
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found. Please sign up first at /login');
+  END IF;
+
+  SELECT id INTO v_org_id
+  FROM public.organizations
+  WHERE lower(slug) = lower(p_org_slug);
+
+  IF v_org_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Organization slug not found. Create org first.');
+  END IF;
+
+  INSERT INTO public.memberships (org_id, user_id, role, status, permissions)
+  VALUES (v_org_id, v_user_id, 'admin', 'active', '{"data_owner": true}'::jsonb)
+  ON CONFLICT (org_id, user_id)
+  DO UPDATE SET role='admin', status='active', permissions='{"data_owner": true}'::jsonb;
+
+  INSERT INTO public.profiles (id, email)
+  VALUES (v_user_id, p_email)
+  ON CONFLICT (id) DO UPDATE SET email = p_email;
+
+  RETURN jsonb_build_object('success', true, 'user_id', v_user_id, 'org_id', v_org_id, 'role', 'admin', 'data_owner', true);
+END;
+$$;
+
+-- Run for you and Daniel (after you both have signed up once)
+SELECT public.sp_setup_admin_by_slug('amir@bolouki.se', 'spaljisten');
+SELECT public.sp_setup_admin_by_slug('daniel.buhre@spaljisten.se', 'spaljisten');
+
+
+Varför detta är rätt: du binder admin-setup till org slug (kontrollerbart), inte en hittad/uppdiktad UUID.
+
+Confidence: High
+
+4) Vad du svarar Replit NU (så de slutar cirkla)
+
+Skicka detta:
+
+I will run the migration in Supabase SQL Editor.
+
+BUT: I will NOT run any setup function with hardcoded org_id.
+Your sp_setup_test_admin() uses a fixed UUID and is not acceptable.
+
+Action for you:
+1) Split the migration: (A) RLS/security only, (B) optional setup script.
+2) Provide a safe setup function that assigns admin+data_owner using org slug (spaljisten) without hardcoded IDs.
+3) After I run migration, you must verify on deployed URL with authenticated requests (member vs non-member) and provide screenshots.
+
+Also: confirm the Supabase project ref we are using is the correct production/demo project for Thursday (no fallback project).
+
+
+Confidence: High
+
+5) Viktig sista kontroll (för att inte hamna i fel Supabase igen)
+
+De länkar till Supabase-projektet: bmvawfrnlpdvcmffqrzc.
+Det måste vara samma projekt som din deployade demo använder. Om ni har “fallback Supabase URL/Key” kvar någonstans kan du annars köra migration i ett projekt och UI pekar på ett annat.
+
+Snabb kontroll i Replit env:
+
+NEXT_PUBLIC_SUPABASE_URL ska matcha projektet du kör SQL i.
+
+Confidence: High
+
+Säg bara detta tillbaka till mig när du är klar
+
+Körde du RLS-migrationen? (Ja/Nej)
+
+Visar policy-queryn sp_* policies? (Ja/Nej)
+
+Har du kört admin-setup med slug för dig och Daniel? (Ja/Nej)
+
+Då ger jag dig exakt nästa steg för att bevisa för ledningsgruppen att isolationen är riktig utan att du betalar ett öre mer i Replit.

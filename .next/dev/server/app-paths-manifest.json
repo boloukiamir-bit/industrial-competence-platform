@@ -1,6 +1,15 @@
 {
+  "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
   "/api/workflows/dashboard/route": "app/api/workflows/dashboard/route.js",
+  "/api/workflows/instances/route": "app/api/workflows/instances/route.js",
+  "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
+  "/app/admin/page": "app/app/admin/page.js",
+  "/app/cockpit/page": "app/app/cockpit/page.js",
+  "/app/manager/risks/page": "app/app/manager/risks/page.js",
+  "/app/safety/certificates/page": "app/app/safety/certificates/page.js",
+  "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
   "/app/workflows/dashboard/page": "app/app/workflows/dashboard/page.js",
+  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js"
 }

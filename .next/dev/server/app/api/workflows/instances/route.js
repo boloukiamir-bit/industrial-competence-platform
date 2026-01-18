@@ -1,6 +1,10 @@
 var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/workflows/instances/route.js")
 R.c("server/chunks/node_modules_next_79a2679a._.js")
-R.c("server/chunks/[root-of-the-server]__af81a076._.js")
+R.c("server/chunks/node_modules_@supabase_realtime-js_dist_module_306ac729._.js")
+R.c("server/chunks/node_modules_@supabase_storage-js_dist_module_473cf4b8._.js")
+R.c("server/chunks/node_modules_@supabase_auth-js_dist_module_d4605ced._.js")
+R.c("server/chunks/node_modules_861fd42b._.js")
+R.c("server/chunks/[root-of-the-server]__3f3b0073._.js")
 R.c("server/chunks/_next-internal_server_app_api_workflows_instances_route_actions_f3e07f2f.js")
 R.m("[project]/node_modules/next/dist/esm/build/templates/app-route.js { INNER_APP_ROUTE => \"[project]/app/api/workflows/instances/route.ts [app-route] (ecmascript)\" } [app-route] (ecmascript)")
 module.exports=R.m("[project]/node_modules/next/dist/esm/build/templates/app-route.js { INNER_APP_ROUTE => \"[project]/app/api/workflows/instances/route.ts [app-route] (ecmascript)\" } [app-route] (ecmascript)").exports
