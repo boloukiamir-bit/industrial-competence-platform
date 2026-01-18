@@ -539,7 +539,6 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$services$2f$hrWorkflows$2e$t
 ;
 ;
 ;
-// In-memory storage for workflow instances (development workaround for Supabase schema cache)
 const workflowInstances = [];
 async function GET() {
     return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json(workflowInstances);
@@ -585,7 +584,6 @@ async function POST(request) {
             steps
         };
         workflowInstances.push(instance);
-        // Create person_events for workflow steps
         const personEvents = template.defaultSteps.map((step)=>{
             const dueDate = new Date(now.getTime() + step.daysFromStart * 24 * 60 * 60 * 1000);
             return {

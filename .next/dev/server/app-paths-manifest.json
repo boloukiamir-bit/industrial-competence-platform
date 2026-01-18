@@ -1,8 +1,11 @@
 {
+  "/api/spaljisten/admin/dedupe-areas/route": "app/api/spaljisten/admin/dedupe-areas/route.js",
   "/api/spaljisten/dashboard/route": "app/api/spaljisten/dashboard/route.js",
   "/api/spaljisten/export/route": "app/api/spaljisten/export/route.js",
   "/api/spaljisten/import/route": "app/api/spaljisten/import/route.js",
   "/api/spaljisten/reset/route": "app/api/spaljisten/reset/route.js",
+  "/api/workflows/route": "app/api/workflows/route.js",
+  "/app/hr/workflows/page": "app/app/hr/workflows/page.js",
   "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
   "/app/spaljisten/import/page": "app/app/spaljisten/import/page.js",
   "/login/page": "app/login/page.js",
