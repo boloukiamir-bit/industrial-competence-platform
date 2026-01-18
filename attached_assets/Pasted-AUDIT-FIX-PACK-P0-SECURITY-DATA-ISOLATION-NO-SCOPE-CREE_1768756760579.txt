@@ -1,0 +1,44 @@
+AUDIT FIX PACK — P0 SECURITY + DATA ISOLATION (NO SCOPE CREEP)
+
+Context:
+We have a multi-tenant Supabase app. Core tables use is_org_member/is_org_admin RLS helpers, but Spaljisten sp_* tables currently have RLS policies USING (TRUE). Also workflows APIs accept org_id from x-org-id header / current_org_id cookie, which is unsafe.
+
+Goal:
+1) Make Spaljisten module properly tenant-isolated (RLS) like the rest of the platform.
+2) Make Workflows APIs derive org_id server-side from auth session + memberships (do NOT trust header/cookie in production).
+3) Remove/disable any hardcoded org auto-seeding in migrations (keep optional manual seeding behind setup endpoint).
+
+Hard requirements:
+- Do not add new features.
+- Provide a single checklist of changes + proof commands.
+- All changes must be committed and pushed.
+
+Tasks:
+P0-1 Spaljisten RLS:
+- Update sql/010_spaljisten_schema.sql policies:
+  Replace USING (TRUE) with USING (public.is_org_member(org_id))
+  Replace FOR ALL USING (TRUE) with:
+    SELECT: USING (public.is_org_member(org_id))
+    INSERT/UPDATE/DELETE: WITH CHECK/USING (public.is_org_admin(org_id) OR role IN ('hr')) if role exists; otherwise admin only.
+- Ensure RLS enabled remains.
+
+P0-2 Workflows org resolution:
+- Create a server-side helper getOrgIdFromSession() that:
+  - reads current user (auth)
+  - selects org_id from memberships where status='active' (and optionally matches cookie current_org_id if exists but validate membership)
+- Refactor workflows routes to use this helper instead of x-org-id/cookie as authority.
+- Add a 401/403 when org cannot be resolved.
+
+P0-3 Seeding:
+- Remove auto-seed call with hardcoded org UUID.
+- If needed, create a /api/workflows/setup route secured with a secret to seed templates for a specified org_id.
+
+Definition of done:
+- A non-member user cannot read/write sp_* rows.
+- Workflows APIs ignore forged x-org-id.
+- No hardcoded org seeding runs on migration automatically.
+- Provide curl tests + short screen recording.
+
+Output:
+- List files changed
+- Exact verification commands

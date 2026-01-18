@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function GET(
   request: NextRequest,
@@ -17,10 +8,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId } = session;
 
     const templateResult = await pool.query(
       `SELECT id, name, description, category, is_active, created_at 

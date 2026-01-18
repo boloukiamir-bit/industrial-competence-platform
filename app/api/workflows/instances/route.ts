@@ -1,22 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function GET(request: NextRequest) {
   try {
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId } = session;
 
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
@@ -30,7 +23,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN wf_templates t ON t.id = i.template_id
       WHERE i.org_id = $1
     `;
-    const params: any[] = [orgId];
+    const params: (string | null)[] = [orgId];
 
     if (status && status !== "all") {
       query += ` AND i.status = $2`;
@@ -47,7 +40,7 @@ export async function GET(request: NextRequest) {
           [inst.id]
         );
         const totalTasks = tasksResult.rows.length;
-        const doneTasks = tasksResult.rows.filter((t: any) => t.status === "done").length;
+        const doneTasks = tasksResult.rows.filter((t: { status: string }) => t.status === "done").length;
 
         return {
           id: inst.id,
@@ -100,10 +93,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId, userId } = session;
 
     const body = await request.json();
     const { templateId, employeeId, employeeName, startDate, shiftDate, shiftType, areaCode } = body;
@@ -136,7 +131,7 @@ export async function POST(request: NextRequest) {
 
     const steps = stepsResult.rows;
     const start = startDate ? new Date(startDate) : new Date();
-    const maxDueDays = steps.length > 0 ? Math.max(...steps.map((s: any) => s.default_due_days)) : 30;
+    const maxDueDays = steps.length > 0 ? Math.max(...steps.map((s: { default_due_days: number }) => s.default_due_days)) : 30;
     const dueDate = new Date(start.getTime() + maxDueDays * 24 * 60 * 60 * 1000);
 
     const instanceResult = await pool.query(
@@ -168,9 +163,9 @@ export async function POST(request: NextRequest) {
     }
 
     await pool.query(
-      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-       VALUES ($1, 'instance', $2, 'created', $3)`,
-      [orgId, instanceId, JSON.stringify({ templateId, templateName: template.name, employeeId, employeeName, taskCount: steps.length })]
+      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+       VALUES ($1, 'instance', $2, 'created', $3, $4)`,
+      [orgId, instanceId, userId, JSON.stringify({ templateId, templateName: template.name, employeeId, employeeName, taskCount: steps.length })]
     );
 
     return NextResponse.json({

@@ -1,22 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function GET(request: NextRequest) {
   try {
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId } = session;
 
     const activeResult = await pool.query(`
       SELECT COUNT(*) as count 
@@ -45,6 +38,20 @@ export async function GET(request: NextRequest) {
       GROUP BY wt.name, wt.category
       ORDER BY count DESC
     `, [orgId]);
+
+    type InstanceRow = {
+      id: string;
+      employee_name: string | null;
+      status: string;
+      start_date: string;
+      due_date: string;
+      updated_at: string;
+      area_code: string | null;
+      template_name: string | null;
+      template_category: string | null;
+      total_tasks: string;
+      done_tasks: string;
+    };
 
     const recentResult = await pool.query(`
       SELECT 
@@ -78,12 +85,12 @@ export async function GET(request: NextRequest) {
       activeWorkflows: parseInt(activeResult.rows[0].count),
       overdueTasks: parseInt(overdueResult.rows[0].count),
       completedToday: parseInt(completedTodayResult.rows[0].count),
-      byTemplate: byTemplateResult.rows.map((row: any) => ({
+      byTemplate: byTemplateResult.rows.map((row: { template_name: string | null; category: string | null; count: string }) => ({
         templateName: row.template_name || "Unknown",
         category: row.category,
         count: parseInt(row.count),
       })),
-      recentInstances: recentResult.rows.map((row: any) => ({
+      recentInstances: recentResult.rows.map((row: InstanceRow) => ({
         id: row.id,
         employeeName: row.employee_name,
         status: row.status,
@@ -96,7 +103,7 @@ export async function GET(request: NextRequest) {
         progress: {
           total: parseInt(row.total_tasks),
           done: parseInt(row.done_tasks),
-          percent: row.total_tasks > 0 ? Math.round((parseInt(row.done_tasks) / parseInt(row.total_tasks)) * 100) : 0,
+          percent: parseInt(row.total_tasks) > 0 ? Math.round((parseInt(row.done_tasks) / parseInt(row.total_tasks)) * 100) : 0,
         },
       })),
     });

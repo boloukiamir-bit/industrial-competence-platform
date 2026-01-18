@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function POST(
   request: NextRequest,
@@ -17,10 +8,12 @@ export async function POST(
 ) {
   try {
     const { id: instanceId } = await params;
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId, userId } = session;
 
     const body = await request.json();
     const { type, comment } = body;
@@ -51,7 +44,7 @@ export async function POST(
     );
 
     const allDone = allTasksResult.rows.length > 0 && 
-      allTasksResult.rows.every((t: any) => t.status === "done");
+      allTasksResult.rows.every((t: { status: string }) => t.status === "done");
 
     if (!allDone) {
       return NextResponse.json({ error: "All tasks must be completed before sign-off" }, { status: 400 });
@@ -65,17 +58,17 @@ export async function POST(
       await pool.query(
         `UPDATE wf_instances 
          SET supervisor_signed_at = NOW(), 
-             supervisor_signed_by = gen_random_uuid(),
-             supervisor_comment = $1,
+             supervisor_signed_by = $1,
+             supervisor_comment = $2,
              updated_at = NOW()
-         WHERE id = $2`,
-        [comment || null, instanceId]
+         WHERE id = $3`,
+        [userId, comment || null, instanceId]
       );
 
       await pool.query(
-        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-         VALUES ($1, 'instance', $2, 'supervisor_signoff', $3)`,
-        [orgId, instanceId, JSON.stringify({ comment })]
+        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+         VALUES ($1, 'instance', $2, 'supervisor_signoff', $3, $4)`,
+        [orgId, instanceId, userId, JSON.stringify({ comment })]
       );
 
       if (!instance.requires_hr_signoff) {
@@ -87,9 +80,9 @@ export async function POST(
         );
 
         await pool.query(
-          `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-           VALUES ($1, 'instance', $2, 'completed', $3)`,
-          [orgId, instanceId, JSON.stringify({ reason: "Supervisor sign-off complete" })]
+          `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+           VALUES ($1, 'instance', $2, 'completed', $3, $4)`,
+          [orgId, instanceId, userId, JSON.stringify({ reason: "Supervisor sign-off complete" })]
         );
       }
     } else if (type === "hr") {
@@ -104,25 +97,25 @@ export async function POST(
       await pool.query(
         `UPDATE wf_instances 
          SET hr_signed_at = NOW(), 
-             hr_signed_by = gen_random_uuid(),
-             hr_comment = $1,
+             hr_signed_by = $1,
+             hr_comment = $2,
              status = 'completed',
              completed_at = NOW(),
              updated_at = NOW()
-         WHERE id = $2`,
-        [comment || null, instanceId]
+         WHERE id = $3`,
+        [userId, comment || null, instanceId]
       );
 
       await pool.query(
-        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-         VALUES ($1, 'instance', $2, 'hr_signoff', $3)`,
-        [orgId, instanceId, JSON.stringify({ comment })]
+        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+         VALUES ($1, 'instance', $2, 'hr_signoff', $3, $4)`,
+        [orgId, instanceId, userId, JSON.stringify({ comment })]
       );
 
       await pool.query(
-        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-         VALUES ($1, 'instance', $2, 'completed', $3)`,
-        [orgId, instanceId, JSON.stringify({ reason: "HR sign-off complete" })]
+        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+         VALUES ($1, 'instance', $2, 'completed', $3, $4)`,
+        [orgId, instanceId, userId, JSON.stringify({ reason: "HR sign-off complete" })]
       );
     }
 

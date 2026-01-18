@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession, isAdminOrHr } from "@/lib/orgSession";
 
 const VALID_CATEGORIES = ["Production", "Safety", "HR", "Quality", "Maintenance", "Competence"];
 const VALID_OWNER_ROLES = ["HR", "Supervisor", "IT", "Quality", "Maintenance", "Employee"];
 
 export async function GET(request: NextRequest) {
   try {
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId } = session;
 
     const templatesResult = await pool.query(
       `SELECT id, name, description, category, is_active, created_at 
@@ -69,20 +62,14 @@ export async function POST(request: NextRequest) {
   const client = await pool.connect();
   
   try {
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
 
-    // Check that org has at least one admin/hr member who could create templates
-    // NOTE: In production, this should verify the authenticated user's role via session.
-    // For demo, we check that the org exists and has admin/hr members.
-    const membershipResult = await client.query(
-      `SELECT role FROM memberships WHERE org_id = $1 AND is_active = true AND role IN ('admin', 'hr') LIMIT 1`,
-      [orgId]
-    );
-    
-    if (membershipResult.rows.length === 0) {
+    const { orgId, role, userId } = session;
+
+    if (!isAdminOrHr(role)) {
       return NextResponse.json({ error: "Only admins and HR can create templates" }, { status: 403 });
     }
 
@@ -150,9 +137,9 @@ export async function POST(request: NextRequest) {
     }
 
     await client.query(
-      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-       VALUES ($1, 'template', $2, 'created', $3)`,
-      [orgId, templateId, JSON.stringify({ name, category, stepCount: steps.length })]
+      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+       VALUES ($1, 'template', $2, 'created', $3, $4)`,
+      [orgId, templateId, userId, JSON.stringify({ name, category, stepCount: steps.length })]
     );
 
     await client.query("COMMIT");

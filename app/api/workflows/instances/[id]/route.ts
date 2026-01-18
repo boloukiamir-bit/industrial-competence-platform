@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function GET(
   request: NextRequest,
@@ -17,10 +8,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId } = session;
 
     const instanceResult = await pool.query(
       `SELECT i.id, i.template_id, i.employee_id, i.employee_name, 
@@ -61,7 +54,7 @@ export async function GET(
 
     const tasks = tasksResult.rows;
     const totalTasks = tasks.length;
-    const doneTasks = tasks.filter((t: any) => t.status === "done").length;
+    const doneTasks = tasks.filter((t: { status: string }) => t.status === "done").length;
 
     return NextResponse.json({
       id: inst.id,
@@ -110,10 +103,12 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId, userId } = session;
 
     const body = await request.json();
     const { status } = body;
@@ -137,9 +132,9 @@ export async function PATCH(
     }
 
     await pool.query(
-      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-       VALUES ($1, 'instance', $2, $3, $4)`,
-      [orgId, id, `status_changed_to_${status}`, JSON.stringify({ newStatus: status })]
+      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+       VALUES ($1, 'instance', $2, $3, $4, $5)`,
+      [orgId, id, `status_changed_to_${status}`, userId, JSON.stringify({ newStatus: status })]
     );
 
     return NextResponse.json({ success: true, instance: result.rows[0] });

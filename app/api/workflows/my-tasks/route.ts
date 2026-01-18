@@ -1,22 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function GET(request: NextRequest) {
   try {
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId } = session;
 
     const result = await pool.query(`
       SELECT 
@@ -49,7 +42,27 @@ export async function GET(request: NextRequest) {
         t.step_no
     `, [orgId]);
 
-    const tasks = result.rows.map((row: any) => {
+    type TaskRow = {
+      id: string;
+      instance_id: string;
+      step_no: number;
+      title: string;
+      description: string | null;
+      owner_role: string;
+      owner_user_id: string | null;
+      due_date: string | null;
+      status: string;
+      notes: string | null;
+      evidence_url: string | null;
+      completed_at: string | null;
+      employee_name: string | null;
+      instance_status: string;
+      area_code: string | null;
+      template_name: string | null;
+      template_category: string | null;
+    };
+
+    const tasks = result.rows.map((row: TaskRow) => {
       const isOverdue = row.due_date && new Date(row.due_date) < new Date() && row.status !== "done";
       const isDueToday = row.due_date && new Date(row.due_date).toDateString() === new Date().toDateString();
       
@@ -76,8 +89,8 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const overdueCount = tasks.filter((t: any) => t.isOverdue).length;
-    const dueTodayCount = tasks.filter((t: any) => t.isDueToday).length;
+    const overdueCount = tasks.filter((t) => t.isOverdue).length;
+    const dueTodayCount = tasks.filter((t) => t.isDueToday).length;
 
     return NextResponse.json({
       tasks,

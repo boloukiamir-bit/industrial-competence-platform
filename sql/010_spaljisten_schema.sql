@@ -1,14 +1,18 @@
 -- Spaljisten Go-Live v1 Schema
 -- Tables for Skill Matrix + Gap/Risk View
 
--- Create Spaljisten organization if not exists
-INSERT INTO organizations (id, name, slug, created_at)
-VALUES (
-  'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-  'Spaljisten',
-  'spaljisten',
-  NOW()
-) ON CONFLICT (slug) DO NOTHING;
+-- SECURITY FIX: Organization auto-seeding has been disabled.
+-- Organizations must be created through the proper signup/invite flow.
+-- Use /api/workflows/setup for template seeding after org exists.
+-- 
+-- Original (disabled):
+-- INSERT INTO organizations (id, name, slug, created_at)
+-- VALUES (
+--   'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+--   'Spaljisten',
+--   'spaljisten',
+--   NOW()
+-- ) ON CONFLICT (slug) DO NOTHING;
 
 -- Rating scales configuration
 CREATE TABLE IF NOT EXISTS sp_rating_scales (
@@ -135,33 +139,23 @@ ALTER TABLE sp_employee_skills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sp_area_leaders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sp_import_logs ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies (allow access based on org membership)
--- For now, allow authenticated users to access their org data
--- These policies check if user is member of the organization
-
-CREATE POLICY sp_rating_scales_select ON sp_rating_scales FOR SELECT USING (TRUE);
-CREATE POLICY sp_rating_scales_all ON sp_rating_scales FOR ALL USING (TRUE);
-
-CREATE POLICY sp_areas_select ON sp_areas FOR SELECT USING (TRUE);
-CREATE POLICY sp_areas_all ON sp_areas FOR ALL USING (TRUE);
-
-CREATE POLICY sp_stations_select ON sp_stations FOR SELECT USING (TRUE);
-CREATE POLICY sp_stations_all ON sp_stations FOR ALL USING (TRUE);
-
-CREATE POLICY sp_skills_select ON sp_skills FOR SELECT USING (TRUE);
-CREATE POLICY sp_skills_all ON sp_skills FOR ALL USING (TRUE);
-
-CREATE POLICY sp_employees_select ON sp_employees FOR SELECT USING (TRUE);
-CREATE POLICY sp_employees_all ON sp_employees FOR ALL USING (TRUE);
-
-CREATE POLICY sp_employee_skills_select ON sp_employee_skills FOR SELECT USING (TRUE);
-CREATE POLICY sp_employee_skills_all ON sp_employee_skills FOR ALL USING (TRUE);
-
-CREATE POLICY sp_area_leaders_select ON sp_area_leaders FOR SELECT USING (TRUE);
-CREATE POLICY sp_area_leaders_all ON sp_area_leaders FOR ALL USING (TRUE);
-
-CREATE POLICY sp_import_logs_select ON sp_import_logs FOR SELECT USING (TRUE);
-CREATE POLICY sp_import_logs_all ON sp_import_logs FOR ALL USING (TRUE);
+-- RLS Policies 
+-- SECURITY FIX: Original USING (TRUE) policies have been replaced.
+-- See sql/017_spaljisten_rls_fix.sql for proper org-scoped RLS policies.
+-- 
+-- The 017 migration drops these placeholder policies and creates:
+-- - SELECT: is_org_member(org_id)
+-- - INSERT/UPDATE/DELETE: is_org_admin(org_id)
+--
+-- Placeholder policies (will be replaced by 017 migration):
+CREATE POLICY IF NOT EXISTS sp_rating_scales_placeholder ON sp_rating_scales FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_areas_placeholder ON sp_areas FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_stations_placeholder ON sp_stations FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_skills_placeholder ON sp_skills FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_employees_placeholder ON sp_employees FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_employee_skills_placeholder ON sp_employee_skills FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_area_leaders_placeholder ON sp_area_leaders FOR SELECT USING (public.is_org_member(org_id));
+CREATE POLICY IF NOT EXISTS sp_import_logs_placeholder ON sp_import_logs FOR SELECT USING (public.is_org_admin(org_id));
 
 -- Insert default rating scale for Spaljisten
 INSERT INTO sp_rating_scales (org_id, level, label, description, color)

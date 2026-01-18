@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
-import { cookies } from "next/headers";
-
-async function getOrgId(request: NextRequest): Promise<string | null> {
-  const orgId = request.headers.get("x-org-id");
-  if (orgId) return orgId;
-  
-  const cookieStore = await cookies();
-  const orgCookie = cookieStore.get("current_org_id");
-  return orgCookie?.value || null;
-}
+import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function PATCH(
   request: NextRequest,
@@ -17,10 +8,12 @@ export async function PATCH(
 ) {
   try {
     const { id: instanceId } = await params;
-    const orgId = await getOrgId(request);
-    if (!orgId) {
-      return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
+    const session = await getOrgIdFromSession(request);
+    if (!session.success) {
+      return NextResponse.json({ error: session.error }, { status: session.status });
     }
+
+    const { orgId, userId } = session;
 
     const body = await request.json();
     const { taskId, status, ownerUserId, notes, evidenceUrl, dueDate } = body;
@@ -50,7 +43,7 @@ export async function PATCH(
     const completedAt = status === "done" ? new Date().toISOString() : null;
 
     let updateQuery = `UPDATE wf_instance_tasks SET updated_at = NOW()`;
-    const updateParams: any[] = [];
+    const updateParams: (string | null)[] = [];
     let paramIndex = 1;
 
     if (status) {
@@ -98,12 +91,13 @@ export async function PATCH(
     const task = taskResult.rows[0];
 
     await pool.query(
-      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-       VALUES ($1, 'task', $2, $3, $4)`,
+      `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+       VALUES ($1, 'task', $2, $3, $4, $5)`,
       [
         orgId,
         taskId,
         status ? `status_changed_to_${status}` : "updated",
+        userId,
         JSON.stringify({ instanceId, taskTitle: task.title, newStatus: status, ownerUserId }),
       ]
     );
@@ -113,7 +107,7 @@ export async function PATCH(
       [instanceId]
     );
 
-    const allDone = allTasksResult.rows.length > 0 && allTasksResult.rows.every((t: any) => t.status === "done");
+    const allDone = allTasksResult.rows.length > 0 && allTasksResult.rows.every((t: { status: string }) => t.status === "done");
 
     if (allDone) {
       await pool.query(
@@ -122,9 +116,9 @@ export async function PATCH(
       );
 
       await pool.query(
-        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, metadata)
-         VALUES ($1, 'instance', $2, 'auto_completed', $3)`,
-        [orgId, instanceId, JSON.stringify({ reason: "All tasks completed" })]
+        `INSERT INTO wf_audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
+         VALUES ($1, 'instance', $2, 'auto_completed', $3, $4)`,
+        [orgId, instanceId, userId, JSON.stringify({ reason: "All tasks completed" })]
       );
     }
 
