@@ -6,6 +6,7 @@
   "/app/admin/page": "app/app/admin/page.js",
   "/app/cockpit/page": "app/app/cockpit/page.js",
   "/app/manager/risks/page": "app/app/manager/risks/page.js",
+  "/app/page": "app/app/page.js",
   "/app/safety/certificates/page": "app/app/safety/certificates/page.js",
   "/app/spaljisten/dashboard/page": "app/app/spaljisten/dashboard/page.js",
   "/app/workflows/dashboard/page": "app/app/workflows/dashboard/page.js",
