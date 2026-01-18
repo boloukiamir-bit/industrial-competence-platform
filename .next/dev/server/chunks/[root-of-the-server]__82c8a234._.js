@@ -97,7 +97,7 @@ const ORG_NAME = "Spaljisten";
 async function GET(request) {
     try {
         const searchParams = request.nextUrl.searchParams;
-        const areaId = searchParams.get("areaId") || undefined;
+        const areaCode = searchParams.get("areaCode") || undefined;
         const client = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].connect();
         try {
             const [areasRes, employeesRes, skillsRes, ratingsRes, stationsRes] = await Promise.all([
@@ -132,10 +132,12 @@ async function GET(request) {
             const independentRatings = ratings.filter((r)=>r.rating !== null && r.rating >= 3);
             const totalRatings = ratings.filter((r)=>r.rating !== null).length;
             const averageIndependentRate = totalRatings > 0 ? Math.round(independentRatings.length / totalRatings * 100) : 0;
+            const totalStations = stations.length;
             const kpis = {
                 totalEmployees,
                 totalSkills,
                 totalAreas,
+                totalStations,
                 totalRatings,
                 averageIndependentRate,
                 orgName: ORG_NAME,
@@ -158,8 +160,11 @@ async function GET(request) {
                 return station?.area_id || null;
             };
             let filteredSkills = skills;
-            if (areaId) {
-                filteredSkills = skills.filter((skill)=>getSkillAreaId(skill) === areaId);
+            if (areaCode) {
+                const matchedArea = areas.find((a)=>a.area_code === areaCode);
+                if (matchedArea) {
+                    filteredSkills = skills.filter((skill)=>getSkillAreaId(skill) === matchedArea.id);
+                }
             }
             const skillRisks = [];
             for (const skill of filteredSkills){

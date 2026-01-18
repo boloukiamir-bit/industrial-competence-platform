@@ -7,7 +7,7 @@ const ORG_NAME = "Spaljisten";
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const areaId = searchParams.get("areaId") || undefined;
+    const areaCode = searchParams.get("areaCode") || undefined;
 
     const client = await pool.connect();
     try {
@@ -35,10 +35,13 @@ export async function GET(request: NextRequest) {
       const totalRatings = ratings.filter((r) => r.rating !== null).length;
       const averageIndependentRate = totalRatings > 0 ? Math.round((independentRatings.length / totalRatings) * 100) : 0;
 
+      const totalStations = stations.length;
+
       const kpis = { 
         totalEmployees, 
         totalSkills, 
         totalAreas,
+        totalStations,
         totalRatings, 
         averageIndependentRate,
         orgName: ORG_NAME,
@@ -55,8 +58,11 @@ export async function GET(request: NextRequest) {
       };
 
       let filteredSkills = skills;
-      if (areaId) {
-        filteredSkills = skills.filter((skill) => getSkillAreaId(skill) === areaId);
+      if (areaCode) {
+        const matchedArea = areas.find((a) => a.area_code === areaCode);
+        if (matchedArea) {
+          filteredSkills = skills.filter((skill) => getSkillAreaId(skill) === matchedArea.id);
+        }
       }
 
       const skillRisks: { skillId: string; skillName: string; category: string; independentCount: number; totalRated: number; riskLevel: string }[] = [];

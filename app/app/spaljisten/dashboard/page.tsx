@@ -22,6 +22,7 @@ type DashboardKPIs = {
   totalEmployees: number;
   totalSkills: number;
   totalAreas: number;
+  totalStations: number;
   totalRatings: number;
   averageIndependentRate: number;
   orgName: string;
@@ -66,7 +67,7 @@ export default function SpaljistenDashboard() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (selectedArea) params.set("areaId", selectedArea);
+      if (selectedArea) params.set("areaCode", selectedArea);
 
       const response = await fetch(`/api/spaljisten/dashboard?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to load dashboard");
@@ -86,7 +87,7 @@ export default function SpaljistenDashboard() {
 
   const handleExport = () => {
     const params = new URLSearchParams();
-    if (selectedArea) params.set("areaId", selectedArea);
+    if (selectedArea) params.set("areaCode", selectedArea);
     window.open(`/api/spaljisten/export?${params.toString()}`, "_blank");
   };
 
@@ -157,16 +158,19 @@ export default function SpaljistenDashboard() {
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <span className="font-bold text-blue-900 dark:text-blue-100">{data.kpis.orgName}</span>
           <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">{data.kpis.orgId.slice(0, 8)}...</span>
-          <span className="text-blue-700 dark:text-blue-300">
+          <span className="text-blue-700 dark:text-blue-300" data-testid="banner-areas">
             Areas: {data.kpis.totalAreas}
           </span>
-          <span className="text-blue-700 dark:text-blue-300">
+          <span className="text-blue-700 dark:text-blue-300" data-testid="banner-stations">
+            Stations: {data.kpis.totalStations}
+          </span>
+          <span className="text-blue-700 dark:text-blue-300" data-testid="banner-employees">
             Employees: {data.kpis.totalEmployees}
           </span>
-          <span className="text-blue-700 dark:text-blue-300">
+          <span className="text-blue-700 dark:text-blue-300" data-testid="banner-skills">
             Skills: {data.kpis.totalSkills}
           </span>
-          <span className="text-blue-700 dark:text-blue-300">
+          <span className="text-blue-700 dark:text-blue-300" data-testid="banner-ratings">
             Ratings: {data.kpis.totalRatings}
           </span>
         </div>
@@ -199,7 +203,7 @@ export default function SpaljistenDashboard() {
           <SelectContent>
             <SelectItem value="all">All Areas</SelectItem>
             {data.filterOptions.areas.map((area) => (
-              <SelectItem key={area.id} value={area.id}>
+              <SelectItem key={area.areaCode} value={area.areaCode} data-testid={`option-area-${area.areaCode}`}>
                 {area.areaName}
               </SelectItem>
             ))}
