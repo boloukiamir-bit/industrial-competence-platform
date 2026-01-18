@@ -74,6 +74,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Organization ID required" }, { status: 400 });
     }
 
+    // Check that org has at least one admin/hr member who could create templates
+    // NOTE: In production, this should verify the authenticated user's role via session.
+    // For demo, we check that the org exists and has admin/hr members.
+    const membershipResult = await client.query(
+      `SELECT role FROM memberships WHERE org_id = $1 AND is_active = true AND role IN ('admin', 'hr') LIMIT 1`,
+      [orgId]
+    );
+    
+    if (membershipResult.rows.length === 0) {
+      return NextResponse.json({ error: "Only admins and HR can create templates" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name, category, description, steps } = body as {
       name: string;
@@ -104,6 +116,9 @@ export async function POST(request: NextRequest) {
       }
       if (step.step_no !== i + 1) {
         return NextResponse.json({ error: "Step numbers must be continuous starting from 1" }, { status: 400 });
+      }
+      if (typeof step.default_due_days !== "number" || step.default_due_days < 0) {
+        return NextResponse.json({ error: `Step ${i + 1} due days must be a non-negative number` }, { status: 400 });
       }
     }
 

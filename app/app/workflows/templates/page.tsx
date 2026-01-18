@@ -46,11 +46,25 @@ export default function WorkflowTemplatesPage() {
   }, [currentOrg?.id]);
 
   const getCategoryColor = (category: string) => {
-    switch (category) {
-      case "onboarding": return "bg-green-500";
-      case "offboarding": return "bg-red-500";
-      case "rehab": return "bg-blue-500";
-      default: return "bg-gray-500";
+    const cat = category.toLowerCase();
+    switch (cat) {
+      case "onboarding":
+      case "hr":
+        return "bg-green-500";
+      case "offboarding":
+      case "safety":
+        return "bg-red-500";
+      case "rehab":
+      case "quality":
+        return "bg-blue-500";
+      case "production":
+        return "bg-orange-500";
+      case "maintenance":
+        return "bg-yellow-600";
+      case "competence":
+        return "bg-purple-500";
+      default:
+        return "bg-gray-500";
     }
   };
 
