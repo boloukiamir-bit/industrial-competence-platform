@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Users, Clock, ArrowRight, Loader2 } from "lucide-react";
+import { FileText, Users, Clock, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
 
 type WorkflowTemplate = {
@@ -85,14 +85,23 @@ export default function WorkflowTemplatesPage() {
             Standardized processes for HR operations
           </p>
         </div>
-        <Button 
-          variant="outline"
-          onClick={() => router.push("/app/workflows/instances")}
-          data-testid="button-view-instances"
-        >
-          View Active Workflows
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => router.push("/app/workflows/templates/new")}
+            data-testid="button-create-template"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create Template
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => router.push("/app/workflows/instances")}
+            data-testid="button-view-instances"
+          >
+            View Active Workflows
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {templates.length === 0 ? (

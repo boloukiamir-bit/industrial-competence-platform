@@ -426,6 +426,10 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$download$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Download$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/download.js [app-ssr] (ecmascript) <export default as Download>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$down$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronDown$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/chevron-down.js [app-ssr] (ecmascript) <export default as ChevronDown>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$right$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronRight$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/chevron-right.js [app-ssr] (ecmascript) <export default as ChevronRight>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$play$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Play$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/play.js [app-ssr] (ecmascript) <export default as Play>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$loader$2d$circle$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Loader2$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/loader-circle.js [app-ssr] (ecmascript) <export default as Loader2>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/navigation.js [app-ssr] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$hooks$2f$useOrg$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/hooks/useOrg.ts [app-ssr] (ecmascript)");
 "use client";
 ;
 ;
@@ -434,10 +438,17 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 ;
 ;
 ;
+;
+;
+const CROSS_TRAINING_TEMPLATE_ID = "cccc0001-0001-0001-0001-000000000001";
+const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 function SpaljistenDashboard() {
+    const router = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRouter"])();
+    const { currentOrg } = (0, __TURBOPACK__imported__module__$5b$project$5d2f$hooks$2f$useOrg$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useOrg"])();
     const [data, setData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
     const [loading, setLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(true);
     const [error, setError] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [startingWorkflow, setStartingWorkflow] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
     const [selectedArea, setSelectedArea] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("");
     const [expandedSkills, setExpandedSkills] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(new Set());
     const fetchData = async ()=>{
@@ -466,6 +477,40 @@ function SpaljistenDashboard() {
         if (selectedArea) params.set("areaCode", selectedArea);
         window.open(`/api/spaljisten/export?${params.toString()}`, "_blank");
     };
+    const handleStartCrossTraining = async (skill)=>{
+        const orgId = currentOrg?.id || SPALJISTEN_ORG_ID;
+        setStartingWorkflow(skill.skillId);
+        try {
+            const res = await fetch("/api/workflows/instances", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-org-id": orgId
+                },
+                body: JSON.stringify({
+                    templateId: CROSS_TRAINING_TEMPLATE_ID,
+                    employeeName: `Cross-training: ${skill.skillName}`,
+                    areaCode: selectedArea || undefined,
+                    metadata: {
+                        skillId: skill.skillId,
+                        skillName: skill.skillName,
+                        category: skill.category,
+                        riskLevel: skill.riskLevel,
+                        independentCount: skill.independentCount
+                    }
+                })
+            });
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Failed to start workflow");
+            }
+            const result = await res.json();
+            router.push(`/app/workflows/instances/${result.instance.id}`);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to start workflow");
+            setStartingWorkflow(null);
+        }
+    };
     const toggleSkillExpand = (skillId)=>{
         const newExpanded = new Set(expandedSkills);
         if (newExpanded.has(skillId)) {
@@ -486,7 +531,7 @@ function SpaljistenDashboard() {
                             children: "Critical"
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 109,
+                            lineNumber: 157,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -494,13 +539,13 @@ function SpaljistenDashboard() {
                             children: "No independent coverage"
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 110,
+                            lineNumber: 158,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                    lineNumber: 108,
+                    lineNumber: 156,
                     columnNumber: 11
                 }, this);
             case "warning":
@@ -512,7 +557,7 @@ function SpaljistenDashboard() {
                             children: "Warning"
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 116,
+                            lineNumber: 164,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -520,13 +565,13 @@ function SpaljistenDashboard() {
                             children: "Single point of failure"
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 117,
+                            lineNumber: 165,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                    lineNumber: 115,
+                    lineNumber: 163,
                     columnNumber: 11
                 }, this);
             default:
@@ -538,7 +583,7 @@ function SpaljistenDashboard() {
                             children: "OK"
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 123,
+                            lineNumber: 171,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -550,13 +595,13 @@ function SpaljistenDashboard() {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 124,
+                            lineNumber: 172,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                    lineNumber: 122,
+                    lineNumber: 170,
                     columnNumber: 11
                 }, this);
         }
@@ -569,12 +614,12 @@ function SpaljistenDashboard() {
                 children: "Loading dashboard..."
             }, void 0, false, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 133,
+                lineNumber: 181,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-            lineNumber: 132,
+            lineNumber: 180,
             columnNumber: 7
         }, this);
     }
@@ -591,7 +636,7 @@ function SpaljistenDashboard() {
                             children: error
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 143,
+                            lineNumber: 191,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -600,23 +645,23 @@ function SpaljistenDashboard() {
                             children: "Retry"
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 144,
+                            lineNumber: 192,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                    lineNumber: 142,
+                    lineNumber: 190,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 141,
+                lineNumber: 189,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-            lineNumber: 140,
+            lineNumber: 188,
             columnNumber: 7
         }, this);
     }
@@ -636,7 +681,7 @@ function SpaljistenDashboard() {
                                 children: data.kpis.orgName
                             }, void 0, false, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 159,
+                                lineNumber: 207,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -647,7 +692,7 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 160,
+                                lineNumber: 208,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -659,7 +704,7 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 161,
+                                lineNumber: 209,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -671,7 +716,7 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 164,
+                                lineNumber: 212,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -683,7 +728,7 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 167,
+                                lineNumber: 215,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -695,7 +740,7 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 170,
+                                lineNumber: 218,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -707,13 +752,13 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 173,
+                                lineNumber: 221,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 158,
+                        lineNumber: 206,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -723,26 +768,26 @@ function SpaljistenDashboard() {
                                 children: "Independent = rating ≥ 3"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 178,
+                                lineNumber: 226,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                 children: "Recommended minimum coverage = 2"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 179,
+                                lineNumber: 227,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 177,
+                        lineNumber: 225,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 157,
+                lineNumber: 205,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -756,7 +801,7 @@ function SpaljistenDashboard() {
                                 children: "Skill Matrix Dashboard"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 185,
+                                lineNumber: 233,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -767,13 +812,13 @@ function SpaljistenDashboard() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 188,
+                                lineNumber: 236,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 184,
+                        lineNumber: 232,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -784,20 +829,20 @@ function SpaljistenDashboard() {
                                 className: "h-4 w-4 mr-2"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 193,
+                                lineNumber: 241,
                                 columnNumber: 11
                             }, this),
                             "Export CSV"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 192,
+                        lineNumber: 240,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 183,
+                lineNumber: 231,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -813,12 +858,12 @@ function SpaljistenDashboard() {
                                 placeholder: "All Areas"
                             }, void 0, false, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 201,
+                                lineNumber: 249,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 200,
+                            lineNumber: 248,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["SelectContent"], {
@@ -828,7 +873,7 @@ function SpaljistenDashboard() {
                                     children: "All Areas"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                    lineNumber: 204,
+                                    lineNumber: 252,
                                     columnNumber: 13
                                 }, this),
                                 data.filterOptions.areas.map((area)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$select$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["SelectItem"], {
@@ -837,24 +882,24 @@ function SpaljistenDashboard() {
                                         children: area.areaName
                                     }, area.areaCode, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 206,
+                                        lineNumber: 254,
                                         columnNumber: 15
                                     }, this))
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 203,
+                            lineNumber: 251,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                    lineNumber: 199,
+                    lineNumber: 247,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 198,
+                lineNumber: 246,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -870,7 +915,7 @@ function SpaljistenDashboard() {
                                         className: "h-8 w-8 text-blue-500"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 218,
+                                        lineNumber: 266,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -881,7 +926,7 @@ function SpaljistenDashboard() {
                                                 children: data.kpis.totalEmployees
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 220,
+                                                lineNumber: 268,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -889,29 +934,29 @@ function SpaljistenDashboard() {
                                                 children: "Employees"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 223,
+                                                lineNumber: 271,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 219,
+                                        lineNumber: 267,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 217,
+                                lineNumber: 265,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 216,
+                            lineNumber: 264,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 215,
+                        lineNumber: 263,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -924,7 +969,7 @@ function SpaljistenDashboard() {
                                         className: "h-8 w-8 text-purple-500"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 232,
+                                        lineNumber: 280,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -935,7 +980,7 @@ function SpaljistenDashboard() {
                                                 children: data.kpis.totalAreas
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 234,
+                                                lineNumber: 282,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -943,29 +988,29 @@ function SpaljistenDashboard() {
                                                 children: "Areas"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 237,
+                                                lineNumber: 285,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 233,
+                                        lineNumber: 281,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 231,
+                                lineNumber: 279,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 230,
+                            lineNumber: 278,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 229,
+                        lineNumber: 277,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -978,7 +1023,7 @@ function SpaljistenDashboard() {
                                         className: "h-8 w-8 text-orange-500"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 246,
+                                        lineNumber: 294,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -989,7 +1034,7 @@ function SpaljistenDashboard() {
                                                 children: data.kpis.totalSkills
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 248,
+                                                lineNumber: 296,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -997,29 +1042,29 @@ function SpaljistenDashboard() {
                                                 children: "Skills"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 251,
+                                                lineNumber: 299,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 247,
+                                        lineNumber: 295,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 245,
+                                lineNumber: 293,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 244,
+                            lineNumber: 292,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 243,
+                        lineNumber: 291,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -1032,7 +1077,7 @@ function SpaljistenDashboard() {
                                         className: "h-8 w-8 text-green-500"
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 260,
+                                        lineNumber: 308,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1046,7 +1091,7 @@ function SpaljistenDashboard() {
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 262,
+                                                lineNumber: 310,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1054,35 +1099,35 @@ function SpaljistenDashboard() {
                                                 children: "Independent Rate"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 265,
+                                                lineNumber: 313,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 261,
+                                        lineNumber: 309,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 259,
+                                lineNumber: 307,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 258,
+                            lineNumber: 306,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 257,
+                        lineNumber: 305,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 214,
+                lineNumber: 262,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -1095,19 +1140,19 @@ function SpaljistenDashboard() {
                                     className: "h-5 w-5 text-yellow-500"
                                 }, void 0, false, {
                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                    lineNumber: 275,
+                                    lineNumber: 323,
                                     columnNumber: 13
                                 }, this),
                                 "Top 10 Risk Skills"
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 274,
+                            lineNumber: 322,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 273,
+                        lineNumber: 321,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -1116,7 +1161,7 @@ function SpaljistenDashboard() {
                             children: "No risk data available. Import skill ratings first."
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 281,
+                            lineNumber: 329,
                             columnNumber: 13
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "overflow-x-auto",
@@ -1132,7 +1177,7 @@ function SpaljistenDashboard() {
                                                     children: "Skill"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 289,
+                                                    lineNumber: 337,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1140,7 +1185,7 @@ function SpaljistenDashboard() {
                                                     children: "Category"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 290,
+                                                    lineNumber: 338,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1148,7 +1193,7 @@ function SpaljistenDashboard() {
                                                     children: "Independent"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 291,
+                                                    lineNumber: 339,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1156,7 +1201,7 @@ function SpaljistenDashboard() {
                                                     children: "Total Rated"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 292,
+                                                    lineNumber: 340,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1164,18 +1209,18 @@ function SpaljistenDashboard() {
                                                     children: "Risk"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 293,
+                                                    lineNumber: 341,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                            lineNumber: 288,
+                                            lineNumber: 336,
                                             columnNumber: 19
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 287,
+                                        lineNumber: 335,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -1193,7 +1238,7 @@ function SpaljistenDashboard() {
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                lineNumber: 300,
+                                                                lineNumber: 348,
                                                                 columnNumber: 25
                                                             }, this),
                                                             skill.skillName,
@@ -1206,13 +1251,13 @@ function SpaljistenDashboard() {
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                lineNumber: 302,
+                                                                lineNumber: 350,
                                                                 columnNumber: 25
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                        lineNumber: 299,
+                                                        lineNumber: 347,
                                                         columnNumber: 23
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1220,7 +1265,7 @@ function SpaljistenDashboard() {
                                                         children: skill.category
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                        lineNumber: 304,
+                                                        lineNumber: 352,
                                                         columnNumber: 23
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1228,7 +1273,7 @@ function SpaljistenDashboard() {
                                                         children: skill.independentCount
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                        lineNumber: 305,
+                                                        lineNumber: 353,
                                                         columnNumber: 23
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1236,7 +1281,7 @@ function SpaljistenDashboard() {
                                                         children: skill.totalRated
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                        lineNumber: 306,
+                                                        lineNumber: 354,
                                                         columnNumber: 23
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1244,40 +1289,40 @@ function SpaljistenDashboard() {
                                                         children: getRiskBadge(skill.riskLevel, skill.independentCount)
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                        lineNumber: 307,
+                                                        lineNumber: 355,
                                                         columnNumber: 23
                                                     }, this)
                                                 ]
                                             }, skill.skillId, true, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 298,
+                                                lineNumber: 346,
                                                 columnNumber: 21
                                             }, this))
                                     }, void 0, false, {
                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                        lineNumber: 296,
+                                        lineNumber: 344,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                lineNumber: 286,
+                                lineNumber: 334,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 285,
+                            lineNumber: 333,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 279,
+                        lineNumber: 327,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 272,
+                lineNumber: 320,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Card"], {
@@ -1291,12 +1336,12 @@ function SpaljistenDashboard() {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 321,
+                            lineNumber: 369,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 320,
+                        lineNumber: 368,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$card$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["CardContent"], {
@@ -1305,32 +1350,32 @@ function SpaljistenDashboard() {
                             children: "No skill data available for the selected filters."
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 325,
+                            lineNumber: 373,
                             columnNumber: 13
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "space-y-2",
                             children: data.skillGapTable.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "border rounded-md overflow-hidden",
                                     children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                            className: "w-full flex items-center justify-between p-3 hover-elevate text-left",
-                                            onClick: ()=>toggleSkillExpand(item.skillId),
-                                            "data-testid": `button-expand-${item.skillId}`,
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "flex items-center justify-between p-3 hover-elevate",
                                             children: [
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                    className: "flex items-center gap-3",
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                    className: "flex items-center gap-3 text-left flex-1",
+                                                    onClick: ()=>toggleSkillExpand(item.skillId),
+                                                    "data-testid": `button-expand-${item.skillId}`,
                                                     children: [
                                                         expandedSkills.has(item.skillId) ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$down$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronDown$3e$__["ChevronDown"], {
                                                             className: "h-4 w-4"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                            lineNumber: 342,
+                                                            lineNumber: 390,
                                                             columnNumber: 25
                                                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$chevron$2d$right$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__ChevronRight$3e$__["ChevronRight"], {
                                                             className: "h-4 w-4"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                            lineNumber: 344,
+                                                            lineNumber: 392,
                                                             columnNumber: 25
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1340,7 +1385,7 @@ function SpaljistenDashboard() {
                                                                     children: item.skillName
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                    lineNumber: 347,
+                                                                    lineNumber: 395,
                                                                     columnNumber: 25
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1354,19 +1399,19 @@ function SpaljistenDashboard() {
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                    lineNumber: 348,
+                                                                    lineNumber: 396,
                                                                     columnNumber: 25
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                            lineNumber: 346,
+                                                            lineNumber: 394,
                                                             columnNumber: 23
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 340,
+                                                    lineNumber: 384,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1382,20 +1427,52 @@ function SpaljistenDashboard() {
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                            lineNumber: 354,
+                                                            lineNumber: 402,
                                                             columnNumber: 23
                                                         }, this),
-                                                        getRiskBadge(item.riskLevel, item.independentCount)
+                                                        getRiskBadge(item.riskLevel, item.independentCount),
+                                                        (item.riskLevel === "critical" || item.riskLevel === "warning") && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
+                                                            size: "sm",
+                                                            variant: "outline",
+                                                            onClick: (e)=>{
+                                                                e.stopPropagation();
+                                                                handleStartCrossTraining(item);
+                                                            },
+                                                            disabled: startingWorkflow === item.skillId,
+                                                            "data-testid": `button-start-crosstraining-${item.skillId}`,
+                                                            children: startingWorkflow === item.skillId ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$loader$2d$circle$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Loader2$3e$__["Loader2"], {
+                                                                className: "h-4 w-4 animate-spin"
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
+                                                                lineNumber: 418,
+                                                                columnNumber: 29
+                                                            }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$play$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Play$3e$__["Play"], {
+                                                                        className: "h-4 w-4 mr-1"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
+                                                                        lineNumber: 421,
+                                                                        columnNumber: 31
+                                                                    }, this),
+                                                                    "Cross-train"
+                                                                ]
+                                                            }, void 0, true)
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
+                                                            lineNumber: 407,
+                                                            columnNumber: 25
+                                                        }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                    lineNumber: 353,
+                                                    lineNumber: 401,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                            lineNumber: 335,
+                                            lineNumber: 383,
                                             columnNumber: 19
                                         }, this),
                                         expandedSkills.has(item.skillId) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1405,7 +1482,7 @@ function SpaljistenDashboard() {
                                                 children: "No employees rated for this skill."
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 364,
+                                                lineNumber: 433,
                                                 columnNumber: 25
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 className: "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2",
@@ -1420,7 +1497,7 @@ function SpaljistenDashboard() {
                                                                         children: emp.employeeName
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                        lineNumber: 373,
+                                                                        lineNumber: 442,
                                                                         columnNumber: 33
                                                                     }, this),
                                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1428,13 +1505,13 @@ function SpaljistenDashboard() {
                                                                         children: emp.areaName
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                        lineNumber: 374,
+                                                                        lineNumber: 443,
                                                                         columnNumber: 33
                                                                     }, this)
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                lineNumber: 372,
+                                                                lineNumber: 441,
                                                                 columnNumber: 31
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
@@ -1443,51 +1520,51 @@ function SpaljistenDashboard() {
                                                                 children: emp.rating ?? "N"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                                lineNumber: 376,
+                                                                lineNumber: 445,
                                                                 columnNumber: 31
                                                             }, this)
                                                         ]
                                                     }, emp.employeeId, true, {
                                                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                        lineNumber: 368,
+                                                        lineNumber: 437,
                                                         columnNumber: 29
                                                     }, this))
                                             }, void 0, false, {
                                                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                                lineNumber: 366,
+                                                lineNumber: 435,
                                                 columnNumber: 25
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                            lineNumber: 362,
+                                            lineNumber: 431,
                                             columnNumber: 21
                                         }, this)
                                     ]
                                 }, item.skillId, true, {
                                     fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                                    lineNumber: 331,
+                                    lineNumber: 379,
                                     columnNumber: 17
                                 }, this))
                         }, void 0, false, {
                             fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                            lineNumber: 329,
+                            lineNumber: 377,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                        lineNumber: 323,
+                        lineNumber: 371,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-                lineNumber: 319,
+                lineNumber: 367,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/app/spaljisten/dashboard/page.tsx",
-        lineNumber: 156,
+        lineNumber: 204,
         columnNumber: 5
     }, this);
 }
