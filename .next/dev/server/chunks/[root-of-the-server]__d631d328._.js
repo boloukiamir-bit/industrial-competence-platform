@@ -92,6 +92,7 @@ var __turbopack_async_dependencies__ = __turbopack_handle_async_dependencies__([
 [__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__] = __turbopack_async_dependencies__.then ? (await __turbopack_async_dependencies__)() : __turbopack_async_dependencies__;
 ;
 ;
+const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 async function GET(request) {
     try {
         const searchParams = request.nextUrl.searchParams;
@@ -103,6 +104,7 @@ async function GET(request) {
                 status: 400
             });
         }
+        // First try regular employees table
         const result = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(`SELECT id, name, email 
        FROM employees 
        WHERE org_id = $1 
@@ -110,6 +112,19 @@ async function GET(request) {
        LIMIT 100`, [
             orgId
         ]);
+        // If no employees found and this is Spaljisten org, check sp_employees
+        if (result.rows.length === 0 && orgId === SPALJISTEN_ORG_ID) {
+            const spResult = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pgClient$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["default"].query(`SELECT id, employee_name as name, email 
+         FROM sp_employees 
+         WHERE org_id = $1 
+         ORDER BY employee_name 
+         LIMIT 100`, [
+                orgId
+            ]);
+            return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
+                employees: spResult.rows
+            });
+        }
         return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
             employees: result.rows
         });

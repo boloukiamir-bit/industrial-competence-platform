@@ -1,4 +1,5 @@
 {
   "/api/workflows/templates/route": "app/api/workflows/templates/route.js",
-  "/app/workflows/templates/page": "app/app/workflows/templates/page.js"
+  "/app/workflows/templates/page": "app/app/workflows/templates/page.js",
+  "/login/page": "app/login/page.js"
 }
