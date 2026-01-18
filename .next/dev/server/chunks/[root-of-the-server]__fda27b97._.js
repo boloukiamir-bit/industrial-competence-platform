@@ -101,6 +101,15 @@ var __turbopack_async_dependencies__ = __turbopack_handle_async_dependencies__([
 ;
 ;
 const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+/**
+ * DETERMINISTIC area_code normalizer - used EVERYWHERE
+ * - trim whitespace
+ * - lowercase
+ * - replace spaces with underscore
+ * - map Swedish characters: å→a, ä→a, ö→o, Å→a, Ä→a, Ö→o
+ */ function normalizeAreaCode(raw) {
+    return raw.trim().toLowerCase().replace(/\s+/g, "_").replace(/å/g, "a").replace(/ä/g, "a").replace(/ö/g, "o");
+}
 async function importAreas(rows) {
     let inserted = 0, updated = 0;
     const failedRows = [];
@@ -118,7 +127,7 @@ async function importAreas(rows) {
                 });
                 continue;
             }
-            const areaCode = rawAreaCode.toLowerCase();
+            const areaCode = normalizeAreaCode(rawAreaCode);
             try {
                 const result = await client.query(`INSERT INTO sp_areas (org_id, area_code, area_name) 
            VALUES ($1, $2, $3) 
@@ -160,7 +169,7 @@ async function importStations(rows) {
             const lineNum = i + 2;
             const stationCode = row["station_code"]?.trim() || row["code"]?.trim() || row["skill_code"]?.trim();
             const stationName = row["station_name"]?.trim() || row["name"]?.trim() || row["skill_name"]?.trim() || stationCode;
-            const areaCode = row["area_code"]?.trim() || row["area"]?.trim();
+            const rawAreaCode = row["area_code"]?.trim() || row["area"]?.trim();
             if (!stationCode) {
                 failedRows.push({
                     line: lineNum,
@@ -170,13 +179,20 @@ async function importStations(rows) {
             }
             try {
                 let areaId = null;
-                if (areaCode) {
-                    const normalizedAreaCode = areaCode.toLowerCase();
-                    const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", [
+                if (rawAreaCode) {
+                    const normalizedAreaCode = normalizeAreaCode(rawAreaCode);
+                    const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [
                         SPALJISTEN_ORG_ID,
                         normalizedAreaCode
                     ]);
-                    areaId = areaRes.rows[0]?.id || null;
+                    if (areaRes.rows.length === 0) {
+                        failedRows.push({
+                            line: lineNum,
+                            reason: `Unknown area_code: ${rawAreaCode}. Import areas.csv first.`
+                        });
+                        continue;
+                    }
+                    areaId = areaRes.rows[0].id;
                 }
                 const result = await client.query(`INSERT INTO sp_stations (org_id, station_code, station_name, area_id) 
            VALUES ($1, $2, $3, $4) 
@@ -220,7 +236,7 @@ async function importEmployees(rows) {
             const employeeId = row["employee_id"]?.trim();
             const employeeName = row["employee_name"]?.trim() || row["name"]?.trim();
             const email = row["email"]?.trim() || null;
-            const areaName = row["source_sheet"]?.trim() || row["area"]?.trim() || row["area_code"]?.trim();
+            const rawAreaCode = row["source_sheet"]?.trim() || row["area"]?.trim() || row["area_code"]?.trim();
             if (!employeeId) {
                 failedRows.push({
                     line: lineNum,
@@ -237,21 +253,20 @@ async function importEmployees(rows) {
             }
             try {
                 let areaId = null;
-                if (areaName) {
-                    const normalizedAreaCode = areaName.trim().toLowerCase();
-                    // Upsert area first
-                    await client.query(`INSERT INTO sp_areas (org_id, area_code, area_name) 
-             VALUES ($1, $2, $3) 
-             ON CONFLICT (org_id, area_code) DO NOTHING`, [
-                        SPALJISTEN_ORG_ID,
-                        normalizedAreaCode,
-                        areaName.trim()
-                    ]);
+                if (rawAreaCode) {
+                    const normalizedAreaCode = normalizeAreaCode(rawAreaCode);
                     const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [
                         SPALJISTEN_ORG_ID,
                         normalizedAreaCode
                     ]);
-                    areaId = areaRes.rows[0]?.id || null;
+                    if (areaRes.rows.length === 0) {
+                        failedRows.push({
+                            line: lineNum,
+                            reason: `Unknown area_code: ${rawAreaCode}. Import areas.csv first.`
+                        });
+                        continue;
+                    }
+                    areaId = areaRes.rows[0].id;
                 }
                 const result = await client.query(`INSERT INTO sp_employees (org_id, employee_id, employee_name, email, area_id) 
            VALUES ($1, $2, $3, $4, $5) 
@@ -431,9 +446,9 @@ async function importAreaLeaders(rows) {
         for(let i = 0; i < rows.length; i++){
             const row = rows[i];
             const lineNum = i + 2;
-            const areaName = row["area"]?.trim() || row["area_code"]?.trim();
+            const rawAreaCode = row["area"]?.trim() || row["area_code"]?.trim();
             const leaderName = row["leader_name"]?.trim() || row["employee_name"]?.trim();
-            if (!areaName) {
+            if (!rawAreaCode) {
                 failedRows.push({
                     line: lineNum,
                     reason: "Missing area"
@@ -448,15 +463,15 @@ async function importAreaLeaders(rows) {
                 continue;
             }
             try {
-                const normalizedAreaCode = areaName.toLowerCase();
-                const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND (area_code = $2 OR LOWER(area_name) = $2)", [
+                const normalizedAreaCode = normalizeAreaCode(rawAreaCode);
+                const areaRes = await client.query("SELECT id FROM sp_areas WHERE org_id = $1 AND area_code = $2", [
                     SPALJISTEN_ORG_ID,
                     normalizedAreaCode
                 ]);
                 if (areaRes.rows.length === 0) {
                     failedRows.push({
                         line: lineNum,
-                        reason: `Area not found: ${areaName}`
+                        reason: `Area not found: ${rawAreaCode}`
                     });
                     continue;
                 }
