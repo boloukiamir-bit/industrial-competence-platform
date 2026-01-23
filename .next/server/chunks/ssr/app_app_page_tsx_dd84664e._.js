@@ -1,3 +1,0 @@
-module.exports=[26336,a=>{"use strict";var b=a.i(87924),c=a.i(72131),d=a.i(50944);function e(){let a=(0,d.useRouter)();return(0,c.useEffect)(()=>{a.replace("/app/dashboard")},[a]),(0,b.jsx)("div",{className:"flex items-center justify-center min-h-screen",children:(0,b.jsx)("div",{className:"animate-pulse text-muted-foreground",children:"Loading dashboard..."})})}a.s(["default",()=>e])}];
-
-//# sourceMappingURL=app_app_page_tsx_dd84664e._.js.map

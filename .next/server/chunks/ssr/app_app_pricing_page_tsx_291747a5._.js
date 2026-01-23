@@ -1,3 +1,0 @@
-module.exports=[28629,a=>{"use strict";var b=a.i(87924),c=a.i(72131),d=a.i(50944);function e(){let a=(0,d.useRouter)();return(0,c.useEffect)(()=>{a.replace("/pricing")},[a]),(0,b.jsx)("div",{className:"flex items-center justify-center min-h-[50vh]",children:(0,b.jsx)("p",{className:"text-muted-foreground",children:"Redirecting to pricing..."})})}a.s(["default",()=>e])}];
-
-//# sourceMappingURL=app_app_pricing_page_tsx_291747a5._.js.map

@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///home/runner/workspace/app/app/page.tsx"],"sourcesContent":["\"use client\";\n\nimport { useEffect } from \"react\";\nimport { useRouter } from \"next/navigation\";\n\nexport default function AppPage() {\n  const router = useRouter();\n\n  useEffect(() => {\n    router.replace(\"/app/dashboard\");\n  }, [router]);\n\n  return (\n    <div className=\"flex items-center justify-center min-h-screen\">\n      <div className=\"animate-pulse text-muted-foreground\">\n        Loading dashboard...\n      </div>\n    </div>\n  );\n}\n"],"names":[],"mappings":";;;;;AAEA;AACA;;;AAHA;;;AAKe,SAAS;;IACtB,MAAM,SAAS,IAAA,kJAAS;IAExB,IAAA,0KAAS;6BAAC;YACR,OAAO,OAAO,CAAC;QACjB;4BAAG;QAAC;KAAO;IAEX,qBACE,6LAAC;QAAI,WAAU;kBACb,cAAA,6LAAC;YAAI,WAAU;sBAAsC;;;;;;;;;;;AAK3D;GAdwB;;QACP,kJAAS;;;KADF"}}]
-}
