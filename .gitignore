@@ -6,3 +6,4 @@ vite.config.ts.*
 *.tar.gzrepomix-output.txt
 project-audit.tar.gz
 .next
+.env.local
