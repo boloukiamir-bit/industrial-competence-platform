@@ -6,12 +6,29 @@
 -- =============================================================================
 
 -- 1. CREATE ORGANIZATIONS TABLE
+-- NOTE: If your schema requires created_by (NOT NULL), add it:
+-- created_by uuid NOT NULL REFERENCES auth.users(id)
 CREATE TABLE IF NOT EXISTS public.organizations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   slug text UNIQUE NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- If created_by column exists and is NOT NULL, add it:
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'organizations' 
+    AND column_name = 'created_by'
+  ) THEN
+    -- Check if schema requires created_by (from sql/002_multi_tenant_rls.sql)
+    -- If yes, you'll need to add it manually with a migration that sets default values
+    RAISE NOTICE 'Note: If your organizations table requires created_by (NOT NULL), you must add it with a migration that sets existing rows first.';
+  END IF;
+END $$;
 
 -- 2. CREATE MEMBERSHIPS TABLE
 CREATE TABLE IF NOT EXISTS public.memberships (
