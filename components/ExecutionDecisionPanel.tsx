@@ -13,8 +13,10 @@ interface ShiftAssignmentRow {
   station_id: string;
   employee_id: string | null;
   shift_id: string;
-  stations: { name: string } | null;
+  stations: { name: string }[] | null;
 }
+
+const stationName = (a: ShiftAssignmentRow) => a.stations?.[0]?.name ?? "";
 
 export function ExecutionDecisionPanel() {
   const [loading, setLoading] = useState(true);
@@ -328,7 +330,7 @@ export function ExecutionDecisionPanel() {
                       </span>
                     </div>
                     <div className="text-sm text-gray-700 dark:text-gray-300">
-                      {assignment.stations?.name || "Unknown Station"} • {selectedShift}
+                      {stationName(assignment) || "Unknown Station"} • {selectedShift}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
