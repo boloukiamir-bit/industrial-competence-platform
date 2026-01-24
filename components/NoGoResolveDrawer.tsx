@@ -15,19 +15,19 @@ import { logExecutionDecision } from "@/lib/executionDecisions";
 import { useToast } from "@/hooks/use-toast";
 import type { ShiftType } from "@/types/lineOverview";
 
-interface ShiftAssignment {
+export interface ShiftAssignmentRow {
   id: string;
   station_id: string;
   employee_id: string | null;
   shift_id: string;
-  stations: { name: string } | null;
+  stations: { name: string }[] | null;
 }
 
 interface NoGoResolveDrawerProps {
   open: boolean;
   onClose: (wasResolved?: boolean) => void;
   shiftAssignmentId: string | null;
-  shiftAssignment: ShiftAssignment | null;
+  shiftAssignment: ShiftAssignmentRow | null;
   date: string;
   shiftType: ShiftType;
   line: string;
@@ -141,7 +141,7 @@ export function NoGoResolveDrawer({
               {line} • {shiftType}
             </Label>
             <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Station: {shiftAssignment.stations?.name || "Unknown"}
+              Station: {shiftAssignment.stations?.[0]?.name || "Unknown"}
             </div>
           </div>
 

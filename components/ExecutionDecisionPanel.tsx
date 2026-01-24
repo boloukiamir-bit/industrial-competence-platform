@@ -4,17 +4,9 @@ import { useState, useEffect } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import type { ShiftType } from "@/types/lineOverview";
 import { useOrgState } from "@/hooks/useOrg";
-import { NoGoResolveDrawer } from "@/components/NoGoResolveDrawer";
+import { NoGoResolveDrawer, type ShiftAssignmentRow } from "@/components/NoGoResolveDrawer";
 import { supabase } from "@/lib/supabaseClient";
 import { apiPost } from "@/lib/apiClient";
-
-interface ShiftAssignmentRow {
-  id: string;
-  station_id: string;
-  employee_id: string | null;
-  shift_id: string;
-  stations: { name: string }[] | null;
-}
 
 const stationName = (a: ShiftAssignmentRow) => a.stations?.[0]?.name ?? "";
 
@@ -330,7 +322,7 @@ export function ExecutionDecisionPanel() {
                       </span>
                     </div>
                     <div className="text-sm text-gray-700 dark:text-gray-300">
-                      {stationName(assignment) || "Unknown Station"} • {selectedShift}
+                      {assignment.stations?.[0]?.name || "Unknown Station"} • {selectedShift}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
