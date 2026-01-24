@@ -95,6 +95,25 @@ export default function CockpitPage() {
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<EmployeeSuggestion[]>([]);
+  const [availableLines, setAvailableLines] = useState<string[]>([]);
+
+  // Load lines from DB
+  useEffect(() => {
+    async function loadLines() {
+      try {
+        const response = await fetch("/api/cockpit/lines", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableLines(data.lines || []);
+        }
+      } catch (error) {
+        console.error("Failed to load lines:", error);
+      }
+    }
+    loadLines();
+  }, []);
 
   useEffect(() => {
     const demo = isDemoMode();
@@ -224,7 +243,10 @@ export default function CockpitPage() {
     ? staffingCards
     : staffingCards.filter(c => c.station.line === selectedLine);
 
-  const lines = [...new Set(staffingCards.map(c => c.station.line).filter(Boolean))];
+  // Use lines from DB if available, otherwise fallback to lines from staffingCards
+  const lines = availableLines.length > 0 
+    ? availableLines 
+    : [...new Set(staffingCards.map(c => c.station.line).filter(Boolean))];
 
   if (loading) {
     return <CockpitSkeleton />;
@@ -263,7 +285,7 @@ export default function CockpitPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Lines</SelectItem>
-              {lines.map((line) => (
+              {lines.filter(line => line !== "Assembly").map((line) => (
                 <SelectItem key={line} value={line as string}>
                   {line}
                 </SelectItem>

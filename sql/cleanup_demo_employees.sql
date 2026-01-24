@@ -1,0 +1,84 @@
+-- =============================================================================
+-- CLEANUP DEMO EMPLOYEES - P0 Quick Fix
+-- =============================================================================
+-- Run this in Supabase SQL Editor to remove demo employees from your tenant/site
+-- =============================================================================
+-- 
+-- STEP 1: Find your org/site IDs
+-- =============================================================================
+-- Uncomment and run to see your organizations:
+-- SELECT id, name, created_at FROM organizations ORDER BY created_at DESC;
+
+-- Uncomment and run to see your sites (org_units):
+-- SELECT id, name, organization_id, created_at FROM org_units ORDER BY created_at DESC;
+
+-- =============================================================================
+-- STEP 2: Check current employee count
+-- =============================================================================
+-- Replace '<ORG_ID>' with your actual organization ID
+-- SELECT 
+--   COUNT(*) as employees_total,
+--   COUNT(*) FILTER (WHERE is_active = true) as active_employees,
+--   COUNT(*) FILTER (WHERE import_run_id IS NOT NULL) as imported_employees,
+--   COUNT(*) FILTER (WHERE import_run_id IS NULL AND is_active = true) as manual_employees
+-- FROM employees
+-- WHERE org_id = '<ORG_ID>';
+
+-- =============================================================================
+-- STEP 3: Identify demo employees to delete
+-- =============================================================================
+-- Option A: Delete employees without import_run_id (if all real employees are imported)
+-- Replace '<ORG_ID>' with your actual organization ID
+-- 
+-- DELETE FROM employees
+-- WHERE org_id = '<ORG_ID>'
+--   AND import_run_id IS NULL
+--   AND import_batch_id IS NULL;
+
+-- Option B: Delete employees by date range (if demo was created in a specific period)
+-- Replace '<ORG_ID>' and adjust dates as needed
+--
+-- DELETE FROM employees
+-- WHERE org_id = '<ORG_ID>'
+--   AND created_at < '2026-01-24'  -- Adjust date as needed
+--   AND import_run_id IS NULL;
+
+-- Option C: Delete employees by pattern (if demo employees have specific employee_number patterns)
+-- Replace '<ORG_ID>' and adjust pattern as needed
+--
+-- DELETE FROM employees
+-- WHERE org_id = '<ORG_ID>'
+--   AND (employee_number LIKE 'DEMO%' OR employee_number LIKE 'TEST%')
+--   AND import_run_id IS NULL;
+
+-- =============================================================================
+-- STEP 4: Verify cleanup
+-- =============================================================================
+-- After deletion, verify the count:
+-- SELECT COUNT(*) as remaining_employees
+-- FROM employees
+-- WHERE org_id = '<ORG_ID>' AND is_active = true;
+
+-- =============================================================================
+-- RECOMMENDED: Keep only latest import
+-- =============================================================================
+-- If you want to keep only the latest import and soft-delete all others:
+-- 
+-- 1. Find the latest import_run_id:
+-- SELECT id, created_at, employee_count
+-- FROM employee_import_runs
+-- WHERE organization_id = '<ORG_ID>'
+-- ORDER BY created_at DESC
+-- LIMIT 1;
+--
+-- 2. Soft-delete employees from older imports (replace '<LATEST_IMPORT_RUN_ID>'):
+-- UPDATE employees
+-- SET is_active = false
+-- WHERE org_id = '<ORG_ID>'
+--   AND import_run_id IS NOT NULL
+--   AND import_run_id != '<LATEST_IMPORT_RUN_ID>'
+--   AND is_active = true;
+
+-- =============================================================================
+-- WARNING: Always test with SELECT first before running DELETE/UPDATE!
+-- =============================================================================
