@@ -4,10 +4,14 @@ import { z } from "zod";
 
 const DEMO_ORG_ID = "f607f244-da91-41d9-a648-d02a1591105c";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing Supabase env");
+  }
+  return createClient(url, key);
+}
 
 const updateAssignmentSchema = z.object({
   startTime: z.string().optional(),
@@ -22,6 +26,7 @@ export async function DELETE(
   try {
     const { id } = await params;
 
+    const supabaseAdmin = getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from("pl_assignment_segments")
       .delete()
@@ -55,6 +60,7 @@ export async function PATCH(
     if (parsed.data.endTime) updates.end_time = parsed.data.endTime;
     if (parsed.data.employeeCode) updates.employee_code = parsed.data.employeeCode;
 
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
       .from("pl_assignment_segments")
       .update(updates)
