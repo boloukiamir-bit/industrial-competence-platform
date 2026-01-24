@@ -183,7 +183,7 @@ export function NoGoResolveDrawer({
             >
               {saving ? "Saving..." : alreadyResolved ? "Already Resolved" : "Resolve"}
             </Button>
-            <Button variant="outline" onClick={handleClose}>
+            <Button variant="outline" onClick={() => handleClose(false)}>
               Cancel
             </Button>
           </div>
