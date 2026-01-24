@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export type OrgSessionResult = {
@@ -21,6 +21,7 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
     return { success: false, error: "Supabase not configured", status: 401 };
   }
 
+  // Check for Authorization header first (for API-to-API calls)
   const authHeader = request.headers.get("Authorization");
   let accessToken: string | undefined;
 
@@ -28,74 +29,45 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
     accessToken = authHeader.substring(7);
   }
 
-  if (!accessToken) {
-    const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
-    
-    // Try standard cookie name first
-    let sbAccessToken = cookieStore.get("sb-access-token")?.value;
-    
-    // Try project-specific cookie (sb-<project-ref>-auth-token)
-    if (!sbAccessToken) {
-      const authCookie = allCookies.find(c => 
-        c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
-      );
-      if (authCookie?.value) {
-        try {
-          const parsed = JSON.parse(authCookie.value);
-          sbAccessToken = parsed.access_token || parsed[0]?.access_token;
-        } catch {
-          sbAccessToken = authCookie.value;
-        }
-      }
-    }
-    
-    // Also try base64 encoded session cookie format
-    if (!sbAccessToken) {
-      const sessionCookie = allCookies.find(c => 
-        c.name.includes("supabase") || (c.name.startsWith("sb-") && c.name.includes("auth"))
-      );
-      if (sessionCookie?.value) {
-        try {
-          const decoded = Buffer.from(sessionCookie.value, 'base64').toString('utf-8');
-          const parsed = JSON.parse(decoded);
-          sbAccessToken = parsed.access_token;
-        } catch {
-          // Not base64 encoded
-        }
-      }
-    }
-    
-    if (sbAccessToken) {
-      accessToken = sbAccessToken;
-    }
-  }
-
-  if (!accessToken) {
-    return { success: false, error: "Not authenticated - access token required", status: 401 };
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+  // Use createServerClient from @supabase/ssr to properly read cookies
+  const cookieStore = await cookies();
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll() {
+        // Read-only in route handlers; middleware handles cookie updates
       },
     },
   });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  // Get user from session (handles both cookie-based and token-based auth)
+  let user;
+  let authError;
+
+  if (accessToken) {
+    // If token provided via header, use it directly
+    const result = await supabase.auth.getUser(accessToken);
+    user = result.data.user;
+    authError = result.error;
+  } else {
+    // Otherwise, use cookie-based session (createServerClient handles this)
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+    authError = result.error;
+  }
 
   if (authError || !user) {
     return { success: false, error: "Invalid or expired session", status: 401 };
   }
 
   const userId = user.id;
-  console.log("[orgSession] Authenticated user ID:", userId, "email:", user.email);
 
-  const cookieStore = await cookies();
-  const preferredOrgId = cookieStore.get("current_org_id")?.value;
+  const preferredOrgId =
+    cookieStore.get("current_org_id")?.value ||
+    cookieStore.get("nadiplan_current_org")?.value;
 
-  // Query memberships from Supabase (not local pg)
   let membershipQuery = supabase
     .from("memberships")
     .select("org_id, role")
@@ -109,29 +81,12 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
   }
 
   const { data: memberships, error: membershipError } = await membershipQuery;
-  console.log("[orgSession] Membership query result:", memberships?.length || 0, "rows", membershipError?.message || "");
+
+  if (membershipError) {
+    return { success: false, error: "Failed to resolve organization", status: 403 };
+  }
 
   if (!memberships || memberships.length === 0) {
-    // Fallback: try without preferred org filter
-    if (preferredOrgId) {
-      const { data: fallbackMemberships } = await supabase
-        .from("memberships")
-        .select("org_id, role")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .order("created_at", { ascending: true })
-        .limit(1);
-
-      if (fallbackMemberships && fallbackMemberships.length > 0) {
-        return {
-          success: true,
-          userId,
-          orgId: fallbackMemberships[0].org_id,
-          role: fallbackMemberships[0].role,
-        };
-      }
-    }
-
     return { success: false, error: "No active organization membership", status: 403 };
   }
 
