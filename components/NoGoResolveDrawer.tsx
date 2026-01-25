@@ -142,7 +142,8 @@ export function NoGoResolveDrawer({
             type: "data",
             message: "Root cause not yet classified",
             blocking: true,
-            details: { station_id: shiftAssignmentId ?? "" ?? "", station_name: formattedStation, employee_id: null },
+            details: { station_id: shiftAssignmentId ?? "", station_name: formattedStation, employee_id: null },
+            missing: [],
             recommended_actions: ["fix_data", "escalate"],
           });
           setSelectedActions(defaultSelectedActions("data"));
@@ -231,11 +232,11 @@ export function NoGoResolveDrawer({
             )}
           </div>
 
-          {rootCause?.details?.missing && rootCause.details.missing.length > 0 && (
+          {rootCause?.missing && rootCause.missing.length > 0 && (
             <div className="rounded-md border p-3">
               <p className="text-xs font-semibold text-muted-foreground mb-2">Missing</p>
               <ul className="space-y-1">
-                {rootCause.details.missing.map((item, idx) => (
+                {rootCause.missing.map((item, idx) => (
                   <li key={`${item.code}-${idx}`} className="text-sm">
                     <span className="font-medium">{item.label}</span>
                     {item.required_level !== undefined && (

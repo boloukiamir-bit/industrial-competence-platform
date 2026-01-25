@@ -194,7 +194,7 @@ export type RootCausePayload = {
     station_id: string;
     station_name?: string;
     employee_id?: string | null;
-    missing?: RootCauseMissingItem[];
   };
+  missing?: RootCauseMissingItem[];
   recommended_actions: Array<"swap" | "assign" | "call_in" | "escalate" | "fix_data">;
 };

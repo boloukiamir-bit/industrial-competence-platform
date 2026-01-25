@@ -1,5 +1,21 @@
 import { createClient } from "@/utils/supabase/client";
 
+/**
+ * Normalizes root_cause so missing is at root and details does not contain missing.
+ * Handles legacy payloads where missing was stored in details.
+ */
+function normalizeRootCause(rc: unknown): Record<string, unknown> | null {
+  if (rc == null || typeof rc !== "object") return rc as null;
+  const obj = rc as Record<string, unknown>;
+  const missing =
+    (Array.isArray(obj.missing) ? obj.missing : (obj.details as Record<string, unknown> | undefined)?.missing) ?? [];
+  const details: Record<string, unknown> = {
+    ...(typeof obj.details === "object" && obj.details !== null ? (obj.details as Record<string, unknown>) : {}),
+  };
+  delete details.missing;
+  return { ...obj, details, missing };
+}
+
 export type DecisionType =
   | "resolve_no_go"
   | "accept_risk"
@@ -15,7 +31,7 @@ export async function logExecutionDecision(input: {
   target_type: TargetType;
   target_id: string; // uuid
   reason?: string | null;
-  root_cause?: Record<string, any> | null;
+  root_cause?: Record<string, unknown> | null;
   actions?: Record<string, any> | null;
 }) {
   const supabase = createClient();
@@ -37,7 +53,7 @@ export async function logExecutionDecision(input: {
     target_type: input.target_type,
     target_id: input.target_id,
     reason: input.reason ?? null,
-    root_cause: input.root_cause ?? null,
+    root_cause: normalizeRootCause(input.root_cause) ?? null,
     actions: input.actions ?? null,
   };
 

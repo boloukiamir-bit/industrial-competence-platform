@@ -86,14 +86,10 @@ async function computeRootCause(options: {
         station_id: stationId,
         station_name: stationName,
         employee_id: null,
-        missing: [
-          {
-            kind: "skill",
-            code: "assignment",
-            label: "Assignment missing",
-          },
-        ],
       },
+      missing: [
+        { kind: "skill", code: "assignment", label: "Assignment missing" },
+      ],
       recommended_actions: ["assign", "call_in"],
     };
   }
@@ -287,8 +283,8 @@ async function computeRootCause(options: {
       station_id: stationId,
       station_name: stationName,
       employee_id: employeeId,
-      missing: missing.length > 0 ? missing : undefined,
     },
+    missing: missing.length > 0 ? missing : [],
     recommended_actions: recommendedActionsFor(rootCauseType),
   };
 }
