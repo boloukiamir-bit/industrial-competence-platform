@@ -1,194 +1,310 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { logExecutionDecision } from "@/lib/executionDecisions";
-import { useToast } from "@/hooks/use-toast";
-import type { ShiftType } from "@/types/lineOverview";
+import type { RootCausePayload, RootCauseType } from "@/types/cockpit";
+import { AlertCircle, Check, Loader2, Stethoscope, Shield, Database, Repeat } from "lucide-react";
 
-export interface ShiftAssignmentRow {
-  id: string;
-  station_id: string;
-  employee_id: string | null;
-  shift_id: string;
-  stations: { name: string }[] | null;
-}
-
-interface NoGoResolveDrawerProps {
+type NoGoResolveDrawerProps = {
   open: boolean;
-  onClose: (wasResolved?: boolean) => void;
-  shiftAssignmentId: string | null;
-  shiftAssignment: ShiftAssignmentRow | null;
-  date: string;
-  shiftType: ShiftType;
-  line: string;
+  onOpenChange: (open: boolean) => void;
+  shiftAssignmentId?: string | null;
+  stationName?: string;
+  employeeName?: string | null;
+  onResolved?: (status: "created" | "already_resolved") => void;
+};
+
+const typeConfig: Record<RootCauseType, { label: string; color: string; icon: JSX.Element }> = {
+  competence: {
+    label: "Competence",
+    color: "bg-blue-100 text-blue-800",
+    icon: <Repeat className="h-4 w-4" />,
+  },
+  cert: {
+    label: "Certification",
+    color: "bg-amber-100 text-amber-800",
+    icon: <Shield className="h-4 w-4" />,
+  },
+  medical: {
+    label: "Medical",
+    color: "bg-red-100 text-red-800",
+    icon: <Stethoscope className="h-4 w-4" />,
+  },
+  data: {
+    label: "Data",
+    color: "bg-slate-100 text-slate-800",
+    icon: <Database className="h-4 w-4" />,
+  },
+};
+
+const actions: Array<"swap" | "assign" | "call_in" | "escalate" | "fix_data"> = [
+  "swap",
+  "assign",
+  "call_in",
+  "escalate",
+  "fix_data",
+];
+
+function defaultSelectedActions(type: RootCauseType): string[] {
+  if (type === "competence") return ["swap"];
+  if (type === "cert" || type === "medical") return ["assign"];
+  return ["fix_data"];
 }
 
-const isUuid = (v: string | null | undefined) =>
-  !!v &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+const formatActionLabel = (action: string) => action.replace("_", " ");
+
+function ActionChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+        active
+          ? "bg-primary text-primary-foreground border-primary"
+          : "bg-muted text-muted-foreground border-transparent hover:border-input"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 export function NoGoResolveDrawer({
   open,
-  onClose,
+  onOpenChange,
   shiftAssignmentId,
-  shiftAssignment,
-  date,
-  shiftType,
-  line,
+  stationName,
+  employeeName,
+  onResolved,
 }: NoGoResolveDrawerProps) {
-  const { toast } = useToast();
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [alreadyResolved, setAlreadyResolved] = useState(false);
+  const [rootCause, setRootCause] = useState<RootCausePayload | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [selectedActions, setSelectedActions] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"created" | "already_resolved" | null>(null);
 
-  if (!shiftAssignment || !shiftAssignmentId) return null;
+  const formattedStation = stationName || "Station";
+  const formattedEmployee = employeeName || "Unassigned";
 
-  const handleResolve = async () => {
-    if (!isUuid(shiftAssignmentId)) {
-      setError("Cannot resolve: missing real shift_assignment id (not persisted yet).");
+  const recommendedActions = useMemo(() => rootCause?.recommended_actions ?? [], [rootCause]);
+
+  useEffect(() => {
+    if (!open) {
+      setStatus(null);
       return;
     }
 
+    if (!shiftAssignmentId) {
+      setRootCause(null);
+      setError("Missing shift assignment");
+      return;
+    }
+
+    async function loadRootCause() {
+      setLoading(true);
+      setError(null);
+      setRootCause(null);
+      setSelectedActions([]);
+      try {
+        const response = await fetch("/api/cockpit/root-cause", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shift_assignment_id: shiftAssignmentId }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to fetch root cause");
+        }
+
+        const data = await response.json();
+        const payload = data.root_cause as RootCausePayload | undefined;
+        if (payload) {
+          setRootCause(payload);
+          setSelectedActions(defaultSelectedActions(payload.type));
+        } else {
+          setRootCause({
+            type: "data",
+            message: "Root cause not yet classified",
+            blocking: true,
+            details: { station_id: shiftAssignmentId, station_name: formattedStation, employee_id: null },
+            recommended_actions: ["fix_data", "escalate"],
+          });
+          setSelectedActions(defaultSelectedActions("data"));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch root cause");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRootCause();
+  }, [open, shiftAssignmentId, formattedStation]);
+
+  const toggleAction = (action: string) => {
+    setSelectedActions((prev) =>
+      prev.includes(action) ? prev.filter((a) => a !== action) : [...prev, action]
+    );
+  };
+
+  const handleResolve = async () => {
+    if (!shiftAssignmentId || !rootCause) return;
     setSaving(true);
-    setAlreadyResolved(false);
-    setError(null);
+    setStatus(null);
     try {
-      // Build root_cause from shift assignment data
-      const root_cause = {
-        type: "competence", // Default, can be enhanced later
-        shift_id: shiftAssignment.shift_id,
-        station_id: shiftAssignment.station_id,
-        employee_id: shiftAssignment.employee_id,
-        date,
-      };
-
-      const actions = {
-        recommended: ["swap", "assign", "call_in", "escalate"],
-        selected: ["swap"], // Default selection
-      };
-
-      const res = await logExecutionDecision({
+      const result = await logExecutionDecision({
         decision_type: "resolve_no_go",
         target_type: "shift_assignment",
         target_id: shiftAssignmentId,
-        reason: note,
-        root_cause,
-        actions,
+        reason: note || null,
+        root_cause: rootCause,
+        actions: {
+          recommended: rootCause.recommended_actions,
+          selected: selectedActions,
+          note: note || null,
+        },
       });
 
-      console.log("Resolve result:", res);
-
-      if (res.status !== "created" && res.status !== "already_resolved") {
-        throw new Error("Unexpected resolve result");
-      }
-
-      if (res.status === "already_resolved") {
-        setAlreadyResolved(true);
-        toast({ 
-          title: "Already resolved", 
-          description: "This NO-GO has already been resolved",
-          variant: "default"
-        });
-        // Close drawer after a short delay
-        setTimeout(() => {
-          handleClose(false);
-        }, 2000);
-      } else {
-        toast({ title: "Resolved", description: "NO-GO decision has been logged" });
-        handleClose(true); // Signal that it was resolved
-      }
-    } catch (error) {
-      console.error("Failed to log execution decision:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to resolve NO-GO",
-        variant: "destructive",
-      });
+      setStatus(result.status);
+      onResolved?.(result.status);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resolve");
     } finally {
       setSaving(false);
     }
   };
 
-  // Reset state when drawer closes
-  const handleClose = (wasResolved = false) => {
-    setAlreadyResolved(false);
-    setNote("");
-    setError(null);
-    onClose(wasResolved);
-  };
+  const currentType = rootCause?.type ?? "data";
+  const typeMeta = typeConfig[currentType];
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Resolve NO-GO</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Resolve NO-GO</SheetTitle>
+          <SheetDescription>
+            {formattedStation} • {formattedEmployee}
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4 py-4">
-          <div>
-            <Label className="text-sm font-medium">
-              {line} • {shiftType}
-            </Label>
-            <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Station: {shiftAssignment.stations?.[0]?.name || "Unknown"}
+        <div className="mt-4 space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Root cause</p>
+            <div className="flex items-center gap-2">
+              <Badge className={typeMeta.color}>
+                <span className="mr-1">{typeMeta.icon}</span>
+                {typeMeta.label}
+              </Badge>
+              {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {status === "already_resolved" && (
+                <Badge variant="secondary" className="gap-1">
+                  <Check className="h-3 w-3" />
+                  Already resolved
+                </Badge>
+              )}
+            </div>
+            {error ? (
+              <div className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {rootCause?.message ?? "Root cause not yet classified"}
+              </p>
+            )}
+          </div>
+
+          {rootCause?.details?.missing && rootCause.details.missing.length > 0 && (
+            <div className="rounded-md border p-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Missing</p>
+              <ul className="space-y-1">
+                {rootCause.details.missing.map((item, idx) => (
+                  <li key={`${item.code}-${idx}`} className="text-sm">
+                    <span className="font-medium">{item.label}</span>
+                    {item.required_level !== undefined && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        (required {item.required_level}
+                        {item.employee_level !== undefined && `, has ${item.employee_level}`})
+                      </span>
+                    )}
+                    {item.valid_until && (
+                      <span className="text-muted-foreground"> • valid until {item.valid_until}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Recommended actions</p>
+            {recommendedActions.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {recommendedActions.map((action) => (
+                  <Badge key={action} variant="secondary" className="rounded-full px-3 py-1 text-xs">
+                    {formatActionLabel(action)}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No recommendations available.</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Actions taken</p>
+            <div className="flex flex-wrap gap-2">
+              {actions.map((action) => (
+                <ActionChip
+                  key={action}
+                  label={formatActionLabel(action)}
+                  active={selectedActions.includes(action)}
+                  onClick={() => toggleAction(action)}
+                />
+              ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="note">Reason / Note</Label>
+            <Label htmlFor="resolve-note">Notes (optional)</Label>
             <Textarea
-              id="note"
+              id="resolve-note"
+              placeholder="Add context for this resolution..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Enter resolution note..."
-              rows={3}
             />
           </div>
 
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <p className="text-sm text-red-800 dark:text-red-200 font-medium">
-                {error}
-              </p>
-            </div>
-          )}
-
-          {alreadyResolved && (
-            <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-              <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
-                Already resolved
-              </p>
-              <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                This NO-GO has already been resolved. The drawer will close shortly.
-              </p>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 pt-4 border-t">
+          <div className="flex justify-end">
             <Button
               onClick={handleResolve}
-              disabled={!isUuid(shiftAssignmentId) || alreadyResolved || saving}
-              className="flex-1"
+              disabled={saving || loading || !shiftAssignmentId}
+              className="min-w-[120px]"
             >
-              {saving ? "Saving..." : alreadyResolved ? "Already Resolved" : "Resolve"}
-            </Button>
-            <Button variant="outline" onClick={() => handleClose(false)}>
-              Cancel
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+              Resolve
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

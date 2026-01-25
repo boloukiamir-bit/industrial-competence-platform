@@ -174,3 +174,27 @@ export type HandoverItem = {
   severity?: 'low' | 'medium' | 'high';
   createdAt: string;
 };
+
+export type RootCauseType = "competence" | "cert" | "medical" | "data";
+
+export type RootCauseMissingItem = {
+  kind: "skill" | "cert" | "medical";
+  code: string;
+  label: string;
+  required_level?: number;
+  employee_level?: number;
+  valid_until?: string | null;
+};
+
+export type RootCausePayload = {
+  type: RootCauseType;
+  message: string;
+  blocking: true;
+  details: {
+    station_id: string;
+    station_name?: string;
+    employee_id?: string | null;
+    missing?: RootCauseMissingItem[];
+  };
+  recommended_actions: Array<"swap" | "assign" | "call_in" | "escalate" | "fix_data">;
+};
