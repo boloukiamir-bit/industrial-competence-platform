@@ -142,7 +142,7 @@ export function NoGoResolveDrawer({
             type: "data",
             message: "Root cause not yet classified",
             blocking: true,
-            details: { station_id: shiftAssignmentId, station_name: formattedStation, employee_id: null },
+            details: { station_id: shiftAssignmentId ?? "" ?? "", station_name: formattedStation, employee_id: null },
             recommended_actions: ["fix_data", "escalate"],
           });
           setSelectedActions(defaultSelectedActions("data"));
