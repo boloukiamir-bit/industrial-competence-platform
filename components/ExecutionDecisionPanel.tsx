@@ -18,7 +18,6 @@ type AssignmentRow = {
 
 export function ExecutionDecisionPanel() {
   const { date, shiftType, line } = useCockpitFilters();
-  const [lines, setLines] = useState<string[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -27,88 +26,99 @@ export function ExecutionDecisionPanel() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerAssignment, setDrawerAssignment] = useState<AssignmentRow | null>(null);
 
-  const effectiveLine = (line === "all" || !line) ? (lines[0] ?? null) : line;
-
-  useEffect(() => {
-    async function fetchLines() {
-      try {
-        const response = await fetch("/api/cockpit/lines");
-        if (response.ok) {
-          const data = await response.json();
-          setLines(data.lines || []);
-        }
-      } catch (err) {
-        console.error("Failed to load lines", err);
-      }
-    }
-    fetchLines();
-  }, []);
-
   const supabase = useMemo(() => createClient(), []);
 
   const loadAssignments = async () => {
-    if (!effectiveLine) return;
     setLoading(true);
     setError(null);
     try {
-      const ensureRes = await fetch("/api/shift-context/ensure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shift_date: date,
-          shift_type: shiftType,
-          line: effectiveLine,
-        }),
-      });
+      let assignmentIds: string[] = [];
 
-      if (!ensureRes.ok) {
-        const data = await ensureRes.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to ensure shift context");
-      }
+      if (line === "all") {
+        const siRes = await fetch(
+          `/api/cockpit/shift-ids?date=${encodeURIComponent(date)}&shift=${encodeURIComponent(shiftType)}`,
+          { credentials: "include" }
+        );
+        if (!siRes.ok) {
+          const d = await siRes.json().catch(() => ({}));
+          throw new Error(d.error || "Failed to load shift IDs");
+        }
+        const { shift_ids } = await siRes.json();
+        if (!Array.isArray(shift_ids) || shift_ids.length === 0) {
+          setAssignments([]);
+          setResolvedIds(new Set());
+          return;
+        }
+        const { data: assignmentRows, error: assignmentError } = await supabase
+          .from("shift_assignments")
+          .select(
+            `id, status, assignment_date, employee:employee_id(name), station:station_id(name)`
+          )
+          .in("shift_id", shift_ids)
+          .eq("assignment_date", date);
 
-      const ensureData = await ensureRes.json();
-      const shiftId = ensureData.shift_id as string | undefined;
-      if (!shiftId) {
+        if (assignmentError) throw assignmentError;
+
+        const normalized: AssignmentRow[] = (assignmentRows || []).map((row: any) => ({
+          id: row.id,
+          stationName: row.station?.name || "Station",
+          employeeName: row.employee?.name || null,
+          status: row.status,
+        }));
+        setAssignments(normalized);
+        assignmentIds = normalized.map((r) => r.id).filter(Boolean);
+      } else if (line) {
+        const ensureRes = await fetch("/api/shift-context/ensure", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shift_date: date, shift_type: shiftType, line }),
+        });
+
+        if (!ensureRes.ok) {
+          const data = await ensureRes.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to ensure shift context");
+        }
+
+        const ensureData = await ensureRes.json();
+        const shiftId = ensureData.shift_id as string | undefined;
+        if (!shiftId) {
+          setAssignments([]);
+          setResolvedIds(new Set());
+          return;
+        }
+
+        const { data: assignmentRows, error: assignmentError } = await supabase
+          .from("shift_assignments")
+          .select(
+            `id, status, assignment_date, employee:employee_id(name), station:station_id(name)`
+          )
+          .eq("shift_id", shiftId)
+          .eq("assignment_date", date);
+
+        if (assignmentError) throw assignmentError;
+
+        const normalized: AssignmentRow[] = (assignmentRows || []).map((row: any) => ({
+          id: row.id,
+          stationName: row.station?.name || "Station",
+          employeeName: row.employee?.name || null,
+          status: row.status,
+        }));
+        setAssignments(normalized);
+        assignmentIds = normalized.map((r) => r.id).filter(Boolean);
+      } else {
         setAssignments([]);
+        setResolvedIds(new Set());
         return;
       }
 
-      const { data: assignmentRows, error: assignmentError } = await supabase
-        .from("shift_assignments")
-        .select(
-          `
-            id,
-            status,
-            assignment_date,
-            employee:employee_id(name),
-            station:station_id(name)
-          `
-        )
-        .eq("shift_id", shiftId)
-        .eq("assignment_date", date);
-
-      if (assignmentError) {
-        throw assignmentError;
-      }
-
-      const normalized: AssignmentRow[] = (assignmentRows || []).map((row: any) => ({
-        id: row.id,
-        stationName: row.station?.name || "Station",
-        employeeName: row.employee?.name || null,
-        status: row.status,
-      }));
-
-      setAssignments(normalized);
-
-      const ids = normalized.map((r) => r.id).filter(Boolean);
-      if (ids.length > 0) {
+      if (assignmentIds.length > 0) {
         const { data: decisions, error: decisionsError } = await supabase
           .from("execution_decisions")
           .select("target_id")
           .eq("decision_type", "resolve_no_go")
           .eq("target_type", "shift_assignment")
           .eq("status", "active")
-          .in("target_id", ids);
+          .in("target_id", assignmentIds);
 
         if (decisionsError) {
           console.warn("Failed to load resolved state", decisionsError);
@@ -122,17 +132,17 @@ export function ExecutionDecisionPanel() {
     } catch (err) {
       console.error("Failed to load assignments", err);
       setError(err instanceof Error ? err.message : "Failed to load assignments");
+      setAssignments([]);
+      setResolvedIds(new Set());
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (effectiveLine) {
-      loadAssignments();
-    }
+    loadAssignments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveLine, shiftType, date]);
+  }, [date, shiftType, line]);
 
   const handleOpenDrawer = (row: AssignmentRow) => {
     setDrawerAssignment(row);
@@ -146,10 +156,6 @@ export function ExecutionDecisionPanel() {
     setDrawerOpen(false);
   };
 
-  if (!lines.length) {
-    return null;
-  }
-
   return (
     <>
       <div className="mb-4">
@@ -161,7 +167,7 @@ export function ExecutionDecisionPanel() {
             </CardTitle>
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-xs text-muted-foreground">
-                {date} · {shiftType} · {effectiveLine || "—"}
+                {date} · {shiftType} · {line === "all" ? "All Lines" : (line || "—")}
               </span>
               <Button variant="outline" size="sm" onClick={loadAssignments} disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
