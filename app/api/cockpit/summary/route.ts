@@ -38,6 +38,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: session.error }, { status: session.status });
     }
 
+    const searchParams = request.nextUrl.searchParams;
+    const date = searchParams.get("date") || undefined;
+    const shift = searchParams.get("shift") || undefined;
+    const line = searchParams.get("line") || undefined;
+
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("active_org_id, active_site_id")
@@ -47,27 +52,100 @@ export async function GET(request: NextRequest) {
     const activeOrgId = (profile?.active_org_id as string) || session.orgId;
     const activeSiteId = profile?.active_site_id as string | null | undefined;
 
-    let query = supabaseAdmin
-      .from("execution_decisions")
-      .select("root_cause, actions")
-      .eq("org_id", activeOrgId)
-      .eq("status", "active");
+    let list: Array<{ root_cause: unknown; actions: unknown }>;
 
-    if (activeSiteId) {
-      query = query.or(`site_id.is.null,site_id.eq.${activeSiteId}`);
+    if (date || shift || line) {
+      let shiftsQuery = supabaseAdmin
+        .from("shifts")
+        .select("id")
+        .eq("org_id", activeOrgId);
+
+      if (date) shiftsQuery = shiftsQuery.eq("shift_date", date);
+      if (shift) shiftsQuery = shiftsQuery.eq("shift_type", shift);
+      if (line) shiftsQuery = shiftsQuery.eq("line", line);
+
+      const { data: shiftRows, error: shiftsErr } = await shiftsQuery;
+
+      if (shiftsErr) {
+        console.error("cockpit/summary: shifts query error", shiftsErr);
+        return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+      }
+
+      const shiftIds = (shiftRows || []).map((r: { id: string }) => r.id).filter(Boolean);
+      if (shiftIds.length === 0) {
+        const body: CockpitSummaryResponse = {
+          active_total: 0,
+          active_blocking: 0,
+          active_nonblocking: 0,
+          top_actions: [],
+          by_type: [],
+        };
+        return NextResponse.json(body);
+      }
+
+      const { data: saRows, error: saErr } = await supabaseAdmin
+        .from("shift_assignments")
+        .select("id")
+        .in("shift_id", shiftIds);
+
+      if (saErr) {
+        console.error("cockpit/summary: shift_assignments query error", saErr);
+        return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+      }
+
+      const saIds = (saRows || []).map((r: { id: string }) => r.id).filter(Boolean);
+      if (saIds.length === 0) {
+        const body: CockpitSummaryResponse = {
+          active_total: 0,
+          active_blocking: 0,
+          active_nonblocking: 0,
+          top_actions: [],
+          by_type: [],
+        };
+        return NextResponse.json(body);
+      }
+
+      let edQuery = supabaseAdmin
+        .from("execution_decisions")
+        .select("root_cause, actions")
+        .eq("org_id", activeOrgId)
+        .eq("status", "active")
+        .eq("target_type", "shift_assignment")
+        .in("target_id", saIds);
+
+      if (activeSiteId) {
+        edQuery = edQuery.or(`site_id.is.null,site_id.eq.${activeSiteId}`);
+      }
+
+      const { data: rows, error } = await edQuery;
+      if (error) {
+        console.error("cockpit/summary: execution_decisions query error", error);
+        return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+      }
+      list = (rows || []) as Array<{ root_cause: unknown; actions: unknown }>;
+    } else {
+      let query = supabaseAdmin
+        .from("execution_decisions")
+        .select("root_cause, actions")
+        .eq("org_id", activeOrgId)
+        .eq("status", "active");
+
+      if (activeSiteId) {
+        query = query.or(`site_id.is.null,site_id.eq.${activeSiteId}`);
+      }
+
+      const { data: rows, error } = await query;
+
+      if (error) {
+        console.error("cockpit/summary: execution_decisions query error", error);
+        return NextResponse.json(
+          { error: "Failed to fetch summary" },
+          { status: 500 }
+        );
+      }
+
+      list = (rows || []) as Array<{ root_cause: unknown; actions: unknown }>;
     }
-
-    const { data: rows, error } = await query;
-
-    if (error) {
-      console.error("cockpit/summary: execution_decisions query error", error);
-      return NextResponse.json(
-        { error: "Failed to fetch summary" },
-        { status: 500 }
-      );
-    }
-
-    const list = (rows || []) as Array<{ root_cause: unknown; actions: unknown }>;
 
     let active_blocking = 0;
     let active_nonblocking = 0;

@@ -15,6 +15,7 @@ import { PriorityFixesWidget } from "@/components/cockpit/PriorityFixesWidget";
 import { ActionsWidget } from "@/components/cockpit/ActionsWidget";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 import { StaffingWidget } from "@/components/cockpit/StaffingWidget";
+import { useCockpitFilters } from "@/lib/CockpitFilterContext";
 import { ComplianceWidget } from "@/components/cockpit/ComplianceWidget";
 import { SafetyWidget } from "@/components/cockpit/SafetyWidget";
 import { PlanActualWidget } from "@/components/cockpit/PlanActualWidget";
@@ -72,11 +73,12 @@ function CockpitSkeleton() {
   );
 }
 
+const SHIFT_OPTIONS = ["Day", "Evening", "Night"] as const;
+
 export default function CockpitPage() {
   const { toast } = useToast();
+  const { date, shiftType, line, setDate, setShiftType, setLine } = useCockpitFilters();
   const [isDemo, setIsDemo] = useState(false);
-  const [selectedShift, setSelectedShift] = useState("shift-day");
-  const [selectedLine, setSelectedLine] = useState("all");
   
   const [actions, setActions] = useState<Action[]>([]);
   const [staffingCards, setStaffingCards] = useState<StationStaffingCard[]>([]);
@@ -102,12 +104,18 @@ export default function CockpitPage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  // Load cockpit summary from execution_decisions
+  // Load cockpit summary from execution_decisions (respects date/shift/line filters)
   useEffect(() => {
     let cancelled = false;
     setSummaryLoading(true);
     setSummaryError(null);
-    fetch("/api/cockpit/summary", { credentials: "include" })
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (shiftType) params.set("shift", shiftType);
+    if (line && line !== "all") params.set("line", line);
+    const qs = params.toString();
+    const url = `/api/cockpit/summary${qs ? `?${qs}` : ""}`;
+    fetch(url, { credentials: "include" })
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load summary");
         return res.json();
@@ -128,7 +136,7 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [date, shiftType, line]);
 
   // Load lines from DB
   useEffect(() => {
@@ -270,16 +278,16 @@ export default function CockpitPage() {
     toast({ title: "Handover report generated", description: "PDF ready for download" });
   };
 
-  const today = format(new Date(), "EEEE, MMMM d, yyyy");
+  const dateLabel = format(new Date(date + "T12:00:00"), "EEEE, MMMM d, yyyy");
 
-  const filteredStaffingCards = selectedLine === "all"
+  const filteredStaffingCards = line === "all"
     ? staffingCards
-    : staffingCards.filter(c => c.station.line === selectedLine);
+    : staffingCards.filter((c) => c.station.line === line);
 
   // Use lines from DB if available, otherwise fallback to lines from staffingCards
-  const lines = availableLines.length > 0 
-    ? availableLines 
-    : [...new Set(staffingCards.map(c => c.station.line).filter(Boolean))];
+  const lines = availableLines.length > 0
+    ? availableLines
+    : [...new Set(staffingCards.map((c) => c.station.line).filter(Boolean))];
 
   if (loading) {
     return <CockpitSkeleton />;
@@ -294,33 +302,40 @@ export default function CockpitPage() {
           </h1>
           <p className="text-muted-foreground flex items-center gap-2 mt-1 text-sm">
             <CalendarDays className="h-4 w-4" />
-            {today}
+            {dateLabel}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Select value={selectedShift} onValueChange={setSelectedShift}>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+            data-testid="input-date"
+          />
+          <Select value={shiftType} onValueChange={(v) => setShiftType(v as typeof shiftType)}>
             <SelectTrigger className="w-[130px]" data-testid="select-shift">
               <SelectValue placeholder="Shift" />
             </SelectTrigger>
             <SelectContent>
-              {shifts.map((shift) => (
-                <SelectItem key={shift.id} value={shift.id}>
-                  {shift.name}
+              {SHIFT_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Select value={selectedLine} onValueChange={setSelectedLine}>
+          <Select value={line} onValueChange={setLine}>
             <SelectTrigger className="w-[130px]" data-testid="select-line">
               <SelectValue placeholder="Line" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Lines</SelectItem>
-              {lines.filter(line => line !== "Assembly").map((line) => (
-                <SelectItem key={line} value={line as string}>
-                  {line}
+              {lines.filter((l) => l !== "Assembly").map((l) => (
+                <SelectItem key={l} value={l as string}>
+                  {l}
                 </SelectItem>
               ))}
             </SelectContent>

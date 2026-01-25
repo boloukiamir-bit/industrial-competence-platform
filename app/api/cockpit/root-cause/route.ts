@@ -223,6 +223,22 @@ async function computeRootCause(options: {
 
   const hasMedical = medicalEvents.length > 0;
 
+  if (
+    requirements.length === 0 &&
+    !hasMedical &&
+    expiredCompliance.length === 0 &&
+    trainingEvents.length === 0
+  ) {
+    return {
+      type: "data",
+      message: "Missing requirements data",
+      blocking: false,
+      details: { station_id: stationId, station_name: stationName, employee_id: employeeId },
+      missing: [],
+      recommended_actions: ["fix_data"],
+    } as unknown as RootCausePayload;
+  }
+
   let rootCauseType: RootCauseType = "data";
   let rootCauseMessage = "Root cause not yet classified";
 
@@ -272,12 +288,12 @@ async function computeRootCause(options: {
     }
   } else if (missing.some((m) => m.kind === "skill")) {
     rootCauseType = "competence";
-    rootCauseMessage = "Missing required skills for this station";
+    rootCauseMessage = "Employee lacks required competence";
   }
 
   return {
     type: rootCauseType,
-    message: rootCauseMessage,
+    message: rootCauseMessage || "Root cause not yet classified",
     blocking: true,
     details: {
       station_id: stationId,

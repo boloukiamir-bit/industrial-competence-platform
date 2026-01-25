@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/client";
 /**
  * Normalizes root_cause so missing is at root and details does not contain missing.
  * Handles legacy payloads where missing was stored in details.
+ * Preserves message, type, blocking, and other root keys.
  */
 function normalizeRootCause(rc: unknown): Record<string, unknown> | null {
   if (rc == null || typeof rc !== "object") return rc as null;

@@ -4,16 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AlertCircle, CheckCircle, Loader2, ShieldOff } from "lucide-react";
 import { NoGoResolveDrawer } from "@/components/NoGoResolveDrawer";
 import { createClient } from "@/utils/supabase/client";
+import { useCockpitFilters } from "@/lib/CockpitFilterContext";
 
 type AssignmentRow = {
   id: string;
@@ -22,13 +16,9 @@ type AssignmentRow = {
   status?: string | null;
 };
 
-const shiftOptions = ["Day", "Evening", "Night"] as const;
-
 export function ExecutionDecisionPanel() {
+  const { date, shiftType, line } = useCockpitFilters();
   const [lines, setLines] = useState<string[]>([]);
-  const [selectedLine, setSelectedLine] = useState<string | null>(null);
-  const [shiftType, setShiftType] = useState<(typeof shiftOptions)[number]>("Day");
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -37,6 +27,8 @@ export function ExecutionDecisionPanel() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerAssignment, setDrawerAssignment] = useState<AssignmentRow | null>(null);
 
+  const effectiveLine = (line === "all" || !line) ? (lines[0] ?? null) : line;
+
   useEffect(() => {
     async function fetchLines() {
       try {
@@ -44,7 +36,6 @@ export function ExecutionDecisionPanel() {
         if (response.ok) {
           const data = await response.json();
           setLines(data.lines || []);
-          setSelectedLine((data.lines || [])[0] || null);
         }
       } catch (err) {
         console.error("Failed to load lines", err);
@@ -56,7 +47,7 @@ export function ExecutionDecisionPanel() {
   const supabase = useMemo(() => createClient(), []);
 
   const loadAssignments = async () => {
-    if (!selectedLine) return;
+    if (!effectiveLine) return;
     setLoading(true);
     setError(null);
     try {
@@ -66,7 +57,7 @@ export function ExecutionDecisionPanel() {
         body: JSON.stringify({
           shift_date: date,
           shift_type: shiftType,
-          line: selectedLine,
+          line: effectiveLine,
         }),
       });
 
@@ -137,11 +128,11 @@ export function ExecutionDecisionPanel() {
   };
 
   useEffect(() => {
-    if (selectedLine) {
+    if (effectiveLine) {
       loadAssignments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLine, shiftType, date]);
+  }, [effectiveLine, shiftType, date]);
 
   const handleOpenDrawer = (row: AssignmentRow) => {
     setDrawerAssignment(row);
@@ -169,39 +160,9 @@ export function ExecutionDecisionPanel() {
               Execution Decisions
             </CardTitle>
             <div className="flex flex-wrap gap-2 items-center">
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="h-9 px-3 rounded-md border border-input bg-background text-sm"
-              />
-              <Select value={shiftType} onValueChange={(v) => setShiftType(v as (typeof shiftOptions)[number])}>
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Shift" />
-                </SelectTrigger>
-                <SelectContent>
-                  {shiftOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={selectedLine ?? undefined}
-                onValueChange={(v) => setSelectedLine(v)}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Line" />
-                </SelectTrigger>
-                <SelectContent>
-                  {lines.map((line) => (
-                    <SelectItem key={line} value={line}>
-                      {line}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className="text-xs text-muted-foreground">
+                {date} · {shiftType} · {effectiveLine || "—"}
+              </span>
               <Button variant="outline" size="sm" onClick={loadAssignments} disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
               </Button>
