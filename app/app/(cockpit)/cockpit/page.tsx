@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarDays } from "lucide-react";
 import { PriorityFixesWidget } from "@/components/cockpit/PriorityFixesWidget";
 import { ActionsWidget } from "@/components/cockpit/ActionsWidget";
+import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 import { StaffingWidget } from "@/components/cockpit/StaffingWidget";
 import { ComplianceWidget } from "@/components/cockpit/ComplianceWidget";
 import { SafetyWidget } from "@/components/cockpit/SafetyWidget";
@@ -96,6 +97,38 @@ export default function CockpitPage() {
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<EmployeeSuggestion[]>([]);
   const [availableLines, setAvailableLines] = useState<string[]>([]);
+
+  const [summary, setSummary] = useState<CockpitSummaryResponse | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // Load cockpit summary from execution_decisions
+  useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    fetch("/api/cockpit/summary", { credentials: "include" })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load summary");
+        return res.json();
+      })
+      .then((data: CockpitSummaryResponse) => {
+        if (!cancelled) {
+          setSummary(data);
+          setSummaryError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSummaryError(err instanceof Error ? err.message : "Unable to load summary");
+          setSummary(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSummaryLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Load lines from DB
   useEffect(() => {
@@ -299,6 +332,9 @@ export default function CockpitPage() {
         <PriorityFixesWidget
           items={priorityItems}
           onResolve={handleResolvePriority}
+          summary={summary}
+          summaryLoading={summaryLoading}
+          summaryError={summaryError}
         />
       </div>
 
@@ -347,6 +383,9 @@ export default function CockpitPage() {
             actions={actions}
             onMarkDone={handleMarkActionDone}
             onActionClick={openActionDrawer}
+            summary={summary}
+            summaryLoading={summaryLoading}
+            summaryError={summaryError}
           />
           <HandoverWidget
             openLoops={handoverData.openLoops}
