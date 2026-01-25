@@ -196,7 +196,6 @@ async function computeRootCause(options: {
         code: compInfo?.code || compId,
         label: compInfo?.name || "Required skill",
         required_level: requiredLevel,
-        employee_level: null,
       });
       continue;
     }
