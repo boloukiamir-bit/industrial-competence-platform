@@ -43,20 +43,26 @@ export async function GET(request: NextRequest) {
     const tasks: ExpiringTask[] = [];
 
     // Fetch expiring medical checks using JOIN to filter by org_id (tenant-safe, no IN list)
+    // Exclude items that are resolved (LEFT JOIN and filter out resolved)
     const medicalQuery = `
       SELECT 
         pe.id,
         pe.employee_id,
         pe.title,
         pe.due_date,
-        e.name as employee_name
+        e.name as employee_name,
+        htr.status as resolution_status
       FROM person_events pe
       INNER JOIN employees e ON pe.employee_id = e.id
+      LEFT JOIN hr_task_resolutions htr ON htr.org_id = e.org_id
+        AND htr.task_source = 'medical_check'
+        AND htr.task_id = pe.id
       WHERE e.org_id = $1
         AND e.is_active = true
         AND pe.category = 'medical_check'
         AND pe.completed_date IS NULL
         AND pe.due_date <= $2
+        AND (htr.status IS NULL OR htr.status != 'resolved')
       ORDER BY pe.due_date ASC
     `;
 
@@ -93,20 +99,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch expiring certificates using JOIN to filter by org_id (tenant-safe, no IN list)
+    // Exclude items that are resolved (LEFT JOIN and filter out resolved)
     const certQuery = `
       SELECT 
         d.id,
         d.employee_id,
         d.title,
         d.valid_to,
-        e.name as employee_name
+        e.name as employee_name,
+        htr.status as resolution_status
       FROM documents d
       INNER JOIN employees e ON d.employee_id = e.id
+      LEFT JOIN hr_task_resolutions htr ON htr.org_id = e.org_id
+        AND htr.task_source = 'certificate'
+        AND htr.task_id = d.id
       WHERE e.org_id = $1
         AND e.is_active = true
         AND d.type = 'certificate'
         AND d.valid_to IS NOT NULL
         AND d.valid_to <= $2
+        AND (htr.status IS NULL OR htr.status != 'resolved')
       ORDER BY d.valid_to ASC
     `;
 

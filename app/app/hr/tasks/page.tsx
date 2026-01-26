@@ -3,6 +3,24 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { AlertTriangle } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getHrTaskBuckets, HrTaskBuckets, HrTask, ExpiringItem } from "@/services/hrTasks";
@@ -221,7 +239,21 @@ function HrTasksBody({
           />
 
           {buckets.expiring && buckets.expiring.length > 0 && (
-            <ExpiringSection expiring={buckets.expiring} />
+            <ExpiringSection 
+              expiring={buckets.expiring}
+              onResolve={() => {
+                // Refresh buckets after resolve
+                setBuckets(null);
+                setLoading(true);
+                getHrTaskBuckets()
+                  .then(setBuckets)
+                  .catch((err) => {
+                    console.error(err);
+                    setError("Could not load HR tasks.");
+                  })
+                  .finally(() => setLoading(false));
+              }}
+            />
           )}
         </>
       )}
@@ -229,16 +261,19 @@ function HrTasksBody({
   );
 }
 
-function ExpiringSection({ expiring }: { expiring: Array<{
-  id: string;
-  employee_id: string;
-  employee_name: string | null;
-  type: "medical" | "cert";
-  item_name: string;
-  expires_on: string;
-  days_to_expiry: number;
-  severity: "P0" | "P1" | "P2";
-}> }) {
+function ExpiringSection({ expiring, onResolve }: { 
+  expiring: Array<{
+    id: string;
+    employee_id: string;
+    employee_name: string | null;
+    type: "medical" | "cert";
+    item_name: string;
+    expires_on: string;
+    days_to_expiry: number;
+    severity: "P0" | "P1" | "P2";
+  }>;
+  onResolve: () => void;
+}) {
   return (
     <section className="hr-task-section" data-testid="section-expiring">
       <header className="hr-task-section__header">
