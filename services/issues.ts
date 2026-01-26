@@ -1,7 +1,12 @@
 import type { IssueInboxItem } from "@/types/issues";
 
-export async function getIssueInbox(): Promise<IssueInboxItem[]> {
-  const response = await fetch("/api/issues/inbox", {
+export async function getIssueInbox(includeResolved?: boolean): Promise<IssueInboxItem[]> {
+  const url = new URL("/api/issues/inbox", window.location.origin);
+  if (includeResolved) {
+    url.searchParams.set("includeResolved", "1");
+  }
+
+  const response = await fetch(url.toString(), {
     credentials: "include",
   });
 

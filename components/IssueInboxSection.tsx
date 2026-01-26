@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { getIssueInbox } from "@/services/issues";
 import type { IssueInboxItem } from "@/types/issues";
@@ -28,6 +29,7 @@ export function IssueInboxSection() {
   const [items, setItems] = useState<IssueInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<IssueInboxItem | null>(null);
   const [resolveStatus, setResolveStatus] = useState<"resolved" | "snoozed">("resolved");
@@ -37,9 +39,11 @@ export function IssueInboxSection() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
-        const data = await getIssueInbox();
+        const data = await getIssueInbox(showResolved);
         setItems(data);
+        setError(null);
       } catch (err) {
         console.error(err);
         setError("Could not load issues.");
@@ -48,7 +52,7 @@ export function IssueInboxSection() {
       }
     }
     load();
-  }, []);
+  }, [showResolved]);
 
   const handleResolve = async () => {
     if (!selectedItem) return;
@@ -91,7 +95,7 @@ export function IssueInboxSection() {
       }
 
       // Refresh items
-      const data = await getIssueInbox();
+      const data = await getIssueInbox(showResolved);
       setItems(data);
       setResolveDialogOpen(false);
       setSelectedItem(null);
@@ -132,31 +136,35 @@ export function IssueInboxSection() {
     return labels[type];
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading issues...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-start gap-2 text-sm text-destructive py-8">
-        <AlertCircle className="h-4 w-4 mt-0.5" />
-        <span>{error}</span>
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return <p className="hr-task-empty">No issues found.</p>;
-  }
-
   return (
     <>
-      <div className="hr-task-list">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="show-resolved" className="text-sm font-normal cursor-pointer">
+            Show resolved
+          </Label>
+          <Switch
+            id="show-resolved"
+            checked={showResolved}
+            onCheckedChange={setShowResolved}
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading issues...
+        </div>
+      ) : error ? (
+        <div className="flex items-start gap-2 text-sm text-destructive py-8">
+          <AlertCircle className="h-4 w-4 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      ) : items.length === 0 ? (
+        <p className="hr-task-empty">No issues found.</p>
+      ) : (
+        <div className="hr-task-list">
         {items.map((item) => {
           const severityBadge = getSeverityBadge(item.severity);
           const dueDate = item.due_date
@@ -248,7 +256,8 @@ export function IssueInboxSection() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       <Dialog open={resolveDialogOpen} onOpenChange={setResolveDialogOpen}>
         <DialogContent>

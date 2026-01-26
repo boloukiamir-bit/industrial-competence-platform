@@ -50,6 +50,10 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
+    // Read includeResolved query param (default false)
+    const searchParams = request.nextUrl.searchParams;
+    const includeResolved = searchParams.get("includeResolved") === "1" || searchParams.get("includeResolved") === "true";
+
     const orgId = session.orgId;
 
     // Get active site filter if available
@@ -264,8 +268,13 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching HR issues:", err);
     }
 
-    // 3. Sort by severity (P0 first), then due_date ascending (nulls last)
-    items.sort((a, b) => {
+    // 3. Filter out resolved items if includeResolved is false (default)
+    const filteredItems = includeResolved
+      ? items
+      : items.filter((item) => item.resolution_status !== "resolved");
+
+    // 4. Sort by severity (P0 first), then due_date ascending (nulls last)
+    filteredItems.sort((a, b) => {
       const severityOrder = { P0: 0, P1: 1, P2: 2 };
       const severityDiff = severityOrder[a.severity] - severityOrder[b.severity];
       if (severityDiff !== 0) return severityDiff;
@@ -277,8 +286,8 @@ export async function GET(request: NextRequest) {
       return a.due_date.localeCompare(b.due_date);
     });
 
-    // 4. Limit to top 200 items
-    const limitedItems = items.slice(0, 200);
+    // 5. Limit to top 200 items
+    const limitedItems = filteredItems.slice(0, 200);
 
     const res = NextResponse.json(limitedItems);
     applySupabaseCookies(res, pendingCookies);
