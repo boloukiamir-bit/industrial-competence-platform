@@ -27,7 +27,8 @@ import {
   Factory,
   Target
 } from "lucide-react";
-import { getCurrentUser, type CurrentUser } from "@/lib/auth";
+import { getCurrentUser, type CurrentUser, isHrAdmin } from "@/lib/auth";
+import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
@@ -57,6 +58,7 @@ const coreNavItems: NavItem[] = [
 
 const hrNavItems: NavItem[] = [
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
+  { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
   { name: "HR Workflows", href: "/app/workflows/templates", icon: Workflow, hrAdminOnly: true },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
@@ -116,21 +118,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  const filterItems = (items: NavItem[]) => 
-    items.filter((item) => {
-      if (item.hrAdminOnly && user?.role !== "HR_ADMIN") return false;
-      return true;
-    });
-
   // DEV MODE: Show ALL navigation including Spaljisten to ALL authenticated users
   // PROD MODE: Would check DB membership for Spaljisten org (not email domain)
   const showSpaljistenNav = isDevMode || isSpaljistenPage;
-
-  const visibleCoreItems = filterItems(coreNavItems);
-  const visibleHrItems = filterItems(hrNavItems);
-  const visibleMoreItems = moreNavItems;
-  const visibleSettingsItems = filterItems(settingsNavItems);
-  const visibleSpaljistenItems = showSpaljistenNav ? spaljistenNavItems : [];
 
   const renderNavItem = (item: NavItem) => {
     const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -156,6 +146,56 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <OrgProvider>
+      <AppLayoutContent 
+        pathname={pathname}
+        authUser={authUser}
+        user={user}
+        handleSignOut={handleSignOut}
+        isDevMode={isDevMode}
+        showSpaljistenNav={showSpaljistenNav}
+        renderNavItem={renderNavItem}
+      >
+        {children}
+      </AppLayoutContent>
+    </OrgProvider>
+  );
+}
+
+function AppLayoutContent({
+  pathname,
+  authUser,
+  user,
+  handleSignOut,
+  isDevMode,
+  showSpaljistenNav,
+  renderNavItem,
+  children,
+}: {
+  pathname: string | null;
+  authUser: any;
+  user: CurrentUser | null;
+  handleSignOut: () => void;
+  isDevMode: boolean;
+  showSpaljistenNav: boolean;
+  renderNavItem: (item: NavItem) => JSX.Element;
+  children: React.ReactNode;
+}) {
+  const { currentRole } = useOrg();
+
+  const filterItems = (items: NavItem[]) => 
+    items.filter((item) => {
+      if (item.hrAdminOnly && !isHrAdmin(currentRole)) return false;
+      return true;
+    });
+
+  const visibleCoreItems = filterItems(coreNavItems);
+  const visibleHrItems = filterItems(hrNavItems);
+  const visibleMoreItems = moreNavItems;
+  const visibleSettingsItems = filterItems(settingsNavItems);
+  const visibleSpaljistenItems = showSpaljistenNav ? spaljistenNavItems : [];
+
+  return (
+    <>
       <GlobalErrorHandler />
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
         <DemoModeBanner />
@@ -253,6 +293,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-    </OrgProvider>
+    </>
   );
 }
