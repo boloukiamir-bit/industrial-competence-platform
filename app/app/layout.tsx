@@ -182,11 +182,14 @@ function AppLayoutContent({
 }) {
   const { currentRole } = useOrg();
 
-  const filterItems = (items: NavItem[]) => 
-    items.filter((item) => {
-      if (item.hrAdminOnly && !isHrAdmin(currentRole)) return false;
+  const filterItems = (items: NavItem[]) => {
+    // Normalize role safely for casing and undefined handling
+    const roleNormalized = (currentRole ?? "").toLowerCase();
+    return items.filter((item) => {
+      if (item.hrAdminOnly && !isHrAdmin(roleNormalized)) return false;
       return true;
     });
+  };
 
   const visibleCoreItems = filterItems(coreNavItems);
   const visibleHrItems = filterItems(hrNavItems);
