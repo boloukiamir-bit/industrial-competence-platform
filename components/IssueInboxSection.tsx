@@ -86,26 +86,13 @@ export function IssueInboxSection() {
     }
   };
 
-  const handleViewCockpit = async (item: IssueInboxItem) => {
-    if (item.source !== "cockpit" || !item.native_ref.shift_assignment_id) {
+  const handleViewCockpit = (item: IssueInboxItem) => {
+    const id = item.native_ref?.shift_assignment_id;
+    if (id) {
+      router.push(`/app/cockpit?shift_assignment_id=${id}`);
+    } else {
       router.push("/app/cockpit");
-      return;
     }
-
-    // Try to extract date from subtitle if available (format: "2026-01-26 Day")
-    // Otherwise navigate to base cockpit page
-    if (item.subtitle) {
-      const parts = item.subtitle.split(" ");
-      if (parts.length >= 2) {
-        const date = parts[0];
-        const shiftType = parts[1].toLowerCase();
-        router.push(`/app/cockpit?date=${date}&shift=${shiftType}&line=all`);
-        return;
-      }
-    }
-
-    // Fallback: navigate to base cockpit page
-    router.push("/app/cockpit");
   };
 
   const getSeverityBadge = (severity: "P0" | "P1" | "P2") => {
@@ -212,7 +199,7 @@ export function IssueInboxSection() {
                       variant="outline"
                       onClick={() => handleViewCockpit(item)}
                     >
-                      View
+                      Open in Cockpit
                     </Button>
                   )}
                 </div>
