@@ -5,13 +5,9 @@ declare global {
   var __pgPool: Pool | undefined;
 }
 
-function createPool() {
+function createPool(): Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    // During build, DATABASE_URL may not be available - return a dummy pool that will error on use
-    if (process.env.NEXT_PHASE === "phase-production-build") {
-      return {} as Pool;
-    }
     throw new Error("Missing DATABASE_URL");
   }
 
@@ -24,10 +20,23 @@ function createPool() {
   });
 }
 
+// Lazy initialization: only create pool when actually used (not during build)
 function getPool(): Pool {
-  if (!global.__pgPool) {
-    global.__pgPool = createPool();
+  if (global.__pgPool) {
+    return global.__pgPool;
   }
+  
+  // During build phase, DATABASE_URL may not be set - defer creation
+  if (!process.env.DATABASE_URL && (process.env.NEXT_PHASE === "phase-production-build" || !process.env.NODE_ENV)) {
+    // Return a proxy that will throw on actual use, but allows module to load
+    return new Proxy({} as Pool, {
+      get() {
+        throw new Error("Pool not initialized - DATABASE_URL required at runtime");
+      },
+    });
+  }
+  
+  global.__pgPool = createPool();
   return global.__pgPool;
 }
 
