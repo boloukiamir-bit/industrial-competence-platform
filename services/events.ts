@@ -53,7 +53,10 @@ export async function getEventsForManager(managerId: string): Promise<PersonEven
     .order("due_date", { ascending: true });
 
   if (error) {
-    console.error("Failed to fetch events:", error);
+    // Only log errors in development to reduce console noise
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to fetch events:", error.message || error);
+    }
     return [];
   }
 
@@ -93,7 +96,10 @@ export async function getAllEvents(): Promise<PersonEvent[]> {
     .order("due_date", { ascending: true });
 
   if (error) {
-    console.error("Failed to fetch events:", error);
+    // Only log errors in development to reduce console noise
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to fetch events:", error.message || error);
+    }
     return [];
   }
 

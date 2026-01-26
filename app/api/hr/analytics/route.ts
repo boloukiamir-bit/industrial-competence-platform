@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/pgClient";
 import type { HRAnalyticsV2 } from "@/types/domain";
+import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
@@ -128,15 +130,39 @@ async function getSpaljistenAnalytics(): Promise<HRAnalyticsV2> {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Authenticate and get org session
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
+    if (!session.success) {
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    // Verify user has access to HR analytics (admin or hr role)
+    if (session.role !== "admin" && session.role !== "hr") {
+      const res = NextResponse.json({ error: "Forbidden: HR admin access required" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
     const analytics = await getSpaljistenAnalytics();
-    return NextResponse.json(analytics);
+    const res = NextResponse.json(analytics);
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (err) {
     console.error("Analytics API error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch analytics" },
-      { status: 500 }
-    );
+    const errorMessage = err instanceof Error ? err.message : "Failed to fetch analytics";
+    const res = NextResponse.json({ error: errorMessage }, { status: 500 });
+    // Try to apply cookies even on error
+    try {
+      const { pendingCookies } = await createSupabaseServerClient();
+      applySupabaseCookies(res, pendingCookies);
+    } catch {
+      // Ignore cookie errors on error path
+    }
+    return res;
   }
 }
