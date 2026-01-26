@@ -13,19 +13,6 @@ import { isHrAdmin } from "@/lib/auth";
 
 export default function HrTasksPage() {
   const { loading: authLoading } = useAuthGuard();
-
-  if (authLoading) {
-    return (
-      <main className="hr-page">
-        <p>Checking access...</p>
-      </main>
-    );
-  }
-
-  return <HrTasksContent />;
-}
-
-function HrTasksContent() {
   const { currentRole, isLoading: orgLoading, currentOrg, memberships } = useOrg();
   const { user: authUser } = useAuth();
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -47,7 +34,15 @@ function HrTasksContent() {
     }
   }, [authUser]);
 
-  // Render flow: loading -> access denied -> body
+  // Render flow: auth loading -> org loading -> access denied -> body
+  if (authLoading) {
+    return (
+      <main className="hr-page">
+        <p>Checking access...</p>
+      </main>
+    );
+  }
+
   if (orgLoading) {
     return (
       <main className="hr-page">
