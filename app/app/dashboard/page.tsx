@@ -5,8 +5,11 @@ import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { HrDashboard } from "@/components/dashboard/HrDashboard";
 import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
 import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
+import { useOrg } from "@/hooks/useOrg";
+import { isHrAdmin } from "@/lib/auth";
 
 export default function DashboardPage() {
+  const { currentRole } = useOrg();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +66,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {user?.role === "HR_ADMIN" && <HrDashboard />}
+      {isHrAdmin(currentRole) && <HrDashboard />}
       {user?.role === "MANAGER" && <ManagerDashboard user={user} />}
       {user?.role === "EMPLOYEE" && <EmployeeDashboard user={user} />}
       {!user?.role && (

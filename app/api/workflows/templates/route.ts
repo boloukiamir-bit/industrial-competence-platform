@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
 import { getOrgIdFromSession, isAdminOrHr } from "@/lib/orgSession";
+
+export const runtime = "nodejs";
 
 const VALID_CATEGORIES = ["Production", "Safety", "HR", "Quality", "Maintenance", "Competence"];
 const VALID_OWNER_ROLES = ["HR", "Supervisor", "IT", "Quality", "Maintenance", "Employee"];

@@ -55,6 +55,8 @@ export default function DebugPage() {
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [repairResult, setRepairResult] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
+  const [linkingEmployee, setLinkingEmployee] = useState(false);
+  const [linkResult, setLinkResult] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribe((state) => {
@@ -179,6 +181,26 @@ export default function DebugPage() {
       setRepairResult(err instanceof Error ? err.message : 'Repair failed');
     } finally {
       setRepairing(false);
+    }
+  };
+
+  const handleLinkEmployee = async () => {
+    setLinkingEmployee(true);
+    setLinkResult(null);
+    
+    try {
+      const result = await apiPost<{ message: string; employeeId?: string; employeeName?: string; error?: string }>('/api/debug/link-employee', {});
+      setLinkResult(result.message || result.error || 'Success');
+      // Refresh page after successful link to reload user data
+      if (result.message && !result.error) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (err) {
+      setLinkResult(err instanceof Error ? err.message : 'Failed to link employee');
+    } finally {
+      setLinkingEmployee(false);
     }
   };
 
@@ -358,6 +380,39 @@ export default function DebugPage() {
                 {isAuthenticated ? 'Yes' : 'No'}
               </span>
             </div>
+            {!isDemoMode() && currentOrg && (currentRole === 'admin' || currentRole === 'hr' || process.env.NODE_ENV !== 'production') && (
+              <div className="pt-2 border-t border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLinkEmployee}
+                  disabled={linkingEmployee}
+                  className="w-full"
+                  data-testid="button-link-employee"
+                >
+                  {linkingEmployee ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                      Linking...
+                    </>
+                  ) : (
+                    <>
+                      <User className="w-3 h-3 mr-2" />
+                      Link my user to an employee
+                    </>
+                  )}
+                </Button>
+                {linkResult && (
+                  <p className={`text-xs mt-2 ${
+                    linkResult.includes('error') || linkResult.includes('Error') || linkResult.includes('Failed')
+                      ? 'text-destructive'
+                      : 'text-green-600'
+                  }`}>
+                    {linkResult}
+                  </p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

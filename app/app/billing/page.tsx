@@ -7,8 +7,11 @@ import { Check, CreditCard } from "lucide-react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { pricingConfig, calculateYearlyCost, type PlanId } from "@/lib/pricing";
 import { supabase } from "@/lib/supabaseClient";
+import { useOrg } from "@/hooks/useOrg";
+import { isHrAdmin } from "@/lib/auth";
 
 export default function BillingPage() {
+  const { currentRole } = useOrg();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [headcount, setHeadcount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -39,7 +42,8 @@ export default function BillingPage() {
     );
   }
 
-  if (user?.role !== "HR_ADMIN") {
+  // Check HR access using memberships.role (tenant-scoped) instead of profiles.role
+  if (!isHrAdmin(currentRole)) {
     return (
       <div className="p-8">
         <Card>

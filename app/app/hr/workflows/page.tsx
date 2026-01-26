@@ -42,6 +42,8 @@ import {
 } from "@/services/hrWorkflows";
 import { supabase } from "@/lib/supabaseClient";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
+import { useOrg } from "@/hooks/useOrg";
+import { isHrAdmin } from "@/lib/auth";
 import type { 
   HRWorkflowTemplate, 
   HRWorkflowInstance, 
@@ -65,6 +67,7 @@ export default function HRWorkflowsPage() {
 }
 
 function HRWorkflowsPageContent() {
+  const { currentRole } = useOrg();
   const [templates] = useState<HRWorkflowTemplate[]>(getWorkflowTemplates());
   const [instances, setInstances] = useState<HRWorkflowInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,8 +100,8 @@ function HRWorkflowsPageContent() {
 
   useEffect(() => {
     async function checkAuthAndLoad() {
-      const user = await getCurrentUser();
-      if (!user || user.role !== "HR_ADMIN") {
+      // Check HR access using memberships.role (tenant-scoped) instead of profiles.role
+      if (!isHrAdmin(currentRole)) {
         setAuthorized(false);
         setLoading(false);
         return;

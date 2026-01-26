@@ -32,14 +32,22 @@ export default function LoginPage() {
     async function checkExistingSession() {
       try {
         const session = await getSession();
-        if (session?.user) {
-          // Get user role and redirect accordingly
+        if (session?.user && session?.access_token && session?.refresh_token) {
+          // Sync to cookies so /api/* can read auth, then redirect
+          await fetch('/api/auth/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            }),
+            credentials: 'include',
+          });
           const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', session.user.id)
             .single();
-          
           const redirectPath = getRoleRedirectPath(profile?.role || null);
           router.replace(redirectPath);
         } else {
@@ -98,7 +106,18 @@ export default function LoginPage() {
     try {
       const session = await signInWithEmail(email, password);
       
-      if (session?.user) {
+      if (session?.user && session?.session) {
+        // Sync session to cookies so /api/* routes can read auth
+        await fetch('/api/auth/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: session.session.access_token,
+            refresh_token: session.session.refresh_token,
+          }),
+          credentials: 'include',
+        });
+
         // Check if bootstrap is needed or get role
         const { needsBootstrap, role } = await checkBootstrapStatus(session.user.id);
         

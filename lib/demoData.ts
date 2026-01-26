@@ -1,3 +1,5 @@
+const isProd = process.env.NODE_ENV === 'production';
+
 export interface DemoEmployee {
   id: string;
   employeeNumber: string;
@@ -48,7 +50,7 @@ export interface DemoEmployeeSkill {
   level: number;
 }
 
-export const DEMO_EMPLOYEES: DemoEmployee[] = [
+const DEMO_EMPLOYEES_DATA: DemoEmployee[] = [
   { id: "E1001", employeeNumber: "E1001", name: "Anna Lindberg", firstName: "Anna", lastName: "Lindberg", email: "anna.lindberg@example.com", role: "Operator", line: "Pressline 1", team: "Day Shift", startDate: "2020-03-15", isActive: true },
   { id: "E1002", employeeNumber: "E1002", name: "Erik Johansson", firstName: "Erik", lastName: "Johansson", email: "erik.johansson@example.com", role: "Operator", line: "Pressline 1", team: "Day Shift", startDate: "2019-06-01", isActive: true },
   { id: "E1003", employeeNumber: "E1003", name: "Maria Svensson", firstName: "Maria", lastName: "Svensson", email: "maria.svensson@example.com", role: "Team Lead", line: "Pressline 1", team: "Day Shift", startDate: "2018-01-10", isActive: true },
@@ -61,7 +63,9 @@ export const DEMO_EMPLOYEES: DemoEmployee[] = [
   { id: "E1010", employeeNumber: "E1010", name: "Viktor Olsson", firstName: "Viktor", lastName: "Olsson", email: "viktor.olsson@example.com", role: "Logistics Coordinator", line: "Logistics", team: "Day Shift", startDate: "2018-12-01", isActive: true },
 ];
 
-export const DEMO_SKILLS: DemoSkill[] = [
+export const DEMO_EMPLOYEES: DemoEmployee[] = isProd ? [] : DEMO_EMPLOYEES_DATA;
+
+const DEMO_SKILLS_DATA: DemoSkill[] = [
   { id: "SK001", code: "PRESS_A", name: "Pressline A Operation", groupId: "G1", groupName: "Production" },
   { id: "SK002", code: "PRESS_B", name: "Pressline B Operation", groupId: "G1", groupName: "Production" },
   { id: "SK003", code: "SAFETY_BASIC", name: "Safety Basic", groupId: "G2", groupName: "Safety" },
@@ -72,7 +76,9 @@ export const DEMO_SKILLS: DemoSkill[] = [
   { id: "SK008", code: "FIRST_AID", name: "First Aid Certified", groupId: "G2", groupName: "Safety" },
 ];
 
-export const DEMO_POSITIONS: DemoPosition[] = [
+export const DEMO_SKILLS: DemoSkill[] = isProd ? [] : DEMO_SKILLS_DATA;
+
+const DEMO_POSITIONS_DATA: DemoPosition[] = [
   { id: "P1", name: "Pressline 1 Operator", line: "Pressline 1", minHeadcount: 4 },
   { id: "P2", name: "Pressline 2 Operator", line: "Pressline 2", minHeadcount: 3 },
   { id: "P3", name: "Assembly Operator", line: "Assembly", minHeadcount: 3 },
@@ -80,7 +86,9 @@ export const DEMO_POSITIONS: DemoPosition[] = [
   { id: "P5", name: "Logistics Coordinator", line: "Logistics", minHeadcount: 2 },
 ];
 
-export const DEMO_ORG_UNITS: DemoOrgUnit[] = [
+export const DEMO_POSITIONS: DemoPosition[] = isProd ? [] : DEMO_POSITIONS_DATA;
+
+const DEMO_ORG_UNITS_DATA: DemoOrgUnit[] = [
   { id: "OU1", name: "Manufacturing Division", code: "MFG", type: "Division", parentId: null, employeeCount: 10 },
   { id: "OU2", name: "Pressline Department", code: "PRESS", type: "Department", parentId: "OU1", employeeCount: 6 },
   { id: "OU3", name: "Assembly Department", code: "ASSY", type: "Department", parentId: "OU1", employeeCount: 2 },
@@ -88,7 +96,9 @@ export const DEMO_ORG_UNITS: DemoOrgUnit[] = [
   { id: "OU5", name: "Logistics Department", code: "LOG", type: "Department", parentId: "OU1", employeeCount: 1 },
 ];
 
-export const DEMO_REQUIREMENTS: DemoRequirement[] = [
+export const DEMO_ORG_UNITS: DemoOrgUnit[] = isProd ? [] : DEMO_ORG_UNITS_DATA;
+
+const DEMO_REQUIREMENTS_DATA: DemoRequirement[] = [
   { positionId: "P1", skillId: "SK001", requiredLevel: 3 },
   { positionId: "P1", skillId: "SK002", requiredLevel: 2 },
   { positionId: "P1", skillId: "SK003", requiredLevel: 3 },
@@ -104,7 +114,9 @@ export const DEMO_REQUIREMENTS: DemoRequirement[] = [
   { positionId: "P5", skillId: "SK006", requiredLevel: 2 },
 ];
 
-export const DEMO_EMPLOYEE_SKILLS: DemoEmployeeSkill[] = [
+export const DEMO_REQUIREMENTS: DemoRequirement[] = isProd ? [] : DEMO_REQUIREMENTS_DATA;
+
+const DEMO_EMPLOYEE_SKILLS_DATA: DemoEmployeeSkill[] = [
   { employeeId: "E1001", skillId: "SK001", level: 4 },
   { employeeId: "E1001", skillId: "SK002", level: 2 },
   { employeeId: "E1001", skillId: "SK003", level: 3 },
@@ -137,6 +149,8 @@ export const DEMO_EMPLOYEE_SKILLS: DemoEmployeeSkill[] = [
   { employeeId: "E1010", skillId: "SK006", level: 3 },
 ];
 
+export const DEMO_EMPLOYEE_SKILLS: DemoEmployeeSkill[] = isProd ? [] : DEMO_EMPLOYEE_SKILLS_DATA;
+
 export function isDemoMode(): boolean {
   if (typeof window !== "undefined") {
     const urlParams = new URLSearchParams(window.location.search);
@@ -146,6 +160,21 @@ export function isDemoMode(): boolean {
 }
 
 export function getDemoMetrics() {
+  if (isProd) {
+    return {
+      totalEmployees: 0,
+      activeEmployees: 0,
+      totalSkills: 0,
+      totalPositions: 0,
+      totalOrgUnits: 0,
+      employeesAtRisk: 0,
+      totalGaps: 0,
+      criticalGaps: 0,
+      topGapSkill: "",
+      averageReadiness: 0,
+    };
+  }
+
   const employeesAtRisk = 3;
   const totalGaps = 5;
   const criticalGaps = 2;

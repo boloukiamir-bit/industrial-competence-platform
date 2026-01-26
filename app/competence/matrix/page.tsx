@@ -24,32 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
-
-const DEMO_COMPETENCES = [
-  { id: 'c1', label: 'Safety Training', requiredLevel: 3, groupName: 'Safety' },
-  { id: 'c2', label: 'Machine Operation', requiredLevel: 4, groupName: 'Operations' },
-  { id: 'c3', label: 'Quality Control', requiredLevel: 3, groupName: 'Quality' },
-  { id: 'c4', label: 'First Aid', requiredLevel: 2, groupName: 'Safety' },
-  { id: 'c5', label: 'Forklift Cert', requiredLevel: 3, groupName: 'Logistics' },
-  { id: 'c6', label: 'Welding', requiredLevel: 4, groupName: 'Fabrication' },
-  { id: 'c7', label: 'CNC Programming', requiredLevel: 3, groupName: 'Operations' },
-  { id: 'c8', label: 'Lean Manufacturing', requiredLevel: 2, groupName: 'Process' },
-];
-
-const DEMO_EMPLOYEES = [
-  { id: 'e1', name: 'Anna Lindqvist', levels: [3, 4, 3, 2, 3, 4, 3, 2] },
-  { id: 'e2', name: 'Erik Johansson', levels: [3, 3, 2, 2, 2, 4, 3, 2] },
-  { id: 'e3', name: 'Maria Svensson', levels: [2, 4, 3, 1, 3, 3, 2, 2] },
-  { id: 'e4', name: 'Lars Andersson', levels: [3, 2, 3, 2, 3, 4, 1, 1] },
-  { id: 'e5', name: 'Sofia Karlsson', levels: [3, 4, 2, 2, 2, 4, 3, 2] },
-  { id: 'e6', name: 'Johan Eriksson', levels: [1, 3, 3, 2, 3, 2, 3, 2] },
-  { id: 'e7', name: 'Karin Olsson', levels: [3, 4, 3, 2, 1, 4, 3, 2] },
-  { id: 'e8', name: 'Peter Nilsson', levels: [3, 4, 3, 0, 3, 4, 3, 1] },
-  { id: 'e9', name: 'Emma Larsson', levels: [2, 3, 2, 2, 2, 3, 2, 2] },
-  { id: 'e10', name: 'Oscar Pettersson', levels: [3, 4, 3, 2, 3, 4, 3, 2] },
-];
+import { supabase } from '@/lib/supabaseClient';
 
 function computeStatus(current: number | null, required: number): 'OK' | 'GAP' | 'RISK' {
   if (current === null || current === 0) return 'RISK';
@@ -66,38 +41,6 @@ function computeRiskLevel(statuses: ('OK' | 'GAP' | 'RISK')[]): 'LOW' | 'MEDIUM'
   return 'LOW';
 }
 
-function generateDemoData(): { columns: MatrixColumn[], rows: MatrixRow[] } {
-  const columns: MatrixColumn[] = DEMO_COMPETENCES.map(c => ({
-    competenceId: c.id,
-    label: c.label,
-    groupName: c.groupName,
-    requiredLevel: c.requiredLevel,
-  }));
-
-  const rows: MatrixRow[] = DEMO_EMPLOYEES.map(emp => {
-    const items = emp.levels.map((level, idx) => {
-      const required = DEMO_COMPETENCES[idx].requiredLevel;
-      return {
-        competenceId: DEMO_COMPETENCES[idx].id,
-        status: computeStatus(level, required),
-        level,
-        requiredLevel: required,
-      };
-    });
-
-    const statuses = items.map(i => i.status);
-    const riskLevel = computeRiskLevel(statuses);
-
-    return {
-      employeeId: emp.id,
-      employeeName: emp.name,
-      riskLevel,
-      items,
-    };
-  });
-
-  return { columns, rows };
-}
 
 export default function CompetenceMatrixPage() {
   const { loading: authLoading } = useAuthGuard();
@@ -119,27 +62,44 @@ function CompetenceMatrixContent() {
   const [rows, setRows] = useState<MatrixRow[]>([]);
   const [loadingMatrix, setLoadingMatrix] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const isDemoMode = useMemo(() => {
-    if (typeof window === 'undefined') return DEMO_MODE;
-    const urlParams = new URLSearchParams(window.location.search);
-    return DEMO_MODE || urlParams.get('demo') === 'true';
-  }, []);
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
 
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const [loadingPositions, setLoadingPositions] = useState(true);
 
+  // Load active_org_id
   useEffect(() => {
-    if (isDemoMode) {
-      const { columns: demoCols, rows: demoRows } = generateDemoData();
-      setColumns(demoCols);
-      setRows(demoRows);
-      setPositions([{ id: 'demo', name: 'Demo Position', site: null, department: 'Demo' }]);
-      setSelectedPositionId('demo');
-      setLoadingPositions(false);
-      return;
+    async function loadActiveOrgId() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          setActiveOrgId(null);
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("active_org_id")
+          .eq("id", session.user.id)
+          .single();
+
+        if (profileError || !profile?.active_org_id) {
+          console.error("Failed to load active organization:", profileError);
+          setActiveOrgId(null);
+          return;
+        }
+
+        setActiveOrgId(profile.active_org_id as string);
+      } catch (error) {
+        console.error("Error loading active organization:", error);
+        setActiveOrgId(null);
+      }
     }
 
+    loadActiveOrgId();
+  }, []);
+
+  useEffect(() => {
     async function loadPositions() {
       try {
         const posData = await getAllPositions();
@@ -155,7 +115,6 @@ function CompetenceMatrixContent() {
   }, []);
 
   useEffect(() => {
-    if (isDemoMode) return;
     if (!selectedPositionId) {
       setColumns([]);
       setRows([]);
@@ -475,6 +434,18 @@ function CompetenceMatrixContent() {
         {selectedPositionId && !loadingMatrix && rows.length > 0 && columns.length === 0 && (
           <div className="p-6 rounded-lg border border-dashed border-border bg-muted/50 text-center">
             <p className="text-muted-foreground">No mandatory competences defined for this position.</p>
+          </div>
+        )}
+
+        {!activeOrgId && !loadingPositions && (
+          <div className="p-6 rounded-lg border border-dashed border-border bg-muted/50 text-center">
+            <p className="text-muted-foreground">No active organization found. Please select an organization.</p>
+          </div>
+        )}
+
+        {activeOrgId && selectedPositionId && !loadingMatrix && rows.length === 0 && columns.length === 0 && (
+          <div className="p-6 rounded-lg border border-dashed border-border bg-muted/50 text-center">
+            <p className="text-muted-foreground">No competences found for this organization.</p>
           </div>
         )}
       </main>

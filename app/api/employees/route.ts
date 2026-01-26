@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+
+export const runtime = "nodejs";
 
 const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
@@ -37,10 +39,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ employees: result.rows });
   } catch (err) {
-    console.error("Employees fetch error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch employees" },
-      { status: 500 }
-    );
+    console.error("GET /api/employees failed:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -212,51 +212,38 @@ async function checkDelegationBlockers(employeeIds: string[]): Promise<Map<strin
   return blockers;
 }
 
+/**
+ * Get execution decisions (GO/NO-GO) per line and shift.
+ * @param date - plan date (YYYY-MM-DD)
+ * @param shiftType - optional shift to limit to
+ * @param orgId - active org (required); lines are taken from stations for this org
+ * @param siteId - optional; if stations supported site_id, would filter (currently unused)
+ */
 export async function getExecutionDecisions(
   date: string,
-  shiftType?: ShiftType
+  shiftType?: ShiftType,
+  orgId?: string,
+  _siteId?: string | null
 ): Promise<ExecutionDecisionData> {
   const shifts: ShiftType[] = shiftType ? [shiftType] : ["Day", "Evening", "Night"];
 
-  // Use pl_lines if non-empty; otherwise derive lines from operators (employees.line)
-  let linesData: Array<{ line_code: string; line_name: string }> = [];
-
-  const { data: plLinesData, error: plLinesError } = await supabase
-    .from("pl_lines")
-    .select("line_code, line_name")
-    .order("line_code");
-
-  const plLinesOk = !plLinesError && plLinesData && plLinesData.length > 0;
-  if (plLinesOk) {
-    linesData = plLinesData.map((l: any) => ({
-      line_code: l.line_code,
-      line_name: l.line_name,
-    }));
-  } else {
-    // Derive from operators: distinct employees.line where not null/empty/'Unassigned'
-    const { data: employeesData, error: employeesError } = await supabase
-      .from("employees")
-      .select("line")
-      .not("line", "is", null)
-      .eq("is_active", true);
-
-    if (employeesError) {
-      return { date, decisions: [] };
-    }
-
-    const rawLines = (employeesData || []).map((e: any) => (e.line ?? "").trim());
-    const uniqueLines = [...new Set(rawLines)].filter(
-      (line) => line !== "" && line !== "Unassigned"
-    );
-    linesData = uniqueLines.map((lineCode: string) => ({
-      line_code: lineCode,
-      line_name: lineCode,
-    }));
-  }
-
-  if (linesData.length === 0) {
+  if (!orgId) {
     return { date, decisions: [] };
   }
+
+  const { data: stations, error: stationsError } = await supabase
+    .from("stations")
+    .select("line")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .not("line", "is", null);
+
+  if (stationsError || !stations || stations.length === 0) {
+    return { date, decisions: [] };
+  }
+
+  const uniqueLines = [...new Set((stations as Array<{ line?: string }>).map((s) => s.line).filter((v): v is string => Boolean(v)))].sort();
+  const linesData = uniqueLines.map((lineCode) => ({ line_code: lineCode, line_name: lineCode }));
 
   const decisions: LineShiftDecision[] = [];
 

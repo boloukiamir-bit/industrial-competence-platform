@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
-const DEMO_ORG_ID = "f607f244-da91-41d9-a648-d02a1591105c";
+import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import {
+  computeNetFactor,
+  segmentNetHours,
+  type ShiftRule,
+} from "@/lib/lineOverviewNet";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,6 +28,41 @@ export async function GET(request: NextRequest) {
   const shift = shiftParamToDbValue(searchParams.get("shift") || "day");
 
   try {
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
+    if (!session.success) {
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", session.userId)
+      .single();
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const activeOrgId = profile.active_org_id as string;
+
+    const { data: stations, error: stationsError } = await supabaseAdmin
+      .from("stations")
+      .select("line")
+      .eq("org_id", activeOrgId)
+      .eq("is_active", true)
+      .not("line", "is", null);
+
+    if (stationsError) {
+      const res = NextResponse.json({ error: "Failed to fetch lines" }, { status: 500 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const stationLines = [...new Set((stations || []).map((s: { line?: string }) => s.line).filter((v): v is string => Boolean(v)))].sort();
+
     const dates: string[] = [];
     const start = new Date(startDate);
     for (let i = 0; i < 5; i++) {
@@ -31,28 +71,32 @@ export async function GET(request: NextRequest) {
       dates.push(d.toISOString().split("T")[0]);
     }
 
-    const [linesRes, machinesRes, demandRes, assignmentsRes] = await Promise.all([
-      supabaseAdmin.from("pl_lines").select("*").eq("org_id", DEMO_ORG_ID).order("line_code"),
-      supabaseAdmin.from("pl_machines").select("*").eq("org_id", DEMO_ORG_ID).order("machine_code"),
-      supabaseAdmin.from("pl_machine_demand").select("*").eq("org_id", DEMO_ORG_ID).in("plan_date", dates).eq("shift_type", shift),
-      supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", DEMO_ORG_ID).in("plan_date", dates).eq("shift_type", shift),
+    const machinesQuery =
+      stationLines.length > 0
+        ? supabaseAdmin.from("pl_machines").select("*").eq("org_id", activeOrgId).in("line_code", stationLines).order("machine_code")
+        : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null });
+    const [machinesRes, demandRes, assignmentsRes, shiftRulesRes] = await Promise.all([
+      machinesQuery,
+      supabaseAdmin.from("pl_machine_demand").select("*").eq("org_id", activeOrgId).in("plan_date", dates).eq("shift_type", shift),
+      supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", activeOrgId).in("plan_date", dates).eq("shift_type", shift),
+      supabaseAdmin.from("shift_rules").select("shift_start,shift_end,break_minutes,paid_break_minutes").eq("org_id", activeOrgId).eq("shift_type", shift).maybeSingle(),
     ]);
 
-    if (linesRes.error) throw linesRes.error;
     if (machinesRes.error) throw machinesRes.error;
     if (demandRes.error) throw demandRes.error;
     if (assignmentsRes.error) throw assignmentsRes.error;
 
-    const lines = linesRes.data || [];
     const machines = machinesRes.data || [];
     const demands = demandRes.data || [];
     const assignments = assignmentsRes.data || [];
+    const shiftRule = (shiftRulesRes.error ? null : shiftRulesRes.data) as ShiftRule | null;
+    const netFactor = computeNetFactor(shiftRule);
 
     let totalRequired = 0;
     let totalAssigned = 0;
 
-    const lineData = lines.map((line) => {
-      const lineMachines = machines.filter((m) => m.line_code === line.line_code);
+    const lineData = stationLines.map((lineCode) => {
+      const lineMachines = machines.filter((m) => m.line_code === lineCode);
 
       const machineData = lineMachines.map((machine) => {
         const machineDemands = demands.filter((d) => d.machine_code === machine.machine_code);
@@ -62,9 +106,7 @@ export async function GET(request: NextRequest) {
         let assignedHours = 0;
 
         machineAssigns.forEach((a) => {
-          const start = new Date(`2000-01-01T${a.start_time}`);
-          const end = new Date(`2000-01-01T${a.end_time}`);
-          assignedHours += (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          assignedHours += segmentNetHours(a.start_time, a.end_time, netFactor);
         });
 
         const gap = requiredHours - assignedHours;
@@ -94,9 +136,9 @@ export async function GET(request: NextRequest) {
 
       return {
         line: {
-          id: line.id,
-          lineCode: line.line_code,
-          lineName: line.line_name,
+          id: lineCode,
+          lineCode,
+          lineName: lineCode,
         },
         machines: machineData,
         totalRequired: machineData.reduce((sum, m) => sum + m.requiredHours, 0),
@@ -107,7 +149,7 @@ export async function GET(request: NextRequest) {
 
     const coveragePercent = totalRequired > 0 ? Math.round((totalAssigned / totalRequired) * 100) : 100;
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       lines: lineData,
       kpis: {
         coveragePercent,
@@ -119,6 +161,8 @@ export async function GET(request: NextRequest) {
       employees: [],
       weekDates: dates,
     });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error("Week overview fetch error:", error);
     return NextResponse.json({ error: "Failed to fetch week data" }, { status: 500 });

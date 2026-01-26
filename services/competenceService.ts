@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { Employee, Skill, EmployeeSkill, CompetenceLevel } from "@/types/domain";
 
+const isProd = process.env.NODE_ENV === 'production';
+
 const demoEmployees: Omit<Employee, "id">[] = [
   { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Pressline 1", team: "Day", employmentType: "permanent", isActive: true },
   { name: "Erik Johansson", employeeNumber: "E1002", role: "Operator", line: "Pressline 1", team: "Night", employmentType: "permanent", isActive: true },
@@ -24,6 +26,10 @@ const demoSkillLevels: Record<string, Record<string, CompetenceLevel["value"]>> 
 };
 
 export async function seedDemoDataIfEmpty(): Promise<void> {
+  if (isProd) {
+    throw new Error("Demo data seeding is disabled in production");
+  }
+
   const { data: existingEmployees, error: checkError } = await supabase
     .from("employees")
     .select("id")

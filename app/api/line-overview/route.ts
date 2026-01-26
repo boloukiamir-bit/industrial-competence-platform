@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
-const DEMO_ORG_ID = "f607f244-da91-41d9-a648-d02a1591105c";
+import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import {
+  computeNetFactor,
+  segmentNetHours,
+  type ShiftRule,
+} from "@/lib/lineOverviewNet";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,32 +28,72 @@ export async function GET(request: NextRequest) {
   const shift = shiftParamToDbValue(searchParams.get("shift") || "day");
 
   try {
-    const [linesRes, machinesRes, demandRes, assignmentsRes, attendanceRes, employeesRes] = await Promise.all([
-      supabaseAdmin.from("pl_lines").select("*").eq("org_id", DEMO_ORG_ID).order("line_code"),
-      supabaseAdmin.from("pl_machines").select("*").eq("org_id", DEMO_ORG_ID).order("machine_code"),
-      supabaseAdmin.from("pl_machine_demand").select("*").eq("org_id", DEMO_ORG_ID).eq("plan_date", date).eq("shift_type", shift),
-      supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", DEMO_ORG_ID).eq("plan_date", date).eq("shift_type", shift),
-      supabaseAdmin.from("pl_attendance").select("*").eq("org_id", DEMO_ORG_ID).eq("plan_date", date).eq("shift_type", shift),
-      supabaseAdmin.from("pl_employees").select("*").eq("org_id", DEMO_ORG_ID),
-    ]);
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
+    if (!session.success) {
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
 
-    if (linesRes.error) throw linesRes.error;
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", session.userId)
+      .single();
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const activeOrgId = profile.active_org_id as string;
+
+    const { data: stations, error: stationsError } = await supabaseAdmin
+      .from("stations")
+      .select("line")
+      .eq("org_id", activeOrgId)
+      .eq("is_active", true)
+      .not("line", "is", null);
+
+    if (stationsError) {
+      const res = NextResponse.json({ error: "Failed to fetch lines" }, { status: 500 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const stationLines = [...new Set((stations || []).map((s: { line?: string }) => s.line).filter((v): v is string => Boolean(v)))].sort();
+
+    const machinesQuery =
+      stationLines.length > 0
+        ? supabaseAdmin.from("pl_machines").select("*").eq("org_id", activeOrgId).in("line_code", stationLines).order("machine_code")
+        : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null });
+    const [machinesRes, demandRes, assignmentsRes, attendanceRes, employeesRes, shiftRulesRes] =
+      await Promise.all([
+        machinesQuery,
+        supabaseAdmin.from("pl_machine_demand").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shift),
+        supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shift),
+        supabaseAdmin.from("pl_attendance").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shift),
+        supabaseAdmin.from("pl_employees").select("*").eq("org_id", activeOrgId),
+        supabaseAdmin.from("shift_rules").select("shift_start,shift_end,break_minutes,paid_break_minutes").eq("org_id", activeOrgId).eq("shift_type", shift).maybeSingle(),
+      ]);
+
     if (machinesRes.error) throw machinesRes.error;
     if (demandRes.error) throw demandRes.error;
     if (assignmentsRes.error) throw assignmentsRes.error;
     if (attendanceRes.error) throw attendanceRes.error;
     if (employeesRes.error) throw employeesRes.error;
 
-    const lines = linesRes.data || [];
     const machines = machinesRes.data || [];
     const demands = demandRes.data || [];
     const assignments = assignmentsRes.data || [];
     const attendance = attendanceRes.data || [];
     const employees = employeesRes.data || [];
+    const shiftRule = (shiftRulesRes.error ? null : shiftRulesRes.data) as ShiftRule | null;
+    const netFactor = computeNetFactor(shiftRule);
 
     const demandMap = new Map(demands.map((d) => [d.machine_code, d]));
     const employeeMap = new Map(employees.map((e) => [e.employee_code, e]));
-    
+
     const assignmentsByMachine = new Map<string, typeof assignments>();
     assignments.forEach((a) => {
       const list = assignmentsByMachine.get(a.machine_code) || [];
@@ -65,8 +110,8 @@ export async function GET(request: NextRequest) {
     let totalGap = 0;
     let totalOverAssigned = 0;
 
-    const lineData = lines.map((line) => {
-      const lineMachines = machines.filter((m) => m.line_code === line.line_code);
+    const lineData = stationLines.map((lineCode) => {
+      const lineMachines = machines.filter((m) => m.line_code === lineCode);
 
       const machineData = lineMachines.map((machine) => {
         const demand = demandMap.get(machine.machine_code);
@@ -85,9 +130,7 @@ export async function GET(request: NextRequest) {
         }> = [];
 
         machineAssignments.forEach((a) => {
-          const start = new Date(`2000-01-01T${a.start_time}`);
-          const end = new Date(`2000-01-01T${a.end_time}`);
-          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          const hours = segmentNetHours(a.start_time, a.end_time, netFactor);
           assignedHours += hours;
 
           const emp = employeeMap.get(a.employee_code);
@@ -121,7 +164,7 @@ export async function GET(request: NextRequest) {
           status = "over";
         }
 
-        const assignments = machineAssignments.map((a) => ({
+        const assignmentsOut = machineAssignments.map((a) => ({
           id: a.id,
           planDate: a.plan_date,
           shiftType: a.shift_type,
@@ -144,7 +187,7 @@ export async function GET(request: NextRequest) {
           gap,
           overAssigned,
           status,
-          assignments,
+          assignments: assignmentsOut,
           assignedPeople,
         };
       });
@@ -156,9 +199,9 @@ export async function GET(request: NextRequest) {
 
       return {
         line: {
-          id: line.id,
-          lineCode: line.line_code,
-          lineName: line.line_name,
+          id: lineCode,
+          lineCode,
+          lineName: lineCode,
         },
         machines: machineData,
         totalRequired: lineRequired,
@@ -171,7 +214,7 @@ export async function GET(request: NextRequest) {
     const hasDemand = totalRequired > 0;
     const coveragePercent = hasDemand ? Math.min(Math.round((totalAssigned / totalRequired) * 100), 999) : null;
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       lines: lineData,
       kpis: {
         hasDemand,
@@ -198,6 +241,8 @@ export async function GET(request: NextRequest) {
         note: a.note,
       })),
     });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error("Line overview fetch error:", error);
     return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });

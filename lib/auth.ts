@@ -10,36 +10,93 @@ export type CurrentUser = {
   email: string;
 };
 
+// public.users does not exist; auth.users is not exposed via PostgREST. App identity/roles
+// come from public.profiles (id = auth.users.id). For Line Overview operators use pl_employees.
+function mapProfileRoleToAppRole(role: string | null | undefined): AppRole {
+  if (role === "admin" || role === "hr") return "HR_ADMIN";
+  if (role === "manager") return "MANAGER";
+  if (role === "user") return "EMPLOYEE";
+  return "EMPLOYEE";
+}
+
+function isDevFallbackAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" && Boolean(process.env.NEXT_PUBLIC_DEV_USER_EMAIL);
+}
+
+/**
+ * Check if a role from memberships table grants HR admin access.
+ * Returns true for: 'admin', 'hr_admin', 'hr-admin' (case-insensitive)
+ * This is used instead of profiles.role because profiles.role has a CHECK constraint
+ * that doesn't allow 'HR_ADMIN' to be stored.
+ */
+export function isHrAdmin(role: string | null | undefined): boolean {
+  const r = (role ?? "").toLowerCase();
+  return r === "admin" || r === "hr_admin" || r === "hr-admin";
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const devEmail = process.env.NEXT_PUBLIC_DEV_USER_EMAIL || "hr@example.com";
-  
+
   try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, employee_id, email, role")
-      .eq("email", devEmail)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      if (isDevFallbackAllowed()) return { id: "dev-user", role: "HR_ADMIN" as AppRole, email: devEmail };
+      return null;
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, role, email, active_org_id")
+      .eq("id", user.id)
       .single();
 
-    if (error || !data) {
-      return {
-        id: "dev-user",
-        role: "HR_ADMIN" as AppRole,
-        email: devEmail,
-      };
+    if (error || !profile) {
+      // Least privilege on profile failure: never HR_ADMIN
+      if (isDevFallbackAllowed()) return { id: "dev-user", role: "HR_ADMIN" as AppRole, email: devEmail };
+      return { id: user.id, role: "EMPLOYEE" as AppRole, email: user.email ?? "", employeeId: undefined };
+    }
+
+    const userEmail = user.email ?? (profile as { email?: string | null }).email ?? devEmail;
+    let employeeId: string | undefined = undefined;
+
+    // Find employee record: Priority A) user_id match, Fallback B) email match
+    // Must be tenant-scoped by active_org_id
+    if (profile.active_org_id) {
+      // Priority A: Find by user_id
+      const { data: employeeByUserId } = await supabase
+        .from("employees")
+        .select("id")
+        .eq("org_id", profile.active_org_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (employeeByUserId) {
+        employeeId = employeeByUserId.id;
+      } else {
+        // Fallback B: Find by email (if employees.email exists)
+        // Check if email column exists first to avoid errors
+        const { data: employeeByEmail } = await supabase
+          .from("employees")
+          .select("id")
+          .eq("org_id", profile.active_org_id)
+          .eq("email", userEmail)
+          .maybeSingle();
+
+        if (employeeByEmail) {
+          employeeId = employeeByEmail.id;
+        }
+      }
     }
 
     return {
-      id: data.id,
-      role: data.role as AppRole,
-      employeeId: data.employee_id || undefined,
-      email: data.email,
+      id: profile.id,
+      role: mapProfileRoleToAppRole(profile.role),
+      employeeId,
+      email: userEmail,
     };
   } catch {
-    return {
-      id: "dev-user",
-      role: "HR_ADMIN" as AppRole,
-      email: devEmail,
-    };
+    if (isDevFallbackAllowed()) return { id: "dev-user", role: "HR_ADMIN" as AppRole, email: devEmail };
+    return null;
   }
 }
 
@@ -61,6 +118,7 @@ export function canAccessEmployee(
   managedEmployeeIds: string[]
 ): boolean {
   if (!user) return false;
+  // Check HR_ADMIN from AppRole (backwards compatibility) or use isHrAdmin for membership roles
   if (user.role === "HR_ADMIN") return true;
   if (user.role === "MANAGER") {
     return managedEmployeeIds.includes(employeeId);

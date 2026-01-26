@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+export const runtime = "nodejs";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 
 export async function PATCH(

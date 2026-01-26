@@ -197,4 +197,18 @@ export type RootCausePayload = {
   };
   missing?: RootCauseMissingItem[];
   recommended_actions: Array<"swap" | "assign" | "call_in" | "escalate" | "fix_data">;
+  gaps?: {
+    requiredHeadcount: number;
+    assignedHeadcount: number;
+    staffing_gap: number;
+    competence_status: "OK" | "GAP" | "RISK" | "NO-GO";
+    competence_gaps: Array<{
+      skill: string;
+      skillCode: string;
+      requiredLevel: number;
+      currentLevel: number;
+      severity: "OK" | "GAP" | "RISK";
+      suggestedAction: "No action" | "Train" | "Swap" | "Buddy";
+    }>;
+  };
 };

@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import type { RootCausePayload, RootCauseMissingItem, RootCauseType } from "@/types/cockpit";
+import { computeLineGaps, type LineOverviewData } from "@/services/gapEngine";
+import {
+  computeNetFactor,
+  segmentNetHours,
+  type ShiftRule,
+} from "@/lib/lineOverviewNet";
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,14 +34,185 @@ function recommendedActionsFor(type: RootCauseType): RootCausePayload["recommend
   return ["fix_data", "escalate"];
 }
 
+function shiftParamToDbValue(shift: string): string {
+  const map: Record<string, string> = {
+    day: "Day",
+    evening: "Evening",
+    night: "Night",
+  };
+  return map[shift.toLowerCase()] || "Day";
+}
+
+/**
+ * Fetch line-overview data needed for gapEngine.
+ * This replicates the core logic from /api/line-overview but only fetches what's needed.
+ */
+async function fetchLineOverviewData(
+  supabaseAdmin: ReturnType<typeof getServiceClient>,
+  orgId: string,
+  date: string,
+  shiftType: string,
+  line: string
+): Promise<LineOverviewData | null> {
+  const shift = shiftParamToDbValue(shiftType);
+
+  // Get machines for this line
+  const { data: machines, error: machinesError } = await supabaseAdmin
+    .from("pl_machines")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("line_code", line)
+    .order("machine_code");
+
+  if (machinesError) {
+    console.error("root-cause: failed to fetch machines", machinesError);
+    return null;
+  }
+
+  if (!machines || machines.length === 0) {
+    return null;
+  }
+
+  const machineCodes = machines.map((m: any) => m.machine_code);
+
+  // Fetch demand, assignments, and shift rules in parallel
+  const [demandRes, assignmentsRes, shiftRulesRes] = await Promise.all([
+    supabaseAdmin
+      .from("pl_machine_demand")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("plan_date", date)
+      .eq("shift_type", shift)
+      .in("machine_code", machineCodes),
+    supabaseAdmin
+      .from("pl_assignment_segments")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("plan_date", date)
+      .eq("shift_type", shift)
+      .in("machine_code", machineCodes),
+    supabaseAdmin
+      .from("shift_rules")
+      .select("shift_start,shift_end,break_minutes,paid_break_minutes")
+      .eq("org_id", orgId)
+      .eq("shift_type", shift)
+      .maybeSingle(),
+  ]);
+
+  if (demandRes.error || assignmentsRes.error) {
+    console.error("root-cause: failed to fetch demand/assignments", demandRes.error || assignmentsRes.error);
+    return null;
+  }
+
+  const demands = demandRes.data || [];
+  const assignments = assignmentsRes.data || [];
+  const shiftRule = (shiftRulesRes.error ? null : shiftRulesRes.data) as ShiftRule | null;
+  const netFactor = computeNetFactor(shiftRule);
+
+  const demandMap = new Map(demands.map((d: any) => [d.machine_code, d]));
+  const assignmentsByMachine = new Map<string, typeof assignments>();
+  assignments.forEach((a: any) => {
+    const list = assignmentsByMachine.get(a.machine_code) || [];
+    list.push(a);
+    assignmentsByMachine.set(a.machine_code, list);
+  });
+
+  // Build machine data matching LineOverviewData structure
+  const machineData = machines.map((machine: any) => {
+    const demand = demandMap.get(machine.machine_code);
+    const machineAssignments = assignmentsByMachine.get(machine.machine_code) || [];
+
+    const requiredHours = demand?.required_hours || 0;
+    let assignedHours = 0;
+    const assignedPeople: Array<{
+      assignmentId: string;
+      employeeId: string;
+      employeeCode: string;
+      employeeName: string;
+      startTime: string;
+      endTime: string;
+      hours: number;
+    }> = [];
+
+    machineAssignments.forEach((a: any) => {
+      const hours = segmentNetHours(a.start_time, a.end_time, netFactor);
+      assignedHours += hours;
+
+      assignedPeople.push({
+        assignmentId: a.id,
+        employeeId: "", // Will be resolved by gapEngine
+        employeeCode: a.employee_code,
+        employeeName: "", // Will be resolved by gapEngine
+        startTime: a.start_time,
+        endTime: a.end_time,
+        hours,
+      });
+    });
+
+    const gap = requiredHours - assignedHours;
+    const overAssigned = assignedHours > requiredHours ? assignedHours - requiredHours : 0;
+
+    let status: "ok" | "partial" | "gap" | "over" | "no_demand" = "no_demand";
+    if (requiredHours > 0) {
+      if (assignedHours === 0) status = "gap";
+      else if (assignedHours < requiredHours) status = "partial";
+      else if (assignedHours > requiredHours) status = "over";
+      else status = "ok";
+    } else if (assignedHours > 0) {
+      status = "over";
+    }
+
+    const assignmentsOut = machineAssignments.map((a: any) => ({
+      id: a.id,
+      planDate: a.plan_date,
+      shiftType: a.shift_type,
+      machineCode: a.machine_code,
+      employeeCode: a.employee_code,
+      startTime: a.start_time,
+      endTime: a.end_time,
+      roleNote: a.role_note,
+    }));
+
+    return {
+      machine: {
+        id: machine.id,
+        machineCode: machine.machine_code,
+        machineName: machine.machine_name,
+        lineCode: machine.line_code,
+      },
+      requiredHours,
+      assignedHours,
+      gap,
+      overAssigned,
+      status,
+      assignments: assignmentsOut,
+      assignedPeople,
+    };
+  });
+
+  return {
+    lines: [
+      {
+        line: {
+          id: line,
+          lineCode: line,
+          lineName: line,
+        },
+        machines: machineData,
+      },
+    ],
+  };
+}
+
 type AssignmentRow = {
   id: string;
   org_id: string;
   station_id: string;
   employee_id?: string | null;
   assignment_date: string;
-  station?: { id: string; name?: string | null };
-  shift?: { shift_date?: string | null };
+  station?: { id: string; name?: string | null; line?: string | null; code?: string | null };
+  shift?: { shift_date?: string | null; shift_type?: string | null };
+  shift_id?: string | null;
 };
 
 async function loadAssignment(
@@ -51,8 +229,9 @@ async function loadAssignment(
         station_id,
         employee_id,
         assignment_date,
-        station:station_id(id, name),
-        shift:shift_id(shift_date)
+        shift_id,
+        station:station_id(id, name, line, code),
+        shift:shift_id(shift_date, shift_type)
       `
     )
     .eq("org_id", orgId)
@@ -307,28 +486,111 @@ async function computeRootCause(options: {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getOrgIdFromSession(request);
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
-      return NextResponse.json({ error: session.error }, { status: session.status });
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     const supabaseAdmin = getServiceClient();
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", session.userId)
+      .single();
+
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const activeOrgId = profile.active_org_id as string;
+
     const body = await request.json().catch(() => ({}));
     const shiftAssignmentId = body?.shift_assignment_id as string | undefined;
 
     if (!shiftAssignmentId) {
-      return NextResponse.json({ error: "shift_assignment_id is required" }, { status: 400 });
+      const res = NextResponse.json({ error: "shift_assignment_id is required" }, { status: 400 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
-    const assignment = await loadAssignment(supabaseAdmin, session.orgId, shiftAssignmentId);
+    const assignment = await loadAssignment(supabaseAdmin, activeOrgId, shiftAssignmentId);
     if (!assignment) {
-      return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+      const res = NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     const referenceDate = toDateOnly(assignment.shift?.shift_date || assignment.assignment_date);
     const rootCause = await computeRootCause({ supabaseAdmin, assignment, referenceDate });
 
-    return NextResponse.json({ root_cause: rootCause });
+    // Compute gaps if we have line, date, and shift_type
+    const line = assignment.station?.line;
+    const shiftType = assignment.shift?.shift_type;
+    let gaps = undefined;
+
+    if (line && shiftType && referenceDate) {
+      try {
+        // Fetch line-overview data needed for gapEngine
+        const lineOverviewData = await fetchLineOverviewData(
+          supabaseAdmin,
+          activeOrgId,
+          referenceDate,
+          shiftType,
+          line
+        );
+
+        if (lineOverviewData) {
+          const gapResult = await computeLineGaps({
+            orgId: activeOrgId,
+            line,
+            date: referenceDate,
+            shiftType,
+            supabaseClient: supabaseAdmin,
+            lineOverviewData,
+            strictOrgScope: true,
+          });
+
+          // Filter to the specific station/machine
+          const stationCode = assignment.station?.code;
+          const machineGap = gapResult.machineRows.find(
+            (mr) => mr.stationOrMachineCode === stationCode || mr.stationOrMachine === assignment.station?.name
+          );
+
+          if (machineGap) {
+            gaps = {
+              requiredHeadcount: machineGap.required,
+              assignedHeadcount: machineGap.assigned,
+              staffing_gap: machineGap.staffingGap,
+              competence_status: machineGap.competenceStatus,
+              competence_gaps: machineGap.competenceGaps.map((cg) => ({
+                skill: cg.skill,
+                skillCode: cg.skillCode,
+                requiredLevel: cg.requiredLevel,
+                currentLevel: cg.currentLevel,
+                severity: cg.severity,
+                suggestedAction: cg.suggestedAction,
+              })),
+            };
+          }
+        }
+      } catch (err) {
+        console.error("root-cause: failed to compute gaps", err);
+        // Don't fail the request if gap computation fails
+      }
+    }
+
+    const res = NextResponse.json({ 
+      root_cause: {
+        ...rootCause,
+        gaps,
+      }
+    });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error("root-cause endpoint error:", error);
     return NextResponse.json(

@@ -55,7 +55,7 @@ The app runs automatically via the configured workflow. To start manually:
 npm run dev
 ```
 
-This starts both the Express backend and Vite frontend on **port 5000**.
+This starts both the Express backend and Vite frontend on **port 5001**.
 
 ## Environment Variables
 

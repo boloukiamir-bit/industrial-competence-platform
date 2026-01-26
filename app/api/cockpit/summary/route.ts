@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,9 +34,12 @@ function getActionStrings(actions: unknown): string[] {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getOrgIdFromSession(request);
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
-      return NextResponse.json({ error: session.error }, { status: session.status });
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -49,7 +53,12 @@ export async function GET(request: NextRequest) {
       .eq("id", session.userId)
       .single();
 
-    const activeOrgId = (profile?.active_org_id as string) || session.orgId;
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const activeOrgId = profile.active_org_id as string;
     const activeSiteId = profile?.active_site_id as string | null | undefined;
 
     let list: Array<{ root_cause: unknown; actions: unknown }>;
@@ -68,7 +77,9 @@ export async function GET(request: NextRequest) {
 
       if (shiftsErr) {
         console.error("cockpit/summary: shifts query error", shiftsErr);
-        return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+        const res = NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
 
       const shiftIds = (shiftRows || []).map((r: { id: string }) => r.id).filter(Boolean);
@@ -80,7 +91,9 @@ export async function GET(request: NextRequest) {
           top_actions: [],
           by_type: [],
         };
-        return NextResponse.json(body);
+        const res = NextResponse.json(body);
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
 
       const { data: saRows, error: saErr } = await supabaseAdmin
@@ -90,7 +103,9 @@ export async function GET(request: NextRequest) {
 
       if (saErr) {
         console.error("cockpit/summary: shift_assignments query error", saErr);
-        return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+        const res = NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
 
       const saIds = (saRows || []).map((r: { id: string }) => r.id).filter(Boolean);
@@ -102,7 +117,9 @@ export async function GET(request: NextRequest) {
           top_actions: [],
           by_type: [],
         };
-        return NextResponse.json(body);
+        const res = NextResponse.json(body);
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
 
       let edQuery = supabaseAdmin
@@ -120,7 +137,9 @@ export async function GET(request: NextRequest) {
       const { data: rows, error } = await edQuery;
       if (error) {
         console.error("cockpit/summary: execution_decisions query error", error);
-        return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+        const res = NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
       list = (rows || []) as Array<{ root_cause: unknown; actions: unknown }>;
     } else {
@@ -138,10 +157,12 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error("cockpit/summary: execution_decisions query error", error);
-        return NextResponse.json(
+        const res = NextResponse.json(
           { error: "Failed to fetch summary" },
           { status: 500 }
         );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
 
       list = (rows || []) as Array<{ root_cause: unknown; actions: unknown }>;
@@ -188,7 +209,9 @@ export async function GET(request: NextRequest) {
       by_type,
     };
 
-    return NextResponse.json(body);
+    const res = NextResponse.json(body);
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (err) {
     console.error("cockpit/summary error:", err);
     return NextResponse.json(

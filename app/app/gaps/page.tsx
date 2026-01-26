@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,8 @@ import {
   Lightbulb,
   RefreshCw
 } from "lucide-react";
-import { isDemoMode } from "@/lib/demoRuntime";
+import { supabase } from "@/lib/supabaseClient";
+import { computeLineGaps, type LineOverviewData } from "@/services/gapEngine";
 
 interface GapRow {
   employee: string;
@@ -32,25 +33,23 @@ interface GapRow {
   suggestedAction: "No action" | "Train" | "Swap" | "Buddy";
 }
 
+interface StaffingGapRow {
+  stationOrMachine: string;
+  stationOrMachineCode: string;
+  required: number;
+  assigned: number;
+  staffingGap: number;
+  competenceStatus: "OK" | "GAP" | "RISK" | "NO-GO";
+}
+
 interface GapSummary {
   employeesAtRisk: number;
   topMissingSkills: { skill: string; count: number }[];
   fastestFix: string | null;
 }
 
-const demoPositions = ["Pressline 1", "Pressline 2", "Assembly", "Quality Control", "Logistics"];
-const demoShifts = ["Day", "Night", "Weekend"];
+const SHIFT_OPTIONS = ["Day", "Evening", "Night"];
 
-const demoGapsData: GapRow[] = [
-  { employee: "Erik Johansson", employeeId: "E1002", skill: "Truck A1 License", skillCode: "TRUCK_A1", requiredLevel: 2, currentLevel: 0, severity: "RISK", suggestedAction: "Train" },
-  { employee: "Karl Andersson", employeeId: "E1004", skill: "Pressline B", skillCode: "PRESS_B", requiredLevel: 2, currentLevel: 0, severity: "RISK", suggestedAction: "Buddy" },
-  { employee: "Karl Andersson", employeeId: "E1004", skill: "Safety Basic", skillCode: "SAFETY_BASIC", requiredLevel: 3, currentLevel: 1, severity: "RISK", suggestedAction: "Train" },
-  { employee: "Erik Johansson", employeeId: "E1002", skill: "Pressline B", skillCode: "PRESS_B", requiredLevel: 2, currentLevel: 1, severity: "GAP", suggestedAction: "Buddy" },
-  { employee: "Erik Johansson", employeeId: "E1002", skill: "Safety Basic", skillCode: "SAFETY_BASIC", requiredLevel: 3, currentLevel: 2, severity: "GAP", suggestedAction: "Train" },
-  { employee: "Anna Lindberg", employeeId: "E1001", skill: "Truck A1 License", skillCode: "TRUCK_A1", requiredLevel: 2, currentLevel: 1, severity: "GAP", suggestedAction: "Swap" },
-  { employee: "Maria Svensson", employeeId: "E1003", skill: "Truck A1 License", skillCode: "TRUCK_A1", requiredLevel: 3, currentLevel: 2, severity: "GAP", suggestedAction: "Train" },
-  { employee: "Anna Lindberg", employeeId: "E1001", skill: "Pressline A", skillCode: "PRESS_A", requiredLevel: 4, currentLevel: 3, severity: "OK", suggestedAction: "No action" },
-];
 
 function computeSummary(gaps: GapRow[]): GapSummary {
   const riskEmployees = new Set(
@@ -90,16 +89,83 @@ function getSeverityBadge(severity: "OK" | "GAP" | "RISK") {
   }
 }
 
-function exportToCSV(gaps: GapRow[], dateStr: string) {
-  const headers = ["Employee", "Skill", "Required Level", "Current Level", "Severity", "Suggested Action"];
-  const rows = gaps.map(g => [
-    g.employee,
-    g.skill,
-    g.requiredLevel.toString(),
-    g.currentLevel.toString(),
-    g.severity,
-    g.suggestedAction,
-  ]);
+function exportToCSV(
+  gaps: GapRow[], 
+  staffingGaps: StaffingGapRow[], 
+  dateStr: string
+) {
+  const headers = [
+    "Station/Machine", 
+    "Required", 
+    "Assigned", 
+    "Staffing Gap", 
+    "Competence Status",
+    "Employee",
+    "Skill", 
+    "Required Level", 
+    "Current Level", 
+    "Severity", 
+    "Suggested Action"
+  ];
+  
+  // Create rows: one per staffing gap, with competence gaps as additional rows
+  const rows: string[][] = [];
+  
+  staffingGaps.forEach(sg => {
+    // First row: staffing gap info
+    rows.push([
+      sg.stationOrMachine,
+      sg.required.toString(),
+      sg.assigned.toString(),
+      sg.staffingGap.toString(),
+      sg.competenceStatus,
+      "", // Employee
+      "", // Skill
+      "", // Required Level
+      "", // Current Level
+      "", // Severity
+      "", // Suggested Action
+    ]);
+    
+    // Add competence gaps for this station/machine
+    const relatedGaps = gaps.filter(g => 
+      g.employeeId && staffingGaps.some(s => s.stationOrMachineCode === sg.stationOrMachineCode)
+    );
+    relatedGaps.forEach(g => {
+      rows.push([
+        "", // Station/Machine (same as above)
+        "", // Required (staffing)
+        "", // Assigned (staffing)
+        "", // Staffing Gap
+        "", // Competence Status (same as above)
+        g.employee,
+        g.skill,
+        g.requiredLevel.toString(),
+        g.currentLevel.toString(),
+        g.severity,
+        g.suggestedAction,
+      ]);
+    });
+  });
+  
+  // If no staffing gaps but there are competence gaps, add them
+  if (staffingGaps.length === 0 && gaps.length > 0) {
+    gaps.forEach(g => {
+      rows.push([
+        "", // Station/Machine
+        "", // Required
+        "", // Assigned
+        "", // Staffing Gap
+        "", // Competence Status
+        g.employee,
+        g.skill,
+        g.requiredLevel.toString(),
+        g.currentLevel.toString(),
+        g.severity,
+        g.suggestedAction,
+      ]);
+    });
+  }
   
   const csvContent = [
     headers.join(","),
@@ -118,13 +184,16 @@ function exportToCSV(gaps: GapRow[], dateStr: string) {
 }
 
 export default function GapsPage() {
-  const [position, setPosition] = useState<string>("");
+  const [line, setLine] = useState<string>("");
   const [shift, setShift] = useState<string>("");
   const [generated, setGenerated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gaps, setGaps] = useState<GapRow[]>([]);
-
-  const demoMode = isDemoMode();
+  const [staffingGaps, setStaffingGaps] = useState<StaffingGapRow[]>([]);
+  const [lines, setLines] = useState<string[]>([]);
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
+  
+  const lineOptions = (lines ?? []).filter(Boolean);
   
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + 1);
@@ -138,31 +207,126 @@ export default function GapsPage() {
 
   const summary = useMemo(() => computeSummary(gaps), [gaps]);
 
+  // Load lines from stations table and get active_org_id
+  useEffect(() => {
+    async function loadLines() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          setLines([]);
+          setActiveOrgId(null);
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("active_org_id")
+          .eq("id", session.user.id)
+          .single();
+
+        if (profileError || !profile?.active_org_id) {
+          console.error("Failed to load active organization:", profileError);
+          setLines([]);
+          setActiveOrgId(null);
+          return;
+        }
+
+        const orgId = profile.active_org_id as string;
+        setActiveOrgId(orgId);
+
+        let res = await supabase
+          .from("stations")
+          .select("line")
+          .eq("org_id", orgId)
+          .eq("is_active", true)
+          .not("line", "is", null);
+
+        if (res.error && String(res.error.message || "").toLowerCase().includes("is_active") && String(res.error.message || "").toLowerCase().includes("does not exist")) {
+          res = await supabase
+            .from("stations")
+            .select("line")
+            .eq("org_id", orgId)
+            .not("line", "is", null);
+        }
+
+        if (res.error) {
+          console.error("Failed to load lines from stations:", res.error);
+          setLines([]);
+          return;
+        }
+
+        const unique = Array.from(
+          new Set((res.data || []).map((s: { line?: string }) => s.line).filter(Boolean))
+        ).sort() as string[];
+
+        setLines(unique);
+      } catch (error) {
+        console.error("Error loading lines:", error);
+        setLines([]);
+        setActiveOrgId(null);
+      }
+    }
+
+    loadLines();
+  }, []);
+
   async function handleGenerate() {
-    if (!position) return;
+    if (!line || !activeOrgId) return;
     
     setLoading(true);
+    setGaps([]);
+    setStaffingGaps([]);
     
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    if (demoMode) {
-      const filteredGaps = demoGapsData.filter(g => {
-        if (shift && shift !== "all") {
-          return true;
-        }
-        return true;
+    try {
+      const shiftType = shift && shift !== "all" ? shift : "Day";
+      const shiftParam = shiftType.toLowerCase();
+      
+      // 1. Fetch demand data from Line Overview endpoint (same as Line Overview uses)
+      const response = await fetch(`/api/line-overview?date=${dateStr}&shift=${shiftParam}`);
+      
+      if (!response.ok) {
+        console.error("Failed to fetch demand data:", response.statusText);
+        setGenerated(true);
+        setLoading(false);
+        return;
+      }
+      
+      const lineOverviewData: LineOverviewData = await response.json();
+      
+      // 2. Compute gaps using the shared gap engine
+      const result = await computeLineGaps({
+        orgId: activeOrgId,
+        line,
+        date: dateStr,
+        shiftType,
+        supabaseClient: supabase,
+        lineOverviewData,
       });
-      setGaps(filteredGaps);
-    } else {
-      setGaps([]);
+      
+      // 3. Transform results to match UI structure
+      const staffingGapRows: StaffingGapRow[] = result.machineRows.map(mr => ({
+        stationOrMachine: mr.stationOrMachine,
+        stationOrMachineCode: mr.stationOrMachineCode,
+        required: mr.required,
+        assigned: mr.assigned,
+        staffingGap: mr.staffingGap,
+        competenceStatus: mr.competenceStatus,
+      }));
+      
+      const gapRows: GapRow[] = result.machineRows.flatMap(mr => mr.competenceGaps);
+      
+      setStaffingGaps(staffingGapRows);
+      setGaps(gapRows);
+      setGenerated(true);
+    } catch (error) {
+      console.error("Error generating gaps:", error);
+    } finally {
+      setLoading(false);
     }
-    
-    setGenerated(true);
-    setLoading(false);
   }
 
   function handleExport() {
-    exportToCSV(gaps, dateStr);
+    exportToCSV(gaps, staffingGaps, dateStr);
   }
 
   return (
@@ -180,28 +344,35 @@ export default function GapsPage() {
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium mb-2 block">Position / Line</label>
-              <Select value={position} onValueChange={setPosition}>
-                <SelectTrigger data-testid="select-position">
-                  <SelectValue placeholder="Select position..." />
+              <label className="text-sm font-medium mb-2 block">Line</label>
+              <Select value={line} onValueChange={setLine}>
+                <SelectTrigger data-testid="select-line">
+                  <SelectValue placeholder="Select line..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {demoPositions.map(p => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
+                  {lineOptions.length === 0 ? (
+                    <div className="px-2 py-2 text-sm text-muted-foreground">
+                      No lines found for this organization
+                    </div>
+                  ) : (
+                    lineOptions.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {l}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
             
             <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium mb-2 block">Shift (optional)</label>
+              <label className="text-sm font-medium mb-2 block">Shift</label>
               <Select value={shift} onValueChange={setShift}>
                 <SelectTrigger data-testid="select-shift">
-                  <SelectValue placeholder="All shifts" />
+                  <SelectValue placeholder="Day" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All shifts</SelectItem>
-                  {demoShifts.map(s => (
+                  {SHIFT_OPTIONS.map(s => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
@@ -210,7 +381,7 @@ export default function GapsPage() {
             
             <Button 
               onClick={handleGenerate} 
-              disabled={!position || loading}
+              disabled={!line || loading}
               className="min-w-[140px]"
               data-testid="button-generate-gaps"
             >
@@ -289,7 +460,7 @@ export default function GapsPage() {
             <Button 
               variant="outline" 
               onClick={handleExport}
-              disabled={gaps.length === 0}
+              disabled={staffingGaps.length === 0 && gaps.length === 0}
               data-testid="button-export-csv"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -303,16 +474,31 @@ export default function GapsPage() {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground bg-muted/50">
+                      Station/Machine
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
+                      Required
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
+                      Assigned
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
+                      Staffing Gap
+                    </th>
+                    <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
+                      Competence Status
+                    </th>
+                    <th className="text-left p-3 text-sm font-medium text-muted-foreground bg-muted/50">
                       Employee
                     </th>
                     <th className="text-left p-3 text-sm font-medium text-muted-foreground bg-muted/50">
                       Skill
                     </th>
                     <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
-                      Required
+                      Required Level
                     </th>
                     <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
-                      Current
+                      Current Level
                     </th>
                     <th className="text-center p-3 text-sm font-medium text-muted-foreground bg-muted/50">
                       Severity
@@ -323,30 +509,95 @@ export default function GapsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {gaps.length === 0 ? (
+                  {staffingGaps.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-muted-foreground" data-testid="no-gaps-message">
-                        No competence gaps found for tomorrow.
+                      <td colSpan={11} className="p-6 text-center text-muted-foreground" data-testid="no-gaps-message">
+                        {generated 
+                          ? "No demand configured for this line/date/shift."
+                          : "Select a line and click 'Generate Gaps' to analyze tomorrow's skill coverage."}
                       </td>
                     </tr>
                   ) : (
-                    gaps.map((gap, index) => (
-                      <tr 
-                        key={`${gap.employeeId}-${gap.skillCode}-${index}`}
-                        className={`border-b last:border-0 ${index % 2 === 0 ? "bg-muted/20" : ""}`}
-                        data-testid={`row-gap-${index}`}
-                      >
-                        <td className="p-3 text-sm font-medium">{gap.employee}</td>
-                        <td className="p-3 text-sm">
-                          <div>{gap.skill}</div>
-                          <div className="text-xs text-muted-foreground">{gap.skillCode}</div>
-                        </td>
-                        <td className="p-3 text-sm text-center">{gap.requiredLevel}</td>
-                        <td className="p-3 text-sm text-center">{gap.currentLevel}</td>
-                        <td className="p-3 text-center">{getSeverityBadge(gap.severity)}</td>
-                        <td className="p-3 text-sm">{gap.suggestedAction}</td>
-                      </tr>
-                    ))
+                    staffingGaps.map((sg, sgIndex) => {
+                      // For now, show all competence gaps (they're already filtered by assigned employees)
+                      // In a production system, you'd have better machine-to-station mapping
+                      const relatedGaps = gaps; // Show all gaps for simplicity
+                      
+                      const rows: JSX.Element[] = [];
+                      
+                      // First row: staffing gap info
+                      rows.push(
+                        <tr 
+                          key={`staffing-${sg.stationOrMachineCode}-${sgIndex}`}
+                          className={`border-b ${sgIndex % 2 === 0 ? "bg-muted/20" : ""}`}
+                          data-testid={`row-staffing-${sgIndex}`}
+                        >
+                          <td className="p-3 text-sm font-medium">{sg.stationOrMachine}</td>
+                          <td className="p-3 text-sm text-center">{sg.required}</td>
+                          <td className="p-3 text-sm text-center">{sg.assigned}</td>
+                          <td className="p-3 text-sm text-center font-medium">
+                            {sg.staffingGap > 0 ? (
+                              <span className="text-red-600 dark:text-red-400">{sg.staffingGap}</span>
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            {sg.competenceStatus === "NO-GO" ? (
+                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800">NO-GO</Badge>
+                            ) : sg.competenceStatus === "RISK" ? (
+                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800">RISK</Badge>
+                            ) : sg.competenceStatus === "GAP" ? (
+                              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800">GAP</Badge>
+                            ) : (
+                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">OK</Badge>
+                            )}
+                          </td>
+                          <td colSpan={6} className="p-3 text-sm text-muted-foreground">
+                            {relatedGaps.length === 0 ? "No competence gaps" : `${relatedGaps.length} competence gap(s)`}
+                          </td>
+                        </tr>
+                      );
+                      
+                      // Add competence gap rows (limit to first few to avoid clutter)
+                      relatedGaps.slice(0, 5).forEach((gap, gapIndex) => {
+                        rows.push(
+                          <tr 
+                            key={`gap-${sg.stationOrMachineCode}-${gap.employeeId}-${gap.skillCode}-${gapIndex}`}
+                            className={`border-b ${sgIndex % 2 === 0 ? "bg-muted/10" : ""}`}
+                            data-testid={`row-gap-${sgIndex}-${gapIndex}`}
+                          >
+                            <td className="p-3 text-sm text-muted-foreground pl-6">↳</td>
+                            <td colSpan={4}></td>
+                            <td className="p-3 text-sm font-medium">{gap.employee}</td>
+                            <td className="p-3 text-sm">
+                              <div>{gap.skill}</div>
+                              <div className="text-xs text-muted-foreground">{gap.skillCode}</div>
+                            </td>
+                            <td className="p-3 text-sm text-center">{gap.requiredLevel}</td>
+                            <td className="p-3 text-sm text-center">{gap.currentLevel}</td>
+                            <td className="p-3 text-center">{getSeverityBadge(gap.severity)}</td>
+                            <td className="p-3 text-sm">{gap.suggestedAction}</td>
+                          </tr>
+                        );
+                      });
+                      
+                      if (relatedGaps.length > 5) {
+                        rows.push(
+                          <tr 
+                            key={`more-gaps-${sg.stationOrMachineCode}`}
+                            className={`border-b ${sgIndex % 2 === 0 ? "bg-muted/10" : ""}`}
+                          >
+                            <td className="p-3 text-sm text-muted-foreground pl-6">↳</td>
+                            <td colSpan={10} className="p-3 text-sm text-muted-foreground italic">
+                              ... and {relatedGaps.length - 5} more competence gap(s)
+                            </td>
+                          </tr>
+                        );
+                      }
+                      
+                      return rows;
+                    }).flat()
                   )}
                 </tbody>
               </table>
@@ -360,7 +611,9 @@ export default function GapsPage() {
           <CardContent className="py-12 text-center">
             <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">
-              Select a position and click "Generate Gaps" to analyze tomorrow's skill coverage.
+              {!line 
+                ? "Select a line to view gaps for tomorrow's shift."
+                : "Click 'Generate Gaps' to analyze tomorrow's skill coverage."}
             </p>
           </CardContent>
         </Card>

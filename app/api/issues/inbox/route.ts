@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
 import type { IssueInboxItem } from "@/types/issues";
+
+export const runtime = "nodejs";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -293,9 +295,9 @@ export async function GET(request: NextRequest) {
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
-    console.error("issues/inbox error:", err);
+    console.error("GET /api/issues/inbox failed:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to fetch issues";
-    const res = NextResponse.json({ error: errorMessage }, { status: 500 });
+    const res = NextResponse.json({ error: "Internal error" }, { status: 500 });
     try {
       const { pendingCookies } = await createSupabaseServerClient();
       applySupabaseCookies(res, pendingCookies);

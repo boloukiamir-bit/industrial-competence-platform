@@ -16,12 +16,14 @@ import {
   ChevronRight,
   Plus,
   Upload,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
-import { getOrgTree, createOrgUnit } from "@/services/org";
+import { getOrgTree, createOrgUnit, type OrgTreeResult } from "@/services/org";
 import { COPY } from "@/lib/copy";
 import { isDemoMode, getDemoOrgUnits } from "@/lib/demoRuntime";
 import { useOrg } from "@/hooks/useOrg";
+import { supabase } from "@/lib/supabaseClient";
 import type { OrgUnit } from "@/types/domain";
 
 function OrgUnitCard({
@@ -132,6 +134,7 @@ export default function OrgOverviewPage() {
   const router = useRouter();
   const { currentOrg } = useOrg();
   const [orgTree, setOrgTree] = useState<OrgUnit[]>([]);
+  const [unassignedCount, setUnassignedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showEmployees, setShowEmployees] = useState(false);
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
@@ -139,6 +142,7 @@ export default function OrgOverviewPage() {
   const [newUnitName, setNewUnitName] = useState("");
   const [newUnitCode, setNewUnitCode] = useState("");
   const [creating, setCreating] = useState(false);
+  const [totalEmployees, setTotalEmployees] = useState(0);
 
   const loadData = async () => {
     if (isDemoMode()) {
@@ -149,17 +153,71 @@ export default function OrgOverviewPage() {
         children: allUnits.filter(c => c.parentId === u.id),
       }));
       setOrgTree(demoUnits);
+      setUnassignedCount(0); // Demo mode: no unassigned employees
+      // Demo mode: use sum of unit employeeCounts
+      const demoTotal = demoUnits.reduce((sum, u) => sum + (u.employeeCount || 0), 0);
+      setTotalEmployees(demoTotal);
       setLoading(false);
       return;
     }
 
     if (!currentOrg) {
+      setOrgTree([]);
+      setUnassignedCount(0);
+      setTotalEmployees(0);
       setLoading(false);
       return;
     }
 
-    const tree = await getOrgTree(currentOrg.id);
-    setOrgTree(tree);
+    // Load org tree (for unit structure and unit-specific employee counts)
+    const result: OrgTreeResult = await getOrgTree(currentOrg.id);
+    setOrgTree(result.tree);
+    setUnassignedCount(result.unassignedCount);
+
+    // Helper to check if error indicates missing is_active column
+    const isMissingColumnError = (err: any): boolean => {
+      if (!err) return false;
+      const code = err.code;
+      const message = err.message?.toLowerCase() || "";
+      return (
+        code === "42703" || // PostgreSQL undefined column
+        message.includes("is_active") && (
+          message.includes("does not exist") ||
+          message.includes("column") && message.includes("not found")
+        )
+      );
+    };
+
+    // Tenant-scoped: Count ALL active employees for the org (same source as Employees page)
+    // This ensures consistency between Employees page count and Org Overview total
+    // First attempt WITH is_active filter
+    let countQuery = supabase
+      .from("employees")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", currentOrg.id)
+      .eq("is_active", true);
+
+    let { count, error } = await countQuery;
+
+    // If error indicates missing is_active column, retry without it
+    if (error && isMissingColumnError(error)) {
+      countQuery = supabase
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", currentOrg.id);
+      
+      const retryResult = await countQuery;
+      count = retryResult.count;
+      error = retryResult.error;
+    }
+
+    if (error) {
+      console.error("Error counting employees:", error);
+      setTotalEmployees(0);
+    } else {
+      setTotalEmployees(count || 0);
+    }
+
     setLoading(false);
   };
 
@@ -197,7 +255,7 @@ export default function OrgOverviewPage() {
     );
   }
 
-  const totalEmployees = orgTree.reduce((sum, u) => sum + (u.employeeCount || 0), 0);
+  // totalEmployees is now loaded separately to ensure it matches Employees page count
 
   if (orgTree.length === 0) {
     return (
@@ -308,9 +366,17 @@ export default function OrgOverviewPage() {
           <h1 className="text-2xl font-bold" data-testid="text-page-title">
             Organization Overview
           </h1>
-          <p className="text-muted-foreground">
-            {orgTree.length} units, {totalEmployees} total employees
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-muted-foreground">
+              {orgTree.length} units, {totalEmployees} total employees
+            </p>
+            {unassignedCount > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                {unassignedCount} unassigned
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
@@ -342,6 +408,34 @@ export default function OrgOverviewPage() {
         {orgTree.map((unit) => (
           <OrgUnitCard key={unit.id} unit={unit} showEmployees={showEmployees} />
         ))}
+        {unassignedCount > 0 && (
+          <Card className="mb-3 border-orange-200 dark:border-orange-800">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-6" />
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium">Unassigned</span>
+                    <Badge variant="destructive" className="text-xs">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {unassignedCount} unassigned
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Employees without an assigned organization unit
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span className="text-sm">
+                    {unassignedCount} employees
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {showCreateUnitModal && (

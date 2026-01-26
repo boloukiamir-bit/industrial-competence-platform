@@ -30,20 +30,37 @@ export async function getOrgUnits(orgId?: string): Promise<OrgUnit[]> {
   }));
 }
 
-export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
+// Helper to check if error indicates missing is_active column
+function isMissingColumnError(err: any): boolean {
+  if (!err) return false;
+  const code = err.code;
+  const message = err.message?.toLowerCase() || "";
+  return (
+    code === "42703" || // PostgreSQL undefined column
+    message.includes("is_active") && (
+      message.includes("does not exist") ||
+      message.includes("column") && message.includes("not found")
+    )
+  );
+}
+
+export type OrgTreeResult = {
+  tree: OrgUnit[];
+  unassignedCount: number;
+};
+
+export async function getOrgTree(orgId?: string): Promise<OrgTreeResult> {
   let unitsQuery = supabase.from("org_units").select("*").order("name");
-  let employeesQuery = supabase.from("employees").select("id, name, role").eq("is_active", true);
   
   if (orgId) {
     unitsQuery = unitsQuery.eq("org_id", orgId);
-    employeesQuery = employeesQuery.eq("org_id", orgId);
   }
 
-  const [unitsResult, employeesResult] = await Promise.all([unitsQuery, employeesQuery]);
+  const unitsResult = await unitsQuery;
 
   if (unitsResult.error) {
     console.error("Error fetching org units:", unitsResult.error);
-    return [];
+    return { tree: [], unassignedCount: 0 };
   }
 
   const units: OrgUnit[] = (unitsResult.data || []).map((row) => ({
@@ -60,6 +77,38 @@ export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
     employeeCount: 0,
   }));
 
+  // Tenant-scoped: select org_unit_id to properly assign employees to units
+  // Also ensure org_id filter is applied for tenant isolation
+  // First attempt WITH is_active filter
+  let employeesQuery = supabase
+    .from("employees")
+    .select("id, name, role, org_unit_id")
+    .eq("is_active", true);
+  
+  if (orgId) {
+    employeesQuery = employeesQuery.eq("org_id", orgId);
+  }
+
+  let employeesResult = await employeesQuery;
+
+  // If error indicates missing is_active column, retry without it
+  if (employeesResult.error && isMissingColumnError(employeesResult.error)) {
+    employeesQuery = supabase
+      .from("employees")
+      .select("id, name, role, org_unit_id");
+    
+    if (orgId) {
+      employeesQuery = employeesQuery.eq("org_id", orgId);
+    }
+    
+    employeesResult = await employeesQuery;
+  }
+
+  if (employeesResult.error) {
+    console.error("Error fetching employees:", employeesResult.error);
+    return { tree: [], unassignedCount: 0 };
+  }
+
   const employees: Employee[] = (employeesResult.data || []).map((row) => ({
     id: row.id,
     name: row.name || "",
@@ -68,13 +117,16 @@ export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
     line: "",
     team: "",
     employmentType: "permanent",
-    orgUnitId: undefined,
+    orgUnitId: row.org_unit_id || undefined,
     isActive: true,
   }));
 
   const unitMap = new Map<string, OrgUnit>();
   units.forEach((u) => unitMap.set(u.id, u));
 
+  // Count employees per unit (where org_unit_id = unit.id)
+  // Also track unassigned employees (where org_unit_id is null)
+  let unassignedCount = 0;
   employees.forEach((e) => {
     if (e.orgUnitId) {
       const unit = unitMap.get(e.orgUnitId);
@@ -83,6 +135,8 @@ export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
         unit.employees.push(e);
         unit.employeeCount = (unit.employeeCount || 0) + 1;
       }
+    } else {
+      unassignedCount++;
     }
   });
 
@@ -115,7 +169,7 @@ export async function getOrgTree(orgId?: string): Promise<OrgUnit[]> {
 
   rootUnits.forEach(aggregateEmployeeCount);
 
-  return rootUnits;
+  return { tree: rootUnits, unassignedCount };
 }
 
 export async function getOrgUnitById(id: string): Promise<OrgUnit | null> {

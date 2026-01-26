@@ -12,6 +12,7 @@ import type {
   PlanVsActual,
 } from "@/types/cockpit";
 
+const isProd = process.env.NODE_ENV === 'production';
 const TODAY = new Date().toISOString().slice(0, 10);
 
 function addDays(date: Date, days: number): string {
@@ -87,6 +88,9 @@ export const DEMO_SHIFT_ASSIGNMENTS: ShiftAssignment[] = [
 ];
 
 export function getDemoStaffingCards(): StationStaffingCard[] {
+  if (isProd) {
+    return [];
+  }
   return DEMO_STATIONS.map((station) => {
     const assignment = DEMO_SHIFT_ASSIGNMENTS.find(a => a.stationId === station.id);
     const employeeId = assignment?.employeeId;
@@ -121,6 +125,19 @@ export function getDemoStaffingCards(): StationStaffingCard[] {
 }
 
 export function getDemoCockpitMetrics(): CockpitMetrics {
+  if (isProd) {
+    return {
+      openActions: 0,
+      criticalActions: 0,
+      staffedStations: 0,
+      totalStations: 0,
+      expiringCompliance: 0,
+      overdueCompliance: 0,
+      safetyObservationsThisWeek: 0,
+      openSafetyActions: 0,
+    };
+  }
+
   const openActions = DEMO_ACTIONS.filter(a => a.status === "open");
   const criticalActions = openActions.filter(a => a.severity === "critical");
   const staffedStations = DEMO_SHIFT_ASSIGNMENTS.filter(a => a.employeeId).length;
@@ -142,6 +159,9 @@ export function getDemoCockpitMetrics(): CockpitMetrics {
 }
 
 export function getDemoPlanVsActual(): PlanVsActual[] {
+  if (isProd) {
+    return [];
+  }
   return [
     { label: "Mon", plan: 120, actual: 115 },
     { label: "Tue", plan: 120, actual: 122 },
@@ -156,6 +176,9 @@ export function getDemoPlanVsActual(): PlanVsActual[] {
 import type { PriorityItem, ActivityLogEntry, EmployeeSuggestion, HandoverItem } from "@/types/cockpit";
 
 export function getDemoPriorityItems(): PriorityItem[] {
+  if (isProd) {
+    return [];
+  }
   const unassignedStation = DEMO_SHIFT_ASSIGNMENTS.find(a => a.status === "unassigned");
   const station = unassignedStation ? DEMO_STATIONS.find(s => s.id === unassignedStation.stationId) : null;
   
@@ -200,6 +223,9 @@ export function getDemoPriorityItems(): PriorityItem[] {
 }
 
 export function getDemoActivityLog(actionId: string): ActivityLogEntry[] {
+  if (isProd) {
+    return [];
+  }
   const now = new Date();
   return [
     {
@@ -230,6 +256,9 @@ export function getDemoActivityLog(actionId: string): ActivityLogEntry[] {
 }
 
 export function getDemoEmployeeSuggestions(stationId: string): EmployeeSuggestion[] {
+  if (isProd) {
+    return [];
+  }
   const assignedEmployeeIds = DEMO_SHIFT_ASSIGNMENTS
     .filter(a => a.employeeId && a.stationId !== stationId)
     .map(a => a.employeeId);
@@ -253,6 +282,9 @@ export function getDemoEmployeeSuggestions(stationId: string): EmployeeSuggestio
 }
 
 export function getDemoHandoverItems(): { openLoops: HandoverItem[]; decisions: HandoverItem[]; risks: HandoverItem[] } {
+  if (isProd) {
+    return { openLoops: [], decisions: [], risks: [] };
+  }
   const now = new Date();
   
   const openLoops: HandoverItem[] = DEMO_ACTIONS

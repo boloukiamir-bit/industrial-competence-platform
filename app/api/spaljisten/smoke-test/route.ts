@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+export const runtime = "nodejs";
 import { getSpaliDevMode, SPALJISTEN_ORG_ID } from "@/lib/spaliDevMode";
 
 type SmokeTestResult = {

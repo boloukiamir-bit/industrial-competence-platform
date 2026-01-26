@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { logExecutionDecision } from "@/lib/executionDecisions";
 import type { RootCausePayload, RootCauseType } from "@/types/cockpit";
-import { AlertCircle, Check, Loader2, Stethoscope, Shield, Database, Repeat } from "lucide-react";
+import { AlertCircle, Check, ExternalLink, Loader2, Stethoscope, Shield, Database, Repeat } from "lucide-react";
 
 type NoGoResolveDrawerProps = {
   open: boolean;
@@ -17,6 +18,12 @@ type NoGoResolveDrawerProps = {
   stationName?: string;
   employeeName?: string | null;
   onResolved?: (status: "created" | "already_resolved") => void;
+  /** Cockpit filter: date (YYYY-MM-DD) for Line Overview deep-link */
+  cockpitDate?: string;
+  /** Cockpit filter: shift type for Line Overview deep-link */
+  cockpitShift?: "Day" | "Evening" | "Night";
+  /** Cockpit filter: line; use "all" or omit when no line filter */
+  cockpitLine?: string;
 };
 
 const typeConfig: Record<RootCauseType, { label: string; color: string; icon: JSX.Element }> = {
@@ -89,7 +96,11 @@ export function NoGoResolveDrawer({
   stationName,
   employeeName,
   onResolved,
+  cockpitDate,
+  cockpitShift,
+  cockpitLine,
 }: NoGoResolveDrawerProps) {
+  const router = useRouter();
   const [rootCause, setRootCause] = useState<RootCausePayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,7 +282,7 @@ export function NoGoResolveDrawer({
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground">Actions taken</p>
+            <p className="text-xs font-semibold text-muted-foreground">Actions logged</p>
             <div className="flex flex-wrap gap-2">
               {actions.map((action) => (
                 <ActionChip
@@ -282,6 +293,34 @@ export function NoGoResolveDrawer({
                 />
               ))}
             </div>
+            {selectedActions.includes("swap") && (
+              <div className="rounded-md border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Swap is manual</p>
+                <p className="text-xs text-muted-foreground">
+                  Swap is a manual action; select the actual person in Line Overview.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    if (cockpitDate) params.set("date", cockpitDate);
+                    if (cockpitShift) params.set("shift", cockpitShift);
+                    if (cockpitLine && cockpitLine !== "all") params.set("line", cockpitLine);
+                    const sid = rootCause?.details?.station_id?.trim();
+                    if (sid) params.set("station_id", sid);
+                    if (shiftAssignmentId) params.set("shift_assignment_id", shiftAssignmentId);
+                    const q = params.toString();
+                    router.push(`/app/line-overview${q ? `?${q}` : ""}`);
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1.5" />
+                  Open Line Overview
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -292,12 +331,22 @@ export function NoGoResolveDrawer({
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
+            {selectedActions.includes("swap") && note.trim().length < 10 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Add a short note (min 10 characters) to log the manual swap.
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end">
             <Button
               onClick={handleResolve}
-              disabled={saving || loading || !shiftAssignmentId}
+              disabled={
+                saving ||
+                loading ||
+                !shiftAssignmentId ||
+                (selectedActions.includes("swap") && note.trim().length < 10)
+              }
               className="min-w-[120px]"
             >
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}

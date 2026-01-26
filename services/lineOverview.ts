@@ -239,9 +239,10 @@ export async function createAssignment(params: {
   });
   
   if (!response.ok) {
-    throw new Error("Failed to create assignment");
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string })?.error || "Failed to create assignment");
   }
-  
+
   return response.json();
 }
 
@@ -264,8 +265,9 @@ export async function updateAssignment(
   });
   
   if (!response.ok) {
-    throw new Error("Failed to update assignment");
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as { error?: string })?.error || "Failed to update assignment");
   }
-  
+
   return response.json();
 }

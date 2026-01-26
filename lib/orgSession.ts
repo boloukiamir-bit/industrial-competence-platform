@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type OrgSessionResult = {
   success: true;
@@ -13,7 +14,17 @@ export type OrgSessionResult = {
   status: 401 | 403;
 };
 
-export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSessionResult> {
+/**
+ * Resolve org and user from the session. When supabase is passed (from
+ * createSupabaseServerClient), it uses cookie-based SSR auth and can write
+ * refreshed tokens into pendingCookies. When omitted, creates a client with
+ * read-only cookies (for backward compatibility with routes not yet using the
+ * server helper).
+ */
+export async function getOrgIdFromSession(
+  request: NextRequest,
+  supabaseInstance?: SupabaseClient
+): Promise<OrgSessionResult> {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -21,26 +32,28 @@ export async function getOrgIdFromSession(request: NextRequest): Promise<OrgSess
     return { success: false, error: "Supabase not configured", status: 401 };
   }
 
-  // Check for Authorization header first (for API-to-API calls)
   const authHeader = request.headers.get("Authorization");
-  let accessToken: string | undefined;
+  const accessToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
 
-  if (authHeader?.startsWith("Bearer ")) {
-    accessToken = authHeader.substring(7);
+  let supabase: SupabaseClient;
+
+  if (supabaseInstance) {
+    supabase = supabaseInstance;
+  } else {
+    const cookieStore = await cookies();
+    supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll() {
+          // No-op when not using createSupabaseServerClient; caller won't apply cookies
+        },
+      },
+    });
   }
 
-  // Use createServerClient from @supabase/ssr to properly read cookies
   const cookieStore = await cookies();
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll() {
-        // Read-only in route handlers; middleware handles cookie updates
-      },
-    },
-  });
 
   // Get user from session (handles both cookie-based and token-based auth)
   let user;

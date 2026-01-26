@@ -16,7 +16,8 @@ import {
   ArrowRight 
 } from "lucide-react";
 import { COPY } from "@/lib/copy";
-import { isDemoMode, DEMO_EMPLOYEES, DEMO_SKILLS, DEMO_POSITIONS, DEMO_ORG_UNITS } from "@/lib/demoData";
+import { supabase } from "@/lib/supabaseClient";
+import { useOrg } from "@/hooks/useOrg";
 
 interface SetupStep {
   id: string;
@@ -29,50 +30,167 @@ interface SetupStep {
   secondaryButtonLabel?: string;
 }
 
-const SETUP_STORAGE_KEY = "nadiplan_setup_progress";
-
-function getStoredProgress(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
-  try {
-    const stored = localStorage.getItem(SETUP_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveProgress(progress: Record<string, boolean>) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SETUP_STORAGE_KEY, JSON.stringify(progress));
-}
-
 export default function SetupPage() {
   const router = useRouter();
-  const [progress, setProgress] = useState<Record<string, boolean>>({});
+  const { currentOrg } = useOrg();
+  const [progress, setProgress] = useState<Record<string, boolean>>({
+    orgUnit: false,
+    employees: false,
+    skills: false,
+    positions: false,
+    gaps: false,
+  });
   const [loading, setLoading] = useState(true);
+  const [hasActiveOrg, setHasActiveOrg] = useState(false);
 
   useEffect(() => {
-    const stored = getStoredProgress();
-    
-    if (isDemoMode()) {
-      setProgress({
-        orgUnit: DEMO_ORG_UNITS.length >= 1,
-        employees: DEMO_EMPLOYEES.length >= 1,
-        skills: DEMO_SKILLS.length >= 3,
-        positions: DEMO_POSITIONS.length >= 1,
-        gaps: false,
-      });
-    } else {
-      setProgress(stored);
-    }
-    setLoading(false);
-  }, []);
+    async function checkSetupProgress() {
+      // Check 1: Organization exists & active_org_id present
+      let hasOrg = false;
+      let activeOrgId: string | null = null;
 
-  const markComplete = (stepId: string) => {
-    const newProgress = { ...progress, [stepId]: true };
-    setProgress(newProgress);
-    saveProgress(newProgress);
-  };
+      if (currentOrg) {
+        hasOrg = true;
+        activeOrgId = currentOrg.id;
+      } else {
+        // Also check profile for active_org_id
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("active_org_id")
+            .eq("id", user.id)
+            .single();
+          
+          if (profile?.active_org_id) {
+            hasOrg = true;
+            activeOrgId = profile.active_org_id;
+          }
+        }
+      }
+
+      if (!hasOrg || !activeOrgId) {
+        setHasActiveOrg(false);
+        setProgress({
+          orgUnit: false,
+          employees: false,
+          skills: false,
+          positions: false,
+          gaps: false,
+        });
+        setLoading(false);
+        return;
+      }
+
+      setHasActiveOrg(true);
+
+      // Tenant-scoped checks using activeOrgId
+      // Check 2: Employees imported (employees count > 0 for org)
+      // Try with is_active filter first, fallback if column doesn't exist
+      let employeesQuery = supabase
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", activeOrgId)
+        .eq("is_active", true);
+      
+      let employeesRes = await employeesQuery;
+      
+      // If error indicates missing is_active column, retry without it
+      if (employeesRes.error) {
+        const errorCode = (employeesRes.error as any).code;
+        const errorMessage = (employeesRes.error as any).message?.toLowerCase() || "";
+        if (errorCode === "42703" || (errorMessage.includes("is_active") && errorMessage.includes("does not exist"))) {
+          employeesQuery = supabase
+            .from("employees")
+            .select("*", { count: "exact", head: true })
+            .eq("org_id", activeOrgId);
+          employeesRes = await employeesQuery;
+        }
+      }
+
+      // Check 3: Stations/Lines exist (stations count > 0 for org)
+      // Try with is_active filter first, fallback if column doesn't exist
+      let stationsQuery = supabase
+        .from("stations")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", activeOrgId)
+        .eq("is_active", true);
+      
+      let stationsRes = await stationsQuery;
+      
+      // If error indicates missing is_active column, retry without it
+      if (stationsRes.error) {
+        const errorCode = (stationsRes.error as any).code;
+        const errorMessage = (stationsRes.error as any).message?.toLowerCase() || "";
+        if (errorCode === "42703" || (errorMessage.includes("is_active") && errorMessage.includes("does not exist"))) {
+          stationsQuery = supabase
+            .from("stations")
+            .select("*", { count: "exact", head: true })
+            .eq("org_id", activeOrgId);
+          stationsRes = await stationsQuery;
+        }
+      }
+
+      const [competencesRes, positionsRes] = await Promise.all([
+        // Check 4: Competences exist (competences count > 0 for org)
+        supabase
+          .from("competences")
+          .select("*", { count: "exact", head: true })
+          .eq("org_id", activeOrgId),
+        
+        // Check 5a: Positions exist (positions count > 0 for org)
+        supabase
+          .from("positions")
+          .select("*", { count: "exact", head: true })
+          .eq("org_id", activeOrgId),
+      ]);
+
+      // Also check org_units for orgUnit step
+      const { count: orgUnitsCount } = await supabase
+        .from("org_units")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", activeOrgId);
+
+      const employeesCount = employeesRes.count || 0;
+      if (employeesRes.error && !employeesRes.count) {
+        console.error("Error checking employees:", employeesRes.error);
+      }
+
+      // Check if positions have requirements by checking if any position has requirements
+      // We need to join through positions to get org-scoped requirements
+      let hasRequirements = false;
+      if (positionsRes.count && positionsRes.count > 0) {
+        // Get one position to check if it has requirements
+        const { data: samplePosition } = await supabase
+          .from("positions")
+          .select("id")
+          .eq("org_id", activeOrgId)
+          .limit(1)
+          .single();
+        
+        if (samplePosition) {
+          const { count: reqCount } = await supabase
+            .from("position_competence_requirements")
+            .select("*", { count: "exact", head: true })
+            .eq("position_id", samplePosition.id);
+          
+          hasRequirements = (reqCount || 0) > 0;
+        }
+      }
+
+      setProgress({
+        orgUnit: (orgUnitsCount || 0) > 0,
+        employees: employeesCount > 0,
+        skills: (competencesRes.count || 0) > 0,
+        positions: (positionsRes.count || 0) > 0 || hasRequirements,
+        gaps: false, // Gaps step is manual completion
+      });
+
+      setLoading(false);
+    }
+
+    checkSetupProgress();
+  }, [currentOrg]);
 
   const steps: SetupStep[] = [
     {
@@ -115,7 +233,6 @@ export default function SetupPage() {
       completed: progress.gaps ?? false,
       icon: TrendingUp,
       action: () => {
-        markComplete("gaps");
         router.push("/app/gaps");
       },
       buttonLabel: COPY.setup.steps.gaps.button,
@@ -132,6 +249,28 @@ export default function SetupPage() {
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48" />
           <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
         </div>
+      </div>
+    );
+  }
+
+  // Show empty state if no active organization
+  if (!loading && !hasActiveOrg) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto" data-testid="setup-page">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Building2 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              Select organization
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
+              Please select an organization to view setup progress.
+            </p>
+            <Button onClick={() => router.push("/app/org/select")}>
+              Select Organization
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -85,9 +87,8 @@ export async function POST(request: NextRequest) {
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
-    console.error("HR Tasks resolve API error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to resolve task";
-    const res = NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error("POST /api/hr/tasks/resolve failed:", err);
+    const res = NextResponse.json({ error: "Internal error" }, { status: 500 });
     try {
       const { pendingCookies } = await createSupabaseServerClient();
       applySupabaseCookies(res, pendingCookies);

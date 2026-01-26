@@ -1,159 +1,114 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, CheckCircle, Loader2, ShieldOff } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { AlertCircle, AlertTriangle, CheckCircle, Loader2, ShieldOff } from "lucide-react";
 import { NoGoResolveDrawer } from "@/components/NoGoResolveDrawer";
-import { createClient } from "@/utils/supabase/client";
 import { useCockpitFilters } from "@/lib/CockpitFilterContext";
+import { createClient } from "@/utils/supabase/client";
 
-type AssignmentRow = {
-  id: string;
-  stationName: string;
-  employeeName?: string | null;
-  status?: string | null;
+type DecisionRow = {
+  shift_assignment_id: string;
+  station_name: string;
+  employee_name: string | null;
+  decision_id: string | null;
+  status: "active" | "none";
+  root_cause: unknown;
+  severity: "NO-GO" | "WARNING" | "RESOLVED";
 };
 
 export function ExecutionDecisionPanel() {
   const { date, shiftType, line } = useCockpitFilters();
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
-  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
+  const [rows, setRows] = useState<DecisionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerAssignment, setDrawerAssignment] = useState<AssignmentRow | null>(null);
+  const [drawerRow, setDrawerRow] = useState<DecisionRow | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
+
+  const displayedRows = showResolved ? rows : rows.filter((r) => r.severity !== "RESOLVED");
 
   const supabase = useMemo(() => createClient(), []);
 
-  const loadAssignments = async () => {
+  const loadDecisions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let assignmentIds: string[] = [];
-
-      if (line === "all") {
-        const siRes = await fetch(
-          `/api/cockpit/shift-ids?date=${encodeURIComponent(date)}&shift=${encodeURIComponent(shiftType)}`,
-          { credentials: "include" }
-        );
-        if (!siRes.ok) {
-          const d = await siRes.json().catch(() => ({}));
-          throw new Error(d.error || "Failed to load shift IDs");
-        }
-        const { shift_ids } = await siRes.json();
-        if (!Array.isArray(shift_ids) || shift_ids.length === 0) {
-          setAssignments([]);
-          setResolvedIds(new Set());
-          return;
-        }
-        const { data: assignmentRows, error: assignmentError } = await supabase
-          .from("shift_assignments")
-          .select(
-            `id, status, assignment_date, employee:employee_id(name), station:station_id(name)`
-          )
-          .in("shift_id", shift_ids)
-          .eq("assignment_date", date);
-
-        if (assignmentError) throw assignmentError;
-
-        const normalized: AssignmentRow[] = (assignmentRows || []).map((row: any) => ({
-          id: row.id,
-          stationName: row.station?.name || "Station",
-          employeeName: row.employee?.name || null,
-          status: row.status,
-        }));
-        setAssignments(normalized);
-        assignmentIds = normalized.map((r) => r.id).filter(Boolean);
-      } else if (line) {
-        const ensureRes = await fetch("/api/shift-context/ensure", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ shift_date: date, shift_type: shiftType, line }),
-        });
-
-        if (!ensureRes.ok) {
-          const data = await ensureRes.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to ensure shift context");
-        }
-
-        const ensureData = await ensureRes.json();
-        const shiftId = ensureData.shift_id as string | undefined;
-        if (!shiftId) {
-          setAssignments([]);
-          setResolvedIds(new Set());
-          return;
-        }
-
-        const { data: assignmentRows, error: assignmentError } = await supabase
-          .from("shift_assignments")
-          .select(
-            `id, status, assignment_date, employee:employee_id(name), station:station_id(name)`
-          )
-          .eq("shift_id", shiftId)
-          .eq("assignment_date", date);
-
-        if (assignmentError) throw assignmentError;
-
-        const normalized: AssignmentRow[] = (assignmentRows || []).map((row: any) => ({
-          id: row.id,
-          stationName: row.station?.name || "Station",
-          employeeName: row.employee?.name || null,
-          status: row.status,
-        }));
-        setAssignments(normalized);
-        assignmentIds = normalized.map((r) => r.id).filter(Boolean);
-      } else {
-        setAssignments([]);
-        setResolvedIds(new Set());
+      const params = new URLSearchParams({
+        date,
+        shift: shiftType,
+        line: line || "all",
+      });
+      const headers: HeadersInit = {};
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+      const res = await fetch(`/api/cockpit/decisions?${params}`, {
+        credentials: "include",
+        ...(Object.keys(headers).length > 0 && { headers }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError((d as { error?: string }).error || "Failed to load decisions");
+        setRows([]);
         return;
       }
-
-      if (assignmentIds.length > 0) {
-        const { data: decisions, error: decisionsError } = await supabase
-          .from("execution_decisions")
-          .select("target_id")
-          .eq("decision_type", "resolve_no_go")
-          .eq("target_type", "shift_assignment")
-          .eq("status", "active")
-          .in("target_id", assignmentIds);
-
-        if (decisionsError) {
-          console.warn("Failed to load resolved state", decisionsError);
-          setResolvedIds(new Set());
-        } else {
-          setResolvedIds(new Set((decisions || []).map((d: any) => d.target_id)));
-        }
-      } else {
-        setResolvedIds(new Set());
-      }
+      const data = await res.json();
+      setRows(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Failed to load assignments", err);
-      setError(err instanceof Error ? err.message : "Failed to load assignments");
-      setAssignments([]);
-      setResolvedIds(new Set());
+      console.error("Failed to load decisions", err);
+      setError(err instanceof Error ? err.message : "Failed to load decisions");
+      setRows([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [date, shiftType, line, supabase]);
 
   useEffect(() => {
-    loadAssignments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, shiftType, line]);
+    loadDecisions();
+  }, [loadDecisions]);
 
-  const handleOpenDrawer = (row: AssignmentRow) => {
-    setDrawerAssignment(row);
+  const handleOpenDrawer = (row: DecisionRow) => {
+    setDrawerRow(row);
     setDrawerOpen(true);
   };
 
-  const handleResolved = (status: "created" | "already_resolved") => {
-    if (drawerAssignment) {
-      setResolvedIds((prev) => new Set([...prev, drawerAssignment.id]));
-    }
+  const handleResolved = (_?: "created" | "already_resolved") => {
     setDrawerOpen(false);
+    setDrawerRow(null);
+    loadDecisions();
+  };
+
+  const severityBadge = (row: DecisionRow) => {
+    switch (row.severity) {
+      case "RESOLVED":
+        return (
+          <Badge className="bg-green-100 text-green-700">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Resolved
+          </Badge>
+        );
+      case "WARNING":
+        return (
+          <Badge className="bg-amber-100 text-amber-800">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            WARNING
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="destructive" className="bg-red-100 text-red-800">
+            <ShieldOff className="h-3 w-3 mr-1" />
+            NO-GO
+          </Badge>
+        );
+    }
   };
 
   return (
@@ -167,9 +122,19 @@ export function ExecutionDecisionPanel() {
             </CardTitle>
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-xs text-muted-foreground">
-                {date} · {shiftType} · {line === "all" ? "All Lines" : (line || "—")}
+                {date} · {shiftType} · {line === "all" ? "All Lines" : line || "—"}
               </span>
-              <Button variant="outline" size="sm" onClick={loadAssignments} disabled={loading}>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="show-resolved" className="text-xs font-normal text-muted-foreground cursor-pointer">
+                  Show resolved
+                </Label>
+                <Switch
+                  id="show-resolved"
+                  checked={showResolved}
+                  onCheckedChange={setShowResolved}
+                />
+              </div>
+              <Button variant="outline" size="sm" onClick={loadDecisions} disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
               </Button>
             </div>
@@ -185,46 +150,38 @@ export function ExecutionDecisionPanel() {
             {loading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading shift assignments...
+                Loading…
               </div>
-            ) : assignments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No assignments for this selection.</p>
+            ) : displayedRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {showResolved ? "No assignments for this selection." : "No issues for this selection."}
+              </p>
             ) : (
               <div className="space-y-2">
-                {assignments.map((row) => {
-                  const resolved = resolvedIds.has(row.id);
-                  return (
-                    <div
-                      key={row.id}
-                      className="flex items-center justify-between rounded-md border p-3"
-                    >
-                      <div>
-                        <p className="font-medium">{row.stationName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {row.employeeName || "Unassigned"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {resolved ? (
-                          <Badge className="bg-green-100 text-green-700">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Resolved
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">NO-GO</Badge>
-                        )}
-                        <Button
-                          size="sm"
-                          variant={resolved ? "outline" : "default"}
-                          disabled={resolved}
-                          onClick={() => handleOpenDrawer(row)}
-                        >
-                          Resolve
-                        </Button>
-                      </div>
+                {displayedRows.map((row) => (
+                  <div
+                    key={row.shift_assignment_id}
+                    className="flex items-center justify-between rounded-md border p-3"
+                  >
+                    <div>
+                      <p className="font-medium">{row.station_name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {row.employee_name || "Unassigned"}
+                      </p>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-2">
+                      {severityBadge(row)}
+                      <Button
+                        size="sm"
+                        variant={row.severity === "RESOLVED" ? "outline" : "default"}
+                        disabled={row.severity === "RESOLVED"}
+                        onClick={() => handleOpenDrawer(row)}
+                      >
+                        Resolve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
@@ -234,10 +191,13 @@ export function ExecutionDecisionPanel() {
       <NoGoResolveDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        shiftAssignmentId={drawerAssignment?.id}
-        stationName={drawerAssignment?.stationName}
-        employeeName={drawerAssignment?.employeeName || undefined}
+        shiftAssignmentId={drawerRow?.shift_assignment_id}
+        stationName={drawerRow?.station_name}
+        employeeName={drawerRow?.employee_name ?? undefined}
         onResolved={handleResolved}
+        cockpitDate={date}
+        cockpitShift={shiftType}
+        cockpitLine={line || "all"}
       />
     </>
   );

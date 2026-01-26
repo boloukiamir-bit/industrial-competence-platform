@@ -35,7 +35,10 @@ export function HrDashboard() {
 
   useEffect(() => {
     async function loadDashboard() {
-      if (isDemoMode()) {
+      const isProd = process.env.NODE_ENV === 'production';
+      
+      // Demo mode only allowed in non-production when no authenticated org exists
+      if (!isProd && isDemoMode()) {
         const demoMetrics = getDemoMetrics();
         setData({
           totalHeadcount: demoMetrics.totalEmployees,
@@ -45,11 +48,7 @@ export function HrDashboard() {
           openWorkflows: 4,
           avgReadiness: demoMetrics.avgReadiness,
           topGapSkill: demoMetrics.topGapSkill,
-          riskUnits: [
-            { unitName: "Pressline 1", riskIndex: 0.35, criticalCount: 2 },
-            { unitName: "Assembly", riskIndex: 0.25, criticalCount: 1 },
-            { unitName: "Logistics", riskIndex: 0.15, criticalCount: 1 },
-          ],
+          riskUnits: [],
         });
         setLoading(false);
         return;
@@ -250,7 +249,9 @@ export function HrDashboard() {
           </CardHeader>
           <CardContent>
             {data.riskUnits.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">No risk data available</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No analytics data yet for this organization
+              </p>
             ) : (
               <div className="space-y-3">
                 {data.riskUnits.map((unit) => (

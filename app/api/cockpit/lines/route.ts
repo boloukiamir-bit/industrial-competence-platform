@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,20 +10,25 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getOrgIdFromSession(request);
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
-      return NextResponse.json({ error: session.error }, { status: session.status });
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
-    const orgId = session.orgId;
-
-    // Get active_org_id from profiles if available, otherwise use session orgId
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("active_org_id")
       .eq("id", session.userId)
       .single();
 
-    const activeOrgId = profile?.active_org_id || orgId;
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const activeOrgId = profile.active_org_id as string;
 
     // Get distinct lines from stations
     const { data: stations, error } = await supabaseAdmin
@@ -33,19 +39,19 @@ export async function GET(request: NextRequest) {
       .not("line", "is", null);
 
     if (error) {
-      return NextResponse.json(
+      const res = NextResponse.json(
         { error: "Failed to fetch lines" },
         { status: 500 }
       );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
-    // Get unique lines
-    const uniqueLines = [...new Set((stations || []).map((s: any) => s.line).filter(Boolean))];
-    
-    // Filter out "Assembly" as per requirements
-    const validLines = uniqueLines.filter((line: string) => line !== "Assembly");
+    const uniqueLines = [...new Set((stations || []).map((s: { line?: string }) => s.line).filter((v): v is string => Boolean(v)))].sort();
 
-    return NextResponse.json({ lines: validLines.sort() });
+    const res = NextResponse.json({ lines: uniqueLines });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error("getLines error:", error);
     return NextResponse.json(

@@ -19,6 +19,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { WORKFLOW_TEMPLATES } from "@/services/hrWorkflows";
 import type { HRWorkflowInstance, HRWorkflowStatus, HRWorkflowStep } from "@/types/domain";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useOrg } from "@/hooks/useOrg";
+import { isHrAdmin } from "@/lib/auth";
 
 export default function WorkflowDetailPage() {
   const { loading: authLoading } = useAuthGuard();
@@ -37,6 +39,7 @@ export default function WorkflowDetailPage() {
 function WorkflowDetailContent() {
   const router = useRouter();
   const params = useParams();
+  const { currentRole } = useOrg();
   const id = params?.id as string;
   
   const [instance, setInstance] = useState<HRWorkflowInstance | null>(null);
@@ -46,8 +49,8 @@ function WorkflowDetailContent() {
 
   useEffect(() => {
     async function load() {
-      const user = await getCurrentUser();
-      if (!user || user.role !== "HR_ADMIN") {
+      // Check HR access using memberships.role (tenant-scoped) instead of profiles.role
+      if (!isHrAdmin(currentRole)) {
         setAuthorized(false);
         setLoading(false);
         return;

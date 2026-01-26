@@ -129,17 +129,52 @@ type GroupRow = {
 
 export async function getEmployeeCompetenceProfile(
   employeeId: string,
-  effectiveDate?: string
+  effectiveDate?: string,
+  orgId?: string
 ): Promise<EmployeeCompetenceProfile> {
+  // Validate employeeId
+  if (!employeeId || employeeId.trim() === "") {
+    throw new Error("employeeId is required");
+  }
+
+  // Resolve effectiveOrgId
+  let effectiveOrgId: string;
+  if (orgId) {
+    effectiveOrgId = orgId;
+  } else {
+    // Fetch current user and profile
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error("Failed to get current user");
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    if (!profile?.active_org_id) {
+      throw new Error("Missing active_org_id");
+    }
+
+    effectiveOrgId = profile.active_org_id;
+  }
+
   // Use provided date or default to today
   const effectiveDateStr =
     effectiveDate ?? new Date().toISOString().slice(0, 10);
 
-  // 1) Employee
+  // 1) Employee - ensure employee belongs to org
   const { data: employeeRow, error: empError } = await supabase
     .from("employees")
     .select("id, name, position_id")
     .eq("id", employeeId)
+    .eq("org_id", effectiveOrgId)
     .single<EmployeeRow>();
 
   if (empError || !employeeRow) {
@@ -158,6 +193,7 @@ export async function getEmployeeCompetenceProfile(
       .from("positions")
       .select("id, name")
       .eq("id", positionId)
+      .eq("org_id", effectiveOrgId)
       .limit(1);
 
     const pos = posRows?.[0] as { id: string; name: string } | undefined;
@@ -169,6 +205,8 @@ export async function getEmployeeCompetenceProfile(
   // 3) Requirements for this position
   let requirementRows: RequirementRow[] = [];
   if (positionId) {
+    // Filter requirements by position_id (position already verified to belong to org above)
+    // Note: position_competence_requirements doesn't have org_id, but is scoped via position.org_id
     const { data: reqData, error: reqError } = await supabase
       .from("position_competence_requirements")
       .select("id, position_id, competence_id, required_level, mandatory")
@@ -181,7 +219,8 @@ export async function getEmployeeCompetenceProfile(
     requirementRows = (reqData ?? []) as RequirementRow[];
   }
 
-  // 4) Employee competences
+  // 4) Employee competences - employee already verified to belong to org above
+  // Note: employee_competences doesn't have org_id, but is scoped via employee.org_id
   const { data: empCompData, error: empCompError } = await supabase
     .from("employee_competences")
     .select("id, employee_id, competence_id, level, valid_from, valid_to")
@@ -212,7 +251,8 @@ export async function getEmployeeCompetenceProfile(
     const { data: compData, error: compError } = await supabase
       .from("competences")
       .select("id, name, description, code, group_id, is_safety_critical")
-      .in("id", Array.from(competenceIds));
+      .in("id", Array.from(competenceIds))
+      .eq("org_id", effectiveOrgId);
 
     if (compError) {
       console.error(compError);
@@ -228,10 +268,14 @@ export async function getEmployeeCompetenceProfile(
 
     let groupById = new Map<string, string>();
     if (groupIds.size > 0) {
+      // Filter competence_groups by org_id
+      // Note: If competence_groups doesn't have org_id column, this will fail and needs schema update
+      // Competences are already filtered by org_id, so groups are implicitly scoped through competences
       const { data: groupData, error: groupError } = await supabase
         .from("competence_groups")
         .select("id, name")
-        .in("id", Array.from(groupIds));
+        .in("id", Array.from(groupIds))
+        .eq("org_id", effectiveOrgId);
 
       if (groupError) {
         console.error(groupError);

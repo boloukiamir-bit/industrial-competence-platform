@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+
+export const runtime = "nodejs";
 import type { HRAnalyticsV2 } from "@/types/domain";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
@@ -153,9 +155,8 @@ export async function GET(request: NextRequest) {
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
-    console.error("Analytics API error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to fetch analytics";
-    const res = NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error("GET /api/hr/analytics failed:", err);
+    const res = NextResponse.json({ error: "Internal error" }, { status: 500 });
     // Try to apply cookies even on error
     try {
       const { pendingCookies } = await createSupabaseServerClient();

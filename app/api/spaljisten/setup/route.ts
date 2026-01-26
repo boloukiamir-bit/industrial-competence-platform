@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+export const runtime = "nodejs";
 
 const SETUP_SECRET = process.env.SPALJISTEN_SETUP_SECRET || "sp-go-live-2024";
 

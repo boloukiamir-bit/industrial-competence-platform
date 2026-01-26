@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-
-const DEMO_ORG_ID = "f607f244-da91-41d9-a648-d02a1591105c";
+import { getOrgIdFromSession } from "@/lib/orgSession";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,20 +27,63 @@ const suggestionsSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const session = await getOrgIdFromSession(request, supabase);
+    if (!session.success) {
+      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", session.userId)
+      .single();
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const activeOrgId = profile.active_org_id as string;
+
+    const { data: stations, error: stationsError } = await supabaseAdmin
+      .from("stations")
+      .select("line")
+      .eq("org_id", activeOrgId)
+      .eq("is_active", true)
+      .not("line", "is", null);
+
+    if (stationsError) {
+      const res = NextResponse.json({ error: "Failed to fetch lines" }, { status: 500 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const stationLines = [...new Set((stations || []).map((s: { line?: string }) => s.line).filter((v): v is string => Boolean(v)))].sort();
+
+    if (stationLines.length === 0) {
+      const res = NextResponse.json({ suggestions: [] });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
     const body = await request.json();
     const parsed = suggestionsSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 });
+      const res = NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
-    const { date, shift, hoursNeeded } = parsed.data;
+    const { date, shift } = parsed.data;
     const shiftType = shiftParamToDbValue(shift);
 
     const [employeesRes, attendanceRes, assignmentsRes] = await Promise.all([
-      supabaseAdmin.from("pl_employees").select("*").eq("org_id", DEMO_ORG_ID),
-      supabaseAdmin.from("pl_attendance").select("*").eq("org_id", DEMO_ORG_ID).eq("plan_date", date).eq("shift_type", shiftType),
-      supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", DEMO_ORG_ID).eq("plan_date", date).eq("shift_type", shiftType),
+      supabaseAdmin.from("pl_employees").select("*").eq("org_id", activeOrgId),
+      supabaseAdmin.from("pl_attendance").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shiftType),
+      supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shiftType),
     ]);
 
     if (employeesRes.error) throw employeesRes.error;
@@ -85,7 +128,9 @@ export async function POST(request: NextRequest) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
-    return NextResponse.json({ suggestions });
+    const res = NextResponse.json({ suggestions });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error("Suggestions error:", error);
     return NextResponse.json({ error: "Failed to get suggestions" }, { status: 500 });

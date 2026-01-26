@@ -104,7 +104,10 @@ export function SuggestModal({
         toast({ title: "Failed to create assignment", variant: "destructive" });
       }
     } catch (err) {
-      toast({ title: "Error creating assignment", variant: "destructive" });
+      toast({
+        title: err instanceof Error ? err.message : "Error creating assignment",
+        variant: "destructive",
+      });
     } finally {
       setApplying(null);
     }

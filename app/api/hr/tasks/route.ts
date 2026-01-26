@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+
+export const runtime = "nodejs";
 
 export type ExpiringTask = {
   id: string;
@@ -176,9 +178,8 @@ export async function GET(request: NextRequest) {
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
-    console.error("HR Tasks API error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to fetch HR tasks";
-    const res = NextResponse.json({ error: errorMessage }, { status: 500 });
+    console.error("GET /api/hr/tasks failed:", err);
+    const res = NextResponse.json({ error: "Internal error" }, { status: 500 });
     try {
       const { pendingCookies } = await createSupabaseServerClient();
       applySupabaseCookies(res, pendingCookies);

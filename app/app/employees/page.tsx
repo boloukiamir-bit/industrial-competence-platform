@@ -29,16 +29,48 @@ export default function EmployeesPage() {
       }
 
       if (!currentOrg) {
+        setEmployees([]);
         setLoading(false);
         return;
       }
 
-      // Note: org_id filtering disabled until Supabase schema is updated
-      const { data, error } = await supabase
+      // Helper to check if error indicates missing is_active column
+      const isMissingColumnError = (err: any): boolean => {
+        if (!err) return false;
+        const code = err.code;
+        const message = err.message?.toLowerCase() || "";
+        return (
+          code === "42703" || // PostgreSQL undefined column
+          message.includes("is_active") && (
+            message.includes("does not exist") ||
+            message.includes("column") && message.includes("not found")
+          )
+        );
+      };
+
+      // Tenant-scoped: filter by org_id
+      // First attempt WITH is_active filter
+      let query = supabase
         .from("employees")
         .select("*")
+        .eq("org_id", currentOrg.id)
         .eq("is_active", true)
         .order("name");
+
+      let { data, error } = await query;
+
+      // If error indicates missing is_active column, retry without it
+      if (error && isMissingColumnError(error)) {
+        query = supabase
+          .from("employees")
+          .select("*")
+          .eq("org_id", currentOrg.id)
+          .order("name");
+        
+        const retryResult = await query;
+        data = retryResult.data;
+        error = retryResult.error;
+      }
 
       if (!error && data) {
         setEmployees(

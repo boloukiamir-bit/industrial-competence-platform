@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import pool from "@/lib/pgClient";
+import { pool } from "@/lib/db/pool";
+export const runtime = "nodejs";
 import { PoolClient } from "pg";
 import { getOrgIdFromSession, isAdminOrHr } from "@/lib/orgSession";
 
