@@ -28,9 +28,6 @@ export default function HrTasksPage() {
 function HrTasksContent() {
   const { currentRole, isLoading: orgLoading, currentOrg, memberships } = useOrg();
   const { user: authUser } = useAuth();
-  const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Derived authorization: purely computed from currentRole and orgLoading
@@ -50,32 +47,7 @@ function HrTasksContent() {
     }
   }, [authUser]);
 
-  // Data fetching: only runs when authorized
-  useEffect(() => {
-    if (!canAccess) {
-      return;
-    }
-
-    async function load() {
-      try {
-        const data = await getHrTaskBuckets();
-        setBuckets(data);
-      } catch (err) {
-        console.error(err);
-        setError("Could not load HR tasks.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [canAccess]);
-
-  const totalTasks =
-    (buckets?.overdue.length ?? 0) +
-    (buckets?.today.length ?? 0) +
-    (buckets?.upcoming.length ?? 0);
-
-  // Render flow: loading -> access denied -> content
+  // Render flow: loading -> access denied -> body
   if (orgLoading) {
     return (
       <main className="hr-page">
@@ -104,6 +76,68 @@ function HrTasksContent() {
             </p>
           </CardContent>
         </Card>
+      </main>
+    );
+  }
+
+  return (
+    <HrTasksBody
+      currentOrg={currentOrg}
+      currentRole={currentRole}
+      memberships={memberships}
+      userEmail={userEmail}
+    />
+  );
+}
+
+function HrTasksBody({
+  currentOrg,
+  currentRole,
+  memberships,
+  userEmail,
+}: {
+  currentOrg: { id: string } | null;
+  currentRole: string | null;
+  memberships: unknown[];
+  userEmail: string | null;
+}) {
+  const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Data fetching: only runs when authorized (this component only renders when authorized)
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getHrTaskBuckets();
+        setBuckets(data);
+      } catch (err) {
+        console.error(err);
+        setError("Could not load HR tasks.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const totalTasks =
+    (buckets?.overdue.length ?? 0) +
+    (buckets?.today.length ?? 0) +
+    (buckets?.upcoming.length ?? 0);
+
+  if (loading) {
+    return (
+      <main className="hr-page">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+          <div className="hr-kpi-grid">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 bg-gray-200 dark:bg-gray-700 rounded-xl" />
+            ))}
+          </div>
+          <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
+        </div>
       </main>
     );
   }
