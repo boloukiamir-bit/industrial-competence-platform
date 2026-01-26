@@ -7,6 +7,9 @@ import { AlertTriangle } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getHrTaskBuckets, HrTaskBuckets, HrTask } from "@/services/hrTasks";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useOrg } from "@/hooks/useOrg";
+import { useAuth } from "@/hooks/useAuth";
+import { isHrAdmin } from "@/lib/auth";
 
 export default function HrTasksPage() {
   const { loading: authLoading } = useAuthGuard();
@@ -23,20 +26,44 @@ export default function HrTasksPage() {
 }
 
 function HrTasksContent() {
+  const { currentRole, isLoading: orgLoading, currentOrg, memberships } = useOrg();
+  const { user: authUser } = useAuth();
   const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Load user email for diagnostic
+  useEffect(() => {
+    if (authUser?.email) {
+      setUserEmail(authUser.email);
+    } else {
+      getCurrentUser().then((user) => {
+        if (user?.email) {
+          setUserEmail(user.email);
+        }
+      });
+    }
+  }, [authUser]);
 
   useEffect(() => {
     async function load() {
-      const user = await getCurrentUser();
-      if (!user || user.role !== "HR_ADMIN") {
+      // Wait for org context to finish loading before checking authorization
+      if (orgLoading) {
+        return;
+      }
+
+      // Normalize role casing and check HR access using memberships.role (tenant-scoped)
+      const roleNormalized = (currentRole ?? "").toLowerCase();
+      if (!isHrAdmin(roleNormalized)) {
         setAuthorized(false);
         setLoading(false);
         return;
       }
 
+      // User is authorized, load data
+      setAuthorized(true);
       try {
         const data = await getHrTaskBuckets();
         setBuckets(data);
@@ -48,14 +75,14 @@ function HrTasksContent() {
       }
     }
     load();
-  }, []);
+  }, [currentRole, orgLoading]);
 
   const totalTasks =
     (buckets?.overdue.length ?? 0) +
     (buckets?.today.length ?? 0) +
     (buckets?.upcoming.length ?? 0);
 
-  if (loading) {
+  if (loading || orgLoading) {
     return (
       <main className="hr-page">
         <div className="animate-pulse space-y-4">
@@ -97,6 +124,17 @@ function HrTasksContent() {
           </p>
         </div>
       </header>
+
+      {/* DEV-ONLY diagnostic - must not leak in production */}
+      {process.env.NODE_ENV !== "production" && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-xs text-gray-700 dark:text-gray-300">
+          <strong>DEV Diagnostic:</strong>{" "}
+          email: {userEmail ?? "loading..."} |{" "}
+          active org: {currentOrg?.id ?? "none"} |{" "}
+          currentRole: {currentRole ?? "null"} |{" "}
+          memberships: {memberships.length}
+        </div>
+      )}
 
       {error && <p className="hr-error">{error}</p>}
 
