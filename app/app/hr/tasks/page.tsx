@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
-import { getHrTaskBuckets, HrTaskBuckets, HrTask } from "@/services/hrTasks";
+import { getHrTaskBuckets, HrTaskBuckets, HrTask, ExpiringItem } from "@/services/hrTasks";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
@@ -119,7 +119,8 @@ function HrTasksBody({
   const totalTasks =
     (buckets?.overdue.length ?? 0) +
     (buckets?.today.length ?? 0) +
-    (buckets?.upcoming.length ?? 0);
+    (buckets?.upcoming.length ?? 0) +
+    (buckets?.expiring.length ?? 0);
 
   if (loading) {
     return (
@@ -156,6 +157,13 @@ function HrTasksBody({
           active org: {currentOrg?.id ?? "none"} |{" "}
           currentRole: {currentRole ?? "null"} |{" "}
           memberships: {memberships.length}
+          {buckets?.expiringMeta && (
+            <>
+              {" | "}
+              expiring medical: {buckets.expiringMeta.medical_count} |{" "}
+              expiring certs: {buckets.expiringMeta.cert_count}
+            </>
+          )}
         </div>
       )}
 
@@ -211,9 +219,69 @@ function HrTasksBody({
             badgeClass="hr-pill--ok"
             testId="section-upcoming"
           />
+
+          {buckets.expiring && buckets.expiring.length > 0 && (
+            <ExpiringSection expiring={buckets.expiring} />
+          )}
         </>
       )}
     </main>
+  );
+}
+
+function ExpiringSection({ expiring }: { expiring: Array<{
+  id: string;
+  employee_id: string;
+  employee_name: string | null;
+  type: "medical" | "cert";
+  item_name: string;
+  expires_on: string;
+  days_to_expiry: number;
+  severity: "P0" | "P1" | "P2";
+}> }) {
+  return (
+    <section className="hr-task-section" data-testid="section-expiring">
+      <header className="hr-task-section__header">
+        <div>
+          <h2 className="hr-section__title">Expiring Soon</h2>
+          <p className="hr-task-section__description">
+            Medical checks and certificates expiring within 30 days or already expired.
+          </p>
+        </div>
+        <span className="hr-pill hr-pill--danger">{expiring.length}</span>
+      </header>
+
+      {expiring.length === 0 ? (
+        <p className="hr-task-empty">No expiring items.</p>
+      ) : (
+        <div className="hr-task-list">
+          {expiring.map((item) => (
+            <div key={item.id} className="hr-task-row" data-testid={`expiring-item-${item.id}`}>
+              <div className="hr-task-row__main">
+                <h3 className="hr-task-row__title">{item.item_name}</h3>
+                <p className="hr-task-row__subtitle">
+                  {item.employee_name ?? "Unknown employee"} - {item.type === "medical" ? "Medical Check" : "Certificate"}
+                </p>
+              </div>
+              <div className="hr-task-row__meta">
+                <span className="hr-task-row__date">
+                  {new Date(item.expires_on).toLocaleDateString("sv-SE")}
+                  {item.days_to_expiry < 0 && " (expired)"}
+                  {item.days_to_expiry >= 0 && ` (${item.days_to_expiry} days)`}
+                </span>
+                <span className={`hr-task-row__status ${
+                  item.severity === "P0" ? "hr-task-row__status--danger" :
+                  item.severity === "P1" ? "hr-task-row__status--warn" :
+                  "hr-task-row__status--ok"
+                }`}>
+                  {item.severity}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

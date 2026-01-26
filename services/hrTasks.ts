@@ -14,10 +14,27 @@ export type HrTask = {
   employeeName: string | null;
 };
 
+export type ExpiringItem = {
+  id: string;
+  employee_id: string;
+  employee_name: string | null;
+  type: "medical" | "cert";
+  item_name: string;
+  expires_on: string;
+  days_to_expiry: number;
+  severity: "P0" | "P1" | "P2";
+};
+
 export type HrTaskBuckets = {
   overdue: HrTask[];
   today: HrTask[];
   upcoming: HrTask[];
+  expiring: ExpiringItem[];
+  expiringMeta?: {
+    medical_count: number;
+    cert_count: number;
+    total_count: number;
+  };
 };
 
 function normalize(d: string) {
@@ -77,10 +94,27 @@ export async function getHrTaskBuckets(): Promise<HrTaskBuckets> {
   todayBucket.sort((a, b) => a.stepTitle.localeCompare(b.stepTitle));
   upcoming.sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
 
+  // Fetch expiring items from API
+  let expiring: ExpiringItem[] = [];
+  let expiringMeta: { medical_count: number; cert_count: number; total_count: number } | undefined;
+  
+  try {
+    const response = await fetch("/api/hr/tasks");
+    if (response.ok) {
+      const data = await response.json();
+      expiring = data.tasks || [];
+      expiringMeta = data.meta;
+    }
+  } catch (err) {
+    console.error("Failed to fetch expiring items:", err);
+  }
+
   return {
     overdue,
     today: todayBucket,
     upcoming,
+    expiring,
+    expiringMeta,
   };
 }
 
