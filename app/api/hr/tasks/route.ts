@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import pool from "@/lib/pgClient";
 
 export type ExpiringTask = {
   id: string;
@@ -47,56 +42,29 @@ export async function GET(request: NextRequest) {
 
     const tasks: ExpiringTask[] = [];
 
-    // Fetch expiring medical checks from person_events
-    // First get employee IDs for this org
-    const { data: orgEmployees, error: empError } = await supabaseAdmin
-      .from("employees")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("is_active", true);
+    // Fetch expiring medical checks using JOIN to filter by org_id (tenant-safe, no IN list)
+    const medicalQuery = `
+      SELECT 
+        pe.id,
+        pe.employee_id,
+        pe.title,
+        pe.due_date,
+        e.name as employee_name
+      FROM person_events pe
+      INNER JOIN employees e ON pe.employee_id = e.id
+      WHERE e.org_id = $1
+        AND e.is_active = true
+        AND pe.category = 'medical_check'
+        AND pe.completed_date IS NULL
+        AND pe.due_date <= $2
+      ORDER BY pe.due_date ASC
+    `;
 
-    if (empError) {
-      console.error("Error fetching employees:", empError);
-    }
-
-    const employeeIds = (orgEmployees || []).map((e: { id: string }) => e.id);
-    
-    if (employeeIds.length === 0) {
-      const res = NextResponse.json({
-        tasks: [],
-        meta: { medical_count: 0, cert_count: 0, total_count: 0 },
-      });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const { data: medicalEvents, error: medicalError } = await supabaseAdmin
-      .from("person_events")
-      .select(`
-        id,
-        employee_id,
-        title,
-        due_date,
-        employees:employee_id (
-          id,
-          name
-        )
-      `)
-      .eq("category", "medical_check")
-      .is("completed_date", null)
-      .lte("due_date", thirtyDaysStr)
-      .in("employee_id", employeeIds);
-
-    if (medicalError) {
-      console.error("Error fetching medical events:", medicalError);
-    } else if (medicalEvents) {
-      for (const event of medicalEvents) {
-        const employeeData = event.employees;
-        const employee = Array.isArray(employeeData) ? employeeData[0] : employeeData;
-        if (!employee) continue;
-        const emp = employee as { id: string; name: string | null };
-
-        const dueDate = new Date(event.due_date);
+    try {
+      const medicalResult = await pool.query(medicalQuery, [orgId, thirtyDaysStr]);
+      
+      for (const row of medicalResult.rows) {
+        const dueDate = new Date(row.due_date);
         dueDate.setHours(0, 0, 0, 0);
         const daysDiff = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -110,46 +78,43 @@ export async function GET(request: NextRequest) {
         }
 
         tasks.push({
-          id: event.id,
-          employee_id: event.employee_id,
-          employee_name: emp.name,
+          id: row.id,
+          employee_id: row.employee_id,
+          employee_name: row.employee_name,
           type: "medical",
-          item_name: event.title,
-          expires_on: event.due_date,
+          item_name: row.title,
+          expires_on: row.due_date,
           days_to_expiry: daysDiff,
           severity,
         });
       }
+    } catch (err) {
+      console.error("Error fetching medical events:", err);
     }
 
-    // Fetch expiring certificates from documents
-    const { data: certs, error: certError } = await supabaseAdmin
-      .from("documents")
-      .select(`
-        id,
-        employee_id,
-        title,
-        valid_to,
-        employees:employee_id (
-          id,
-          name
-        )
-      `)
-      .eq("type", "certificate")
-      .not("valid_to", "is", null)
-      .lte("valid_to", thirtyDaysStr)
-      .in("employee_id", employeeIds);
+    // Fetch expiring certificates using JOIN to filter by org_id (tenant-safe, no IN list)
+    const certQuery = `
+      SELECT 
+        d.id,
+        d.employee_id,
+        d.title,
+        d.valid_to,
+        e.name as employee_name
+      FROM documents d
+      INNER JOIN employees e ON d.employee_id = e.id
+      WHERE e.org_id = $1
+        AND e.is_active = true
+        AND d.type = 'certificate'
+        AND d.valid_to IS NOT NULL
+        AND d.valid_to <= $2
+      ORDER BY d.valid_to ASC
+    `;
 
-    if (certError) {
-      console.error("Error fetching certificates:", certError);
-    } else if (certs) {
-      for (const cert of certs) {
-        const employeeData = cert.employees;
-        const employee = Array.isArray(employeeData) ? employeeData[0] : employeeData;
-        if (!employee) continue;
-        const emp = employee as { id: string; name: string | null };
-
-        const expiryDate = new Date(cert.valid_to);
+    try {
+      const certResult = await pool.query(certQuery, [orgId, thirtyDaysStr]);
+      
+      for (const row of certResult.rows) {
+        const expiryDate = new Date(row.valid_to);
         expiryDate.setHours(0, 0, 0, 0);
         const daysDiff = Math.floor((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -163,16 +128,18 @@ export async function GET(request: NextRequest) {
         }
 
         tasks.push({
-          id: cert.id,
-          employee_id: cert.employee_id,
-          employee_name: emp.name,
+          id: row.id,
+          employee_id: row.employee_id,
+          employee_name: row.employee_name,
           type: "cert",
-          item_name: cert.title,
-          expires_on: cert.valid_to,
+          item_name: row.title,
+          expires_on: row.valid_to,
           days_to_expiry: daysDiff,
           severity,
         });
       }
+    } catch (err) {
+      console.error("Error fetching certificates:", err);
     }
 
     // Sort by severity (P0 first) then by days_to_expiry (most urgent first)
