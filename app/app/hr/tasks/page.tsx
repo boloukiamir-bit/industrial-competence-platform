@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AlertTriangle } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getHrTaskBuckets, HrTaskBuckets, HrTask, ExpiringItem } from "@/services/hrTasks";
@@ -28,6 +29,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import { isHrAdmin } from "@/lib/auth";
+import { IssueInboxSection } from "@/components/IssueInboxSection";
 
 export default function HrTasksPage() {
   const { loading: authLoading } = useAuthGuard();
@@ -114,6 +116,7 @@ function HrTasksBody({
   memberships: unknown[];
   userEmail: string | null;
 }) {
+  const [viewMode, setViewMode] = useState<"hr" | "inbox">("hr");
   const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,10 +165,19 @@ function HrTasksBody({
         <div>
           <h1 className="hr-page__title">HR Tasks</h1>
           <p className="hr-page__subtitle">
-            All open workflow steps, sorted by urgency - overdue, today and the coming week.
+            {viewMode === "hr"
+              ? "All open workflow steps, sorted by urgency - overdue, today and the coming week."
+              : "Unified inbox of cockpit issues and HR expiring items."}
           </p>
         </div>
       </header>
+
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "hr" | "inbox")} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="hr">HR Tasks</TabsTrigger>
+          <TabsTrigger value="inbox">Issue Inbox</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* DEV-ONLY diagnostic - must not leak in production */}
       {process.env.NODE_ENV !== "production" && (
@@ -185,75 +197,81 @@ function HrTasksBody({
         </div>
       )}
 
-      {error && <p className="hr-error">{error}</p>}
-
-      {!error && buckets && (
+      {viewMode === "inbox" ? (
+        <IssueInboxSection />
+      ) : (
         <>
-          <section className="hr-kpi-grid" data-testid="kpi-grid">
-            <div className="hr-kpi">
-              <div className="hr-kpi__label">Active tasks</div>
-              <div className="hr-kpi__value" data-testid="kpi-active">{totalTasks}</div>
-            </div>
-            <div className="hr-kpi">
-              <div className="hr-kpi__label">Overdue</div>
-              <div className="hr-kpi__value hr-kpi__value--danger" data-testid="kpi-overdue">
-                {buckets.overdue.length}
-              </div>
-            </div>
-            <div className="hr-kpi">
-              <div className="hr-kpi__label">Due today</div>
-              <div className="hr-kpi__value hr-kpi__value--warn" data-testid="kpi-today">
-                {buckets.today.length}
-              </div>
-            </div>
-            <div className="hr-kpi">
-              <div className="hr-kpi__label">Next 7 days</div>
-              <div className="hr-kpi__value hr-kpi__value--ok" data-testid="kpi-upcoming">
-                {buckets.upcoming.length}
-              </div>
-            </div>
-          </section>
+          {error && <p className="hr-error">{error}</p>}
 
-          <TaskSection
-            title="Overdue"
-            description="Tasks that should already have been completed."
-            tasks={buckets.overdue}
-            badgeClass="hr-pill--danger"
-            testId="section-overdue"
-          />
+          {!error && buckets && (
+            <>
+              <section className="hr-kpi-grid" data-testid="kpi-grid">
+                <div className="hr-kpi">
+                  <div className="hr-kpi__label">Active tasks</div>
+                  <div className="hr-kpi__value" data-testid="kpi-active">{totalTasks}</div>
+                </div>
+                <div className="hr-kpi">
+                  <div className="hr-kpi__label">Overdue</div>
+                  <div className="hr-kpi__value hr-kpi__value--danger" data-testid="kpi-overdue">
+                    {buckets.overdue.length}
+                  </div>
+                </div>
+                <div className="hr-kpi">
+                  <div className="hr-kpi__label">Due today</div>
+                  <div className="hr-kpi__value hr-kpi__value--warn" data-testid="kpi-today">
+                    {buckets.today.length}
+                  </div>
+                </div>
+                <div className="hr-kpi">
+                  <div className="hr-kpi__label">Next 7 days</div>
+                  <div className="hr-kpi__value hr-kpi__value--ok" data-testid="kpi-upcoming">
+                    {buckets.upcoming.length}
+                  </div>
+                </div>
+              </section>
 
-          <TaskSection
-            title="Due today"
-            description="Tasks that must be handled today."
-            tasks={buckets.today}
-            badgeClass="hr-pill--warn"
-            testId="section-today"
-          />
+              <TaskSection
+                title="Overdue"
+                description="Tasks that should already have been completed."
+                tasks={buckets.overdue}
+                badgeClass="hr-pill--danger"
+                testId="section-overdue"
+              />
 
-          <TaskSection
-            title="Coming 7 days"
-            description="Tasks with deadlines within the next week."
-            tasks={buckets.upcoming}
-            badgeClass="hr-pill--ok"
-            testId="section-upcoming"
-          />
+              <TaskSection
+                title="Due today"
+                description="Tasks that must be handled today."
+                tasks={buckets.today}
+                badgeClass="hr-pill--warn"
+                testId="section-today"
+              />
 
-          {buckets.expiring && buckets.expiring.length > 0 && (
-            <ExpiringSection 
-              expiring={buckets.expiring}
-              onResolve={() => {
-                // Refresh buckets after resolve
-                setBuckets(null);
-                setLoading(true);
-                getHrTaskBuckets()
-                  .then(setBuckets)
-                  .catch((err) => {
-                    console.error(err);
-                    setError("Could not load HR tasks.");
-                  })
-                  .finally(() => setLoading(false));
-              }}
-            />
+              <TaskSection
+                title="Coming 7 days"
+                description="Tasks with deadlines within the next week."
+                tasks={buckets.upcoming}
+                badgeClass="hr-pill--ok"
+                testId="section-upcoming"
+              />
+
+              {buckets.expiring && buckets.expiring.length > 0 && (
+                <ExpiringSection 
+                  expiring={buckets.expiring}
+                  onResolve={() => {
+                    // Refresh buckets after resolve
+                    setBuckets(null);
+                    setLoading(true);
+                    getHrTaskBuckets()
+                      .then(setBuckets)
+                      .catch((err) => {
+                        console.error(err);
+                        setError("Could not load HR tasks.");
+                      })
+                      .finally(() => setLoading(false));
+                  }}
+                />
+              )}
+            </>
           )}
         </>
       )}
