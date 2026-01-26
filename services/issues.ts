@@ -1,12 +1,14 @@
 import type { IssueInboxItem } from "@/types/issues";
 
+/**
+ * Client-only function to fetch issue inbox.
+ * Must only be imported in client components (marked with "use client").
+ */
 export async function getIssueInbox(includeResolved?: boolean): Promise<IssueInboxItem[]> {
-  const url = new URL("/api/issues/inbox", window.location.origin);
-  if (includeResolved) {
-    url.searchParams.set("includeResolved", "1");
-  }
+  // Use relative URL - works in both browser and Next.js server-side fetch
+  const url = `/api/issues/inbox${includeResolved ? "?includeResolved=1" : ""}`;
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(url, {
     credentials: "include",
   });
 
