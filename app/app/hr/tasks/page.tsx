@@ -31,8 +31,11 @@ function HrTasksContent() {
   const [buckets, setBuckets] = useState<HrTaskBuckets | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [authorized, setAuthorized] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Derived authorization: purely computed from currentRole and orgLoading
+  const roleNormalized = (currentRole ?? "").toLowerCase();
+  const canAccess = !orgLoading && isHrAdmin(roleNormalized);
 
   // Load user email for diagnostic
   useEffect(() => {
@@ -47,23 +50,13 @@ function HrTasksContent() {
     }
   }, [authUser]);
 
+  // Data fetching: only runs when authorized
   useEffect(() => {
+    if (!canAccess) {
+      return;
+    }
+
     async function load() {
-      // Wait for org context to finish loading before checking authorization
-      if (orgLoading) {
-        return;
-      }
-
-      // Normalize role casing and check HR access using memberships.role (tenant-scoped)
-      const roleNormalized = (currentRole ?? "").toLowerCase();
-      if (!isHrAdmin(roleNormalized)) {
-        setAuthorized(false);
-        setLoading(false);
-        return;
-      }
-
-      // User is authorized, load data
-      setAuthorized(true);
       try {
         const data = await getHrTaskBuckets();
         setBuckets(data);
@@ -75,14 +68,15 @@ function HrTasksContent() {
       }
     }
     load();
-  }, [currentRole, orgLoading]);
+  }, [canAccess]);
 
   const totalTasks =
     (buckets?.overdue.length ?? 0) +
     (buckets?.today.length ?? 0) +
     (buckets?.upcoming.length ?? 0);
 
-  if (loading || orgLoading) {
+  // Render flow: loading -> access denied -> content
+  if (orgLoading) {
     return (
       <main className="hr-page">
         <div className="animate-pulse space-y-4">
@@ -98,7 +92,7 @@ function HrTasksContent() {
     );
   }
 
-  if (!authorized) {
+  if (!canAccess) {
     return (
       <main className="hr-page">
         <Card>
