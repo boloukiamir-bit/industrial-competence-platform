@@ -51,25 +51,43 @@ export function IssueInboxSection() {
   }, []);
 
   const handleResolve = async () => {
-    if (!selectedItem || selectedItem.source !== "hr") return;
+    if (!selectedItem) return;
 
     setSaving(true);
     try {
-      const response = await fetch("/api/hr/tasks/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taskSource: selectedItem.native_ref.task_source,
-          taskId: selectedItem.native_ref.task_id,
-          status: resolveStatus,
-          note: resolveNote || null,
-        }),
-        credentials: "include",
-      });
+      let response;
+      if (selectedItem.source === "hr") {
+        // Use existing HR resolve endpoint
+        response = await fetch("/api/hr/tasks/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskSource: selectedItem.native_ref.task_source,
+            taskId: selectedItem.native_ref.task_id,
+            status: resolveStatus,
+            note: resolveNote || null,
+          }),
+          credentials: "include",
+        });
+      } else if (selectedItem.source === "cockpit") {
+        // Use new unified resolve endpoint
+        response = await fetch("/api/issues/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: "cockpit",
+            native_ref: selectedItem.native_ref,
+            note: resolveNote || null,
+          }),
+          credentials: "include",
+        });
+      } else {
+        throw new Error("Unknown source type");
+      }
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to resolve task");
+        throw new Error(data.error || "Failed to resolve issue");
       }
 
       // Refresh items
@@ -79,8 +97,8 @@ export function IssueInboxSection() {
       setSelectedItem(null);
       setResolveNote("");
     } catch (err) {
-      console.error("Failed to resolve task:", err);
-      alert(err instanceof Error ? err.message : "Failed to resolve task");
+      console.error("Failed to resolve issue:", err);
+      alert(err instanceof Error ? err.message : "Failed to resolve issue");
     } finally {
       setSaving(false);
     }
@@ -179,7 +197,7 @@ export function IssueInboxSection() {
                   {severityBadge.label}
                 </span>
                 <div className="flex gap-2 mt-2">
-                  {item.source === "hr" && (
+                  {item.source === "hr" && !item.resolution_status && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -193,7 +211,30 @@ export function IssueInboxSection() {
                       Resolve
                     </Button>
                   )}
-                  {item.source === "cockpit" && (
+                  {item.source === "cockpit" && !item.resolution_status && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedItem(item);
+                          setResolveStatus("resolved");
+                          setResolveNote("");
+                          setResolveDialogOpen(true);
+                        }}
+                      >
+                        Resolve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewCockpit(item)}
+                      >
+                        Open in Cockpit
+                      </Button>
+                    </>
+                  )}
+                  {item.source === "cockpit" && item.resolution_status && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -218,21 +259,28 @@ export function IssueInboxSection() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="resolve-status">Status</Label>
-              <Select
-                value={resolveStatus}
-                onValueChange={(v) => setResolveStatus(v as "resolved" | "snoozed")}
-              >
-                <SelectTrigger id="resolve-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="snoozed">Snoozed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {selectedItem?.source === "hr" && (
+              <div>
+                <Label htmlFor="resolve-status">Status</Label>
+                <Select
+                  value={resolveStatus}
+                  onValueChange={(v) => setResolveStatus(v as "resolved" | "snoozed")}
+                >
+                  <SelectTrigger id="resolve-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                    <SelectItem value="snoozed">Snoozed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {selectedItem?.source === "cockpit" && (
+              <div className="text-sm text-muted-foreground">
+                Status: Resolved
+              </div>
+            )}
             <div>
               <Label htmlFor="resolve-note">Note (optional)</Label>
               <Textarea
