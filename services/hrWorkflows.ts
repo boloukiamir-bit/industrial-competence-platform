@@ -133,7 +133,7 @@ export async function startWorkflow(
     template_name: template.name,
     employee_id: employeeId,
     employee_name: employee?.name || null,
-    started_at: now.toISOString(),
+    start_date: now.toISOString().split("T")[0],
     due_date: dueDate.toISOString().split("T")[0],
     status: "active" as HRWorkflowStatus,
     steps: steps,
@@ -161,7 +161,7 @@ export async function getWorkflowInstances(
   let query = supabase
     .from("hr_workflow_instances")
     .select("*")
-    .order("started_at", { ascending: false });
+    .order("start_date", { ascending: false });
 
   if (filters?.status) {
     query = query.eq("status", filters.status);
@@ -242,7 +242,7 @@ function mapInstanceFromDb(row: Record<string, unknown>): HRWorkflowInstance {
     templateName: row.template_name as string,
     employeeId: row.employee_id as string,
     employeeName: row.employee_name as string | undefined,
-    startedAt: row.started_at as string,
+    startedAt: (row.start_date as string) ?? new Date().toISOString(),
     dueDate: row.due_date as string | undefined,
     status: row.status as HRWorkflowStatus,
     steps: (row.steps as HRWorkflowStep[]) || [],
