@@ -205,71 +205,93 @@ function HrTasksBody({
 
           {!error && buckets && (
             <>
-              <section className="hr-kpi-grid" data-testid="kpi-grid">
-                <div className="hr-kpi">
-                  <div className="hr-kpi__label">Active tasks</div>
-                  <div className="hr-kpi__value" data-testid="kpi-active">{totalTasks}</div>
-                </div>
-                <div className="hr-kpi">
-                  <div className="hr-kpi__label">Overdue</div>
-                  <div className="hr-kpi__value hr-kpi__value--danger" data-testid="kpi-overdue">
-                    {buckets.overdue.length}
-                  </div>
-                </div>
-                <div className="hr-kpi">
-                  <div className="hr-kpi__label">Due today</div>
-                  <div className="hr-kpi__value hr-kpi__value--warn" data-testid="kpi-today">
-                    {buckets.today.length}
-                  </div>
-                </div>
-                <div className="hr-kpi">
-                  <div className="hr-kpi__label">Next 7 days</div>
-                  <div className="hr-kpi__value hr-kpi__value--ok" data-testid="kpi-upcoming">
-                    {buckets.upcoming.length}
-                  </div>
-                </div>
-              </section>
+              {totalTasks === 0 && buckets.expiring.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <div className="max-w-md mx-auto">
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                        No active workflows
+                      </h2>
+                      <p className="text-gray-500 dark:text-gray-400 mb-6">
+                        Get started by creating a workflow from a template. You can manage sick leave follow-ups, rehabilitation processes, parental leave, and more.
+                      </p>
+                      <Link href="/app/hr/workflows/templates">
+                        <Button>
+                          View Workflow Templates
+                        </Button>
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <section className="hr-kpi-grid" data-testid="kpi-grid">
+                    <div className="hr-kpi">
+                      <div className="hr-kpi__label">Active tasks</div>
+                      <div className="hr-kpi__value" data-testid="kpi-active">{totalTasks}</div>
+                    </div>
+                    <div className="hr-kpi">
+                      <div className="hr-kpi__label">Overdue</div>
+                      <div className="hr-kpi__value hr-kpi__value--danger" data-testid="kpi-overdue">
+                        {buckets.overdue.length}
+                      </div>
+                    </div>
+                    <div className="hr-kpi">
+                      <div className="hr-kpi__label">Due today</div>
+                      <div className="hr-kpi__value hr-kpi__value--warn" data-testid="kpi-today">
+                        {buckets.today.length}
+                      </div>
+                    </div>
+                    <div className="hr-kpi">
+                      <div className="hr-kpi__label">Next 7 days</div>
+                      <div className="hr-kpi__value hr-kpi__value--ok" data-testid="kpi-upcoming">
+                        {buckets.upcoming.length}
+                      </div>
+                    </div>
+                  </section>
 
-              <TaskSection
-                title="Overdue"
-                description="Tasks that should already have been completed."
-                tasks={buckets.overdue}
-                badgeClass="hr-pill--danger"
-                testId="section-overdue"
-              />
+                  <TaskSection
+                    title="Overdue"
+                    description="Tasks that should already have been completed."
+                    tasks={buckets.overdue}
+                    badgeClass="hr-pill--danger"
+                    testId="section-overdue"
+                  />
 
-              <TaskSection
-                title="Due today"
-                description="Tasks that must be handled today."
-                tasks={buckets.today}
-                badgeClass="hr-pill--warn"
-                testId="section-today"
-              />
+                  <TaskSection
+                    title="Due today"
+                    description="Tasks that must be handled today."
+                    tasks={buckets.today}
+                    badgeClass="hr-pill--warn"
+                    testId="section-today"
+                  />
 
-              <TaskSection
-                title="Coming 7 days"
-                description="Tasks with deadlines within the next week."
-                tasks={buckets.upcoming}
-                badgeClass="hr-pill--ok"
-                testId="section-upcoming"
-              />
+                  <TaskSection
+                    title="Coming 7 days"
+                    description="Tasks with deadlines within the next week."
+                    tasks={buckets.upcoming}
+                    badgeClass="hr-pill--ok"
+                    testId="section-upcoming"
+                  />
 
-              {buckets.expiring && buckets.expiring.length > 0 && (
-                <ExpiringSection 
-                  expiring={buckets.expiring}
-                  onResolve={() => {
-                    // Refresh buckets after resolve
-                    setBuckets(null);
-                    setLoading(true);
-                    getHrTaskBuckets()
-                      .then(setBuckets)
-                      .catch((err) => {
-                        console.error(err);
-                        setError("Could not load HR tasks.");
-                      })
-                      .finally(() => setLoading(false));
-                  }}
-                />
+                  {buckets.expiring && buckets.expiring.length > 0 && (
+                    <ExpiringSection 
+                      expiring={buckets.expiring}
+                      onResolve={() => {
+                        // Refresh buckets after resolve
+                        setBuckets(null);
+                        setLoading(true);
+                        getHrTaskBuckets()
+                          .then(setBuckets)
+                          .catch((err) => {
+                            console.error(err);
+                            setError("Could not load HR tasks.");
+                          })
+                          .finally(() => setLoading(false));
+                      }}
+                    />
+                  )}
+                </>
               )}
             </>
           )}
