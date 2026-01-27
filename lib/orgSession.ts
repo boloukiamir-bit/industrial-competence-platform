@@ -55,6 +55,25 @@ export async function getOrgIdFromSession(
 
   const cookieStore = await cookies();
 
+  // DEV-ONLY: Log cookie diagnostics
+  if (process.env.NODE_ENV !== "production") {
+    const cookieNames = cookieStore.getAll().map((c) => c.name);
+    const projectRef = supabaseUrl?.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] || "unknown";
+    const projectAuthCookie = cookieStore.get(`sb-${projectRef}-auth-token`);
+    const genericAuthCookie = cookieStore.get("sb-access-token") || cookieStore.get("sb-auth-token");
+    console.log("[DEV getOrgIdFromSession] Cookie names:", cookieNames);
+    console.log("[DEV getOrgIdFromSession] Project ref:", projectRef);
+    console.log("[DEV getOrgIdFromSession] Project auth cookie exists:", !!projectAuthCookie);
+    console.log("[DEV getOrgIdFromSession] Generic auth cookie exists:", !!genericAuthCookie);
+    // Also check request cookies directly
+    const requestCookieHeader = request.headers.get("cookie");
+    console.log("[DEV getOrgIdFromSession] Request cookie header present:", !!requestCookieHeader);
+    if (requestCookieHeader) {
+      const hasProjectCookie = requestCookieHeader.includes(`sb-${projectRef}-auth-token`);
+      console.log("[DEV getOrgIdFromSession] Request has project cookie:", hasProjectCookie);
+    }
+  }
+
   // Get user from session (handles both cookie-based and token-based auth)
   let user;
   let authError;
@@ -69,6 +88,15 @@ export async function getOrgIdFromSession(
     const result = await supabase.auth.getUser();
     user = result.data.user;
     authError = result.error;
+  }
+
+  // DEV-ONLY: Log auth result
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[DEV getOrgIdFromSession] getUser result:", {
+      hasUser: !!user,
+      userId: user?.id || null,
+      errorName: authError?.name || null,
+    });
   }
 
   if (authError || !user) {
