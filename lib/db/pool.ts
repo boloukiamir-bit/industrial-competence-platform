@@ -67,16 +67,28 @@ function getPool(): Pool {
     return global.__pgPool;
   }
   
-  // During build phase, DATABASE_URL may not be set - defer creation
-  if (!process.env.DATABASE_URL && (process.env.NEXT_PHASE === "phase-production-build" || !process.env.NODE_ENV)) {
+  // During build phase or dev mode without DATABASE_URL - defer creation with proxy
+  const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+  const isDevMode = process.env.NODE_ENV !== "production";
+  const missingDatabaseUrl = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("[YOUR_PASSWORD]");
+  
+  if (missingDatabaseUrl && (isBuildPhase || isDevMode)) {
     // Return a proxy that will throw on actual use, but allows module to load
+    // Routes can catch this error and return JSON with requestId
+    const errorMessage = "DATABASE_URL not configured. Get connection string from: Supabase Dashboard > Settings > Database > Connection Pooling > Transaction Pooler";
     return new Proxy({} as Pool, {
-      get() {
-        throw new Error("Pool not initialized - DATABASE_URL required at runtime");
+      get(_target, prop) {
+        if (prop === "query") {
+          return () => {
+            throw new Error(errorMessage);
+          };
+        }
+        throw new Error(errorMessage);
       },
     });
   }
   
+  // Production or DATABASE_URL is set - create pool (will throw if DATABASE_URL missing in prod)
   global.__pgPool = createPool();
   return global.__pgPool;
 }
