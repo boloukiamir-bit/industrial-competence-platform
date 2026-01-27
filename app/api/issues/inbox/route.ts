@@ -4,9 +4,20 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { createClient } from "@supabase/supabase-js";
 import { pool } from "@/lib/db/pool";
 import type { IssueInboxItem } from "@/types/issues";
+import { registerDevErrorHooks } from "@/lib/server/devErrorHooks";
+import { getRequestId } from "@/lib/server/requestId";
 
 export const runtime = "nodejs";
 
+// Register dev error hooks on module load (safe - won't throw)
+try {
+  registerDevErrorHooks();
+} catch (err) {
+  console.error("Failed to register dev error hooks:", err);
+}
+
+// Initialize supabase admin client
+// Note: If env vars are missing, this will throw at runtime when used
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -32,15 +43,22 @@ function daysToExpiryToSeverity(daysDiff: number): "P0" | "P1" | "P2" {
 }
 
 export async function GET(request: NextRequest) {
+  const requestId = getRequestId(request);
   try {
     // Authenticate and get org session
     const { supabase, pendingCookies } = await createSupabaseServerClient();
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
       const res = NextResponse.json({ error: session.error }, { status: session.status });
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
+
+    // Log request with correlation ID
+    console.log(
+      `[${requestId}] GET /api/issues/inbox org=${session.orgId} user=${session.userId}`
+    );
 
     // Verify user has access (admin or hr role)
     if (session.role !== "admin" && session.role !== "hr") {
@@ -48,6 +66,7 @@ export async function GET(request: NextRequest) {
         { error: "Forbidden: HR admin access required" },
         { status: 403 }
       );
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
@@ -86,7 +105,7 @@ export async function GET(request: NextRequest) {
       const { data: edRows, error: edErr } = await edQuery;
 
       if (edErr) {
-        console.error("issues/inbox: execution_decisions query error", edErr);
+        console.error(`[${requestId}] issues/inbox: execution_decisions query error`, edErr);
       } else if (edRows && edRows.length > 0) {
         // Get shift assignment details
         const targetIds = edRows.map((r) => r.target_id).filter(Boolean) as string[];
@@ -153,121 +172,118 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch (err) {
-      console.error("Error fetching cockpit issues:", err);
+      console.error(`[${requestId}] Error fetching cockpit issues:`, err);
     }
 
-    // 2. Fetch HR expiring issues (medical and cert)
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const thirtyDaysFromNow = new Date(today);
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      const todayStr = today.toISOString().slice(0, 10);
-      const thirtyDaysStr = thirtyDaysFromNow.toISOString().slice(0, 10);
+    // 2. Fetch HR expiring issues (medical and cert) — pg errors propagate → 500 with requestId
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const thirtyDaysFromNow = new Date(today);
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const todayStr = today.toISOString().slice(0, 10);
+    const thirtyDaysStr = thirtyDaysFromNow.toISOString().slice(0, 10);
 
-      // Fetch expiring medical checks
-      const medicalQuery = `
-        SELECT 
+    async function queryExpiring(category: "medical_check" | "certificate") {
+      const baseWhere = `
+        WHERE e.org_id = $1
+          AND e.is_active = true
+          AND pe.category = $2
+          AND pe.due_date IS NOT NULL
+          AND pe.due_date <= $3
+          AND (pe.status IS NULL OR pe.status != 'completed')
+      `;
+
+      const withResolutions = `
+        SELECT
           pe.id,
           pe.employee_id,
           pe.title,
           pe.due_date,
-          pe.updated_at,
+          pe.status,
+          pe.created_at,
           e.name as employee_name,
           htr.status as resolution_status,
           htr.note as resolution_note,
           htr.resolved_at as resolution_updated_at
         FROM person_events pe
         INNER JOIN employees e ON pe.employee_id = e.id
-        LEFT JOIN hr_task_resolutions htr ON htr.org_id = e.org_id
-          AND htr.task_source = 'medical_check'
-          AND htr.task_id = pe.id
-        WHERE e.org_id = $1
-          AND e.is_active = true
-          AND pe.category = 'medical_check'
-          AND pe.completed_date IS NULL
-          AND pe.due_date <= $2
+        LEFT JOIN hr_task_resolutions htr
+          ON htr.org_id = e.org_id
+         AND htr.task_source = $2
+         AND htr.task_id = pe.id
+        ${baseWhere}
           AND (htr.status IS NULL OR htr.status != 'resolved')
         ORDER BY pe.due_date ASC
       `;
 
-      const medicalResult = await pool.query(medicalQuery, [orgId, thirtyDaysStr]);
-
-      for (const row of medicalResult.rows) {
-        const dueDate = new Date(row.due_date);
-        dueDate.setHours(0, 0, 0, 0);
-        const daysDiff = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-        items.push({
-          id: `hr:medical:${row.id}`,
-          source: "hr",
-          issue_type: "medical_expiring",
-          severity: daysToExpiryToSeverity(daysDiff),
-          title: row.title || "Medical Check",
-          subtitle: row.employee_name,
-          due_date: row.due_date,
-          native_ref: {
-            task_source: "medical_check",
-            task_id: row.id,
-          },
-          resolution_status: row.resolution_status === "snoozed" ? "snoozed" : null,
-          resolution_note: row.resolution_note || null,
-          updated_at: row.resolution_updated_at || row.updated_at || row.due_date,
-        });
-      }
-
-      // Fetch expiring certificates
-      const certQuery = `
-        SELECT 
-          d.id,
-          d.employee_id,
-          d.title,
-          d.valid_to,
-          d.updated_at,
+      const withoutResolutions = `
+        SELECT
+          pe.id,
+          pe.employee_id,
+          pe.title,
+          pe.due_date,
+          pe.status,
+          pe.created_at,
           e.name as employee_name,
-          htr.status as resolution_status,
-          htr.note as resolution_note,
-          htr.resolved_at as resolution_updated_at
-        FROM documents d
-        INNER JOIN employees e ON d.employee_id = e.id
-        LEFT JOIN hr_task_resolutions htr ON htr.org_id = e.org_id
-          AND htr.task_source = 'certificate'
-          AND htr.task_id = d.id
-        WHERE e.org_id = $1
-          AND e.is_active = true
-          AND d.type = 'certificate'
-          AND d.valid_to IS NOT NULL
-          AND d.valid_to <= $2
-          AND (htr.status IS NULL OR htr.status != 'resolved')
-        ORDER BY d.valid_to ASC
+          NULL::text as resolution_status,
+          NULL::text as resolution_note,
+          NULL::timestamptz as resolution_updated_at
+        FROM person_events pe
+        INNER JOIN employees e ON pe.employee_id = e.id
+        ${baseWhere}
+        ORDER BY pe.due_date ASC
       `;
 
-      const certResult = await pool.query(certQuery, [orgId, thirtyDaysStr]);
-
-      for (const row of certResult.rows) {
-        const expiryDate = new Date(row.valid_to);
-        expiryDate.setHours(0, 0, 0, 0);
-        const daysDiff = Math.floor((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-        items.push({
-          id: `hr:cert:${row.id}`,
-          source: "hr",
-          issue_type: "cert_expiring",
-          severity: daysToExpiryToSeverity(daysDiff),
-          title: row.title || "Certificate",
-          subtitle: row.employee_name,
-          due_date: row.valid_to,
-          native_ref: {
-            task_source: "certificate",
-            task_id: row.id,
-          },
-          resolution_status: row.resolution_status === "snoozed" ? "snoozed" : null,
-          resolution_note: row.resolution_note || null,
-          updated_at: row.resolution_updated_at || row.updated_at || row.valid_to,
-        });
+      try {
+        const r = await pool.query(withResolutions, [orgId, category, thirtyDaysStr]);
+        return r.rows;
+      } catch (err: unknown) {
+        if (String((err as { code?: string })?.code) === "42P01" || String((err as Error)?.message || "").includes("hr_task_resolutions")) {
+          const r2 = await pool.query(withoutResolutions, [orgId, category, thirtyDaysStr]);
+          return r2.rows;
+        }
+        throw err;
       }
-    } catch (err) {
-      console.error("Error fetching HR issues:", err);
+    }
+
+    const medicalRows = await queryExpiring("medical_check");
+    for (const row of medicalRows) {
+      const dueDate = new Date(row.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      items.push({
+        id: `hr:medical:${row.id}`,
+        source: "hr",
+        issue_type: "medical_expiring",
+        severity: daysToExpiryToSeverity(daysDiff),
+        title: row.title || "Medical Check",
+        subtitle: row.employee_name,
+        due_date: row.due_date,
+        native_ref: { task_source: "medical_check", task_id: row.id },
+        resolution_status: row.resolution_status === "snoozed" ? "snoozed" : null,
+        resolution_note: row.resolution_note || null,
+        updated_at: row.resolution_updated_at || row.created_at || row.due_date,
+      });
+    }
+
+    const certRows = await queryExpiring("certificate");
+    for (const row of certRows) {
+      const expiryDate = new Date(row.due_date);
+      expiryDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      items.push({
+        id: `hr:cert:${row.id}`,
+        source: "hr",
+        issue_type: "cert_expiring",
+        severity: daysToExpiryToSeverity(daysDiff),
+        title: row.title || "Certificate",
+        subtitle: row.employee_name,
+        due_date: row.due_date,
+        native_ref: { task_source: "certificate", task_id: row.id },
+        resolution_status: row.resolution_status === "snoozed" ? "snoozed" : null,
+        resolution_note: row.resolution_note || null,
+        updated_at: row.resolution_updated_at || row.created_at || row.due_date,
+      });
     }
 
     // 3. Filter out resolved items if includeResolved is false (default)
@@ -292,12 +308,33 @@ export async function GET(request: NextRequest) {
     const limitedItems = filteredItems.slice(0, 200);
 
     const res = NextResponse.json(limitedItems);
+    res.headers.set("X-Request-Id", requestId);
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
-    console.error("GET /api/issues/inbox failed:", err);
+    // Use the requestId we got earlier, or generate a fallback
+    const errorRequestId = requestId || `error-${Date.now()}`;
+    
+    // Log with full error details
+    const errorDetails = {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      name: err instanceof Error ? err.name : typeof err,
+    };
+    console.error(`[${errorRequestId}] GET /api/issues/inbox failed:`, errorDetails);
+    
+    // Always return JSON, never let Next.js return HTML error page
     const errorMessage = err instanceof Error ? err.message : "Failed to fetch issues";
-    const res = NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const res = NextResponse.json(
+      { 
+        error: errorMessage,
+        requestId: errorRequestId,
+      },
+      { status: 500 }
+    );
+    res.headers.set("X-Request-Id", errorRequestId);
+    res.headers.set("Content-Type", "application/json");
+    
     try {
       const { pendingCookies } = await createSupabaseServerClient();
       applySupabaseCookies(res, pendingCookies);

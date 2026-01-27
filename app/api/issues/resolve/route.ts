@@ -3,8 +3,17 @@ import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { pool } from "@/lib/db/pool";
+import { registerDevErrorHooks } from "@/lib/server/devErrorHooks";
+import { getRequestId } from "@/lib/server/requestId";
 
 export const runtime = "nodejs";
+
+// Register dev error hooks on module load (safe - won't throw)
+try {
+  registerDevErrorHooks();
+} catch (err) {
+  console.error("Failed to register dev error hooks:", err);
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,15 +21,22 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
   try {
     // Authenticate and get org session
     const { supabase, pendingCookies } = await createSupabaseServerClient();
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
       const res = NextResponse.json({ error: session.error }, { status: session.status });
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
+
+    // Log request with correlation ID
+    console.log(
+      `[${requestId}] POST /api/issues/resolve org=${session.orgId} user=${session.userId}`
+    );
 
     // Verify user has access (admin or hr role)
     if (session.role !== "admin" && session.role !== "hr") {
@@ -28,6 +44,7 @@ export async function POST(request: NextRequest) {
         { error: "Forbidden: HR admin access required" },
         { status: 403 }
       );
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
@@ -45,6 +62,7 @@ export async function POST(request: NextRequest) {
         { error: "source and native_ref are required" },
         { status: 400 }
       );
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
@@ -56,6 +74,7 @@ export async function POST(request: NextRequest) {
           { error: "native_ref.shift_assignment_id is required for cockpit source" },
           { status: 400 }
         );
+        res.headers.set("X-Request-Id", requestId);
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
@@ -75,6 +94,7 @@ export async function POST(request: NextRequest) {
           { error: "Shift assignment not found or access denied" },
           { status: 404 }
         );
+        res.headers.set("X-Request-Id", requestId);
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
@@ -127,6 +147,7 @@ export async function POST(request: NextRequest) {
         success: true,
         resolution: result.rows[0],
       });
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     } else if (source === "hr") {
@@ -137,6 +158,7 @@ export async function POST(request: NextRequest) {
           { error: "native_ref.task_source and native_ref.task_id are required for hr source" },
           { status: 400 }
         );
+        res.headers.set("X-Request-Id", requestId);
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
@@ -167,6 +189,7 @@ export async function POST(request: NextRequest) {
         success: true,
         resolution: result.rows[0],
       });
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     } else {
@@ -174,12 +197,16 @@ export async function POST(request: NextRequest) {
         { error: "Invalid source. Must be 'cockpit' or 'hr'" },
         { status: 400 }
       );
+      res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
   } catch (err) {
-    console.error("POST /api/issues/resolve failed:", err);
+    // Use the requestId we got earlier, or generate a fallback
+    const errorRequestId = requestId || `error-${Date.now()}`;
+    console.error(`[${errorRequestId}] POST /api/issues/resolve failed:`, err);
     const res = NextResponse.json({ error: "Internal error" }, { status: 500 });
+    res.headers.set("X-Request-Id", errorRequestId);
     try {
       const { pendingCookies } = await createSupabaseServerClient();
       applySupabaseCookies(res, pendingCookies);
