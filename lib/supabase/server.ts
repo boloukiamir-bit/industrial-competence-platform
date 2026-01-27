@@ -24,6 +24,16 @@ export async function createSupabaseServerClient(): Promise<{
   const cookieStore = await cookies();
   const pendingCookies: CookieToSet[] = [];
 
+  // DEV-ONLY: Log cookie diagnostics
+  if (process.env.NODE_ENV !== "production") {
+    const cookieNames = cookieStore.getAll().map((c) => c.name);
+    const projectRef = url?.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] || "unknown";
+    const projectAuthCookie = cookieStore.get(`sb-${projectRef}-auth-token`);
+    console.log("[DEV createSupabaseServerClient] Cookie names from cookies():", cookieNames);
+    console.log("[DEV createSupabaseServerClient] Project ref:", projectRef);
+    console.log("[DEV createSupabaseServerClient] Project auth cookie exists:", !!projectAuthCookie);
+  }
+
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
