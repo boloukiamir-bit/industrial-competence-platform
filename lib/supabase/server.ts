@@ -83,16 +83,14 @@ export async function createSupabaseServerClient(): Promise<{
     console.log("[DEV createSupabaseServerClient] Project auth cookie exists:", !!projectAuthCookie);
   }
 
-  function buildOptions(getAllFn: () => { name: string; value: string }[]) {
-    return {
-      cookies: {
-        getAll: getAllFn,
-        setAll(cookiesToSet: CookieToSet[]) {
-          cookiesToSet.forEach((c) => pendingCookies.push(c));
-        },
+  const makeOptions = (getAllFn: () => { name: string; value: string }[]) => ({
+    cookies: {
+      getAll: getAllFn,
+      setAll(cookiesToSet: CookieToSet[]) {
+        pendingCookies.push(...cookiesToSet);
       },
-    };
-  }
+    },
+  });
 
   const getAllWithAuth = (): { name: string; value: string }[] => {
     const all = cookieStore.getAll();
@@ -126,9 +124,9 @@ export async function createSupabaseServerClient(): Promise<{
 
   let supabase: ReturnType<typeof createServerClient>;
   try {
-    supabase = createServerClient(url, anonKey, buildOptions(getAllWithAuth));
+    supabase = createServerClient(url, anonKey, makeOptions(getAllWithAuth));
   } catch {
-    supabase = createServerClient(url, anonKey, buildOptions(getAllWithoutAuth));
+    supabase = createServerClient(url, anonKey, makeOptions(getAllWithoutAuth));
   }
 
   return { supabase, pendingCookies };

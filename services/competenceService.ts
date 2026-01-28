@@ -199,16 +199,24 @@ export async function getEmployeesWithSkills(filters?: {
     throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
   }
 
+  type SkillRow = {
+    id: string;
+    code: string;
+    name: string;
+    category: string;
+    description?: string | null;
+  };
   const skillMap = new Map<string, Skill>();
   const employeeSkills: EmployeeSkill[] = (employeeSkillsResult.data || []).map((row) => {
-    const skillRow = row.skill as Skill | null | undefined;
+    const skillValue = row.skill as unknown;
+    const skillRow = (Array.isArray(skillValue) ? skillValue[0] : skillValue) as SkillRow | null | undefined;
     if (skillRow && !skillMap.has(skillRow.id)) {
       skillMap.set(skillRow.id, {
         id: skillRow.id,
         code: skillRow.code,
         name: skillRow.name,
         category: skillRow.category,
-        description: skillRow.description,
+        description: skillRow.description ?? undefined,
       });
     }
     return {
