@@ -7,3 +7,5 @@ vite.config.ts.*
 project-audit.tar.gz
 .next
 .env.local
+cookie*.txt
+cookie.txt
