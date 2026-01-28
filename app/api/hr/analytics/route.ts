@@ -7,16 +7,14 @@ import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getRequestId } from "@/lib/server/requestId";
 
-const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-
-async function getSpaljistenAnalytics(): Promise<HRAnalyticsV2> {
+async function getHrAnalytics({ orgId }: { orgId: string }): Promise<HRAnalyticsV2> {
   try {
     const employeesResult = await pool.query(
       `SELECT e.id, e.employee_name as name, e.email, a.area_name 
        FROM sp_employees e 
-       LEFT JOIN sp_areas a ON e.area_id = a.id
+       LEFT JOIN sp_areas a ON e.area_id = a.id AND a.org_id = $1
        WHERE e.org_id = $1`,
-      [SPALJISTEN_ORG_ID]
+      [orgId]
     );
     const employees = employeesResult.rows;
     const totalHeadcount = employees.length;
@@ -43,10 +41,10 @@ async function getSpaljistenAnalytics(): Promise<HRAnalyticsV2> {
         sk.skill_name,
         es.rating
       FROM sp_employee_skills es
-      JOIN sp_skills sk ON es.skill_id = sk.skill_id
+      JOIN sp_skills sk ON es.skill_id = sk.skill_id AND sk.org_id = $1
       WHERE es.org_id = $1
       ORDER BY sk.skill_name
-    `, [SPALJISTEN_ORG_ID]);
+    `, [orgId]);
 
     const skillLevels: Record<string, number[]> = {};
     for (const row of skillsResult.rows) {
@@ -73,11 +71,11 @@ async function getSpaljistenAnalytics(): Promise<HRAnalyticsV2> {
         COUNT(DISTINCT CASE WHEN es.rating >= 3 THEN es.employee_id END) as independent_count
       FROM sp_stations st
       LEFT JOIN sp_areas a ON st.area_id = a.id
-      LEFT JOIN sp_skills sk ON sk.station_id = st.id
-      LEFT JOIN sp_employee_skills es ON es.skill_id = sk.skill_id
+      LEFT JOIN sp_skills sk ON sk.station_id = st.id AND sk.org_id = $1
+      LEFT JOIN sp_employee_skills es ON es.skill_id = sk.skill_id AND es.org_id = $1
       WHERE st.org_id = $1
       GROUP BY st.station_name, a.area_name
-    `, [SPALJISTEN_ORG_ID]);
+    `, [orgId]);
 
     let overdueCount = 0;
     let dueSoonCount = 0;
@@ -128,7 +126,7 @@ async function getSpaljistenAnalytics(): Promise<HRAnalyticsV2> {
       skillGapSummary: { criticalGaps: overdueCount, trainingNeeded: dueSoonCount, wellStaffed: 0 },
     };
   } catch (err) {
-    console.error("Spaljisten analytics error:", err);
+    console.error("HR analytics error:", err);
     throw err;
   }
 }
@@ -153,14 +151,13 @@ export async function GET(request: NextRequest) {
 
     const requestId = getRequestId(request);
     if (process.env.NODE_ENV !== "production") {
-      console.log("[DEV hr-analytics]", { requestId, orgId: session.orgId, table: "sp_employees" });
+      console.log("[DEV hr-analytics]", {
+        requestId,
+        orgId: session.orgId,
+        tables: ["sp_employees", "sp_areas", "sp_employee_skills", "sp_skills", "sp_stations"],
+      });
     }
-    if (session.orgId !== SPALJISTEN_ORG_ID) {
-      const res = NextResponse.json({ error: "Forbidden: org mismatch" }, { status: 403 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-    const analytics = await getSpaljistenAnalytics();
+    const analytics = await getHrAnalytics({ orgId: session.orgId });
     const res = NextResponse.json(analytics);
     applySupabaseCookies(res, pendingCookies);
     return res;
