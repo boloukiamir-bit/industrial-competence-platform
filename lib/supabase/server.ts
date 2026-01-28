@@ -4,6 +4,12 @@ import type { NextResponse } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
 
+/** Fix malformed % sequences so decodeURIComponent in downstream libs does not throw. */
+function sanitizeCookieValue(v: string): string {
+  if (!v.includes("%")) return v;
+  return v.replace(/%(?![0-9A-Fa-f]{2})/g, "%25");
+}
+
 /**
  * Creates a Supabase client for use in App Router route handlers (app/api/**).
  * Reads auth from request cookies and collects any cookies Supabase wants to set
@@ -37,7 +43,11 @@ export async function createSupabaseServerClient(): Promise<{
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
-        return cookieStore.getAll();
+        const all = cookieStore.getAll().map((c) => ({
+          name: c.name,
+          value: sanitizeCookieValue(c.value),
+        }));
+        return all;
       },
       setAll(cookiesToSet: CookieToSet[]) {
         cookiesToSet.forEach((c) => pendingCookies.push(c));
