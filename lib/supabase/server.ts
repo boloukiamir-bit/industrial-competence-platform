@@ -4,8 +4,36 @@ import type { NextResponse } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
 
-/** Fix malformed % sequences so decodeURIComponent in downstream libs does not throw. */
-function sanitizeCookieValue(v: string): string {
+const SUPABASE_AUTH_COOKIE_RE = /^sb-[a-z0-9]+-auth-token$/i;
+
+/**
+ * Normalize or reject Supabase auth cookie value to prevent Invalid UTF-8 crash
+ * in auth-js (stringFromUTF8/base64URL). Only applies to sb-*-auth-token cookies.
+ * Returns null if value is malformed and should be dropped.
+ */
+function normalizeSupabaseAuthCookie(name: string, value: string): string | null {
+  if (!SUPABASE_AUTH_COOKIE_RE.test(name)) return value;
+
+  let v = value.trim();
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1);
+  }
+  v = v.replace(/%(?![0-9A-Fa-f]{2})/g, "%25");
+  v = v.replace(/=3D/gi, "=").replace(/%3[Dd]/g, "=");
+
+  if (v.startsWith("base64-")) {
+    let payload = v.slice(7);
+    payload = payload.replace(/\+/g, "-").replace(/\//g, "_");
+    payload = payload.replace(/=+$/, "");
+    if (!/^[A-Za-z0-9\-_]+$/.test(payload)) return null;
+    return "base64-" + payload;
+  }
+
+  return v;
+}
+
+/** Stray % fix for non-auth cookies only. */
+function fixStrayPercent(v: string): string {
   if (!v.includes("%")) return v;
   return v.replace(/%(?![0-9A-Fa-f]{2})/g, "%25");
 }
@@ -43,10 +71,22 @@ export async function createSupabaseServerClient(): Promise<{
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
-        const all = cookieStore.getAll().map((c) => ({
-          name: c.name,
-          value: sanitizeCookieValue(c.value),
-        }));
+        const raw = cookieStore.getAll();
+        const all: { name: string; value: string }[] = [];
+        for (const c of raw) {
+          if (SUPABASE_AUTH_COOKIE_RE.test(c.name)) {
+            const normalized = normalizeSupabaseAuthCookie(c.name, c.value);
+            if (normalized === null) {
+              if (process.env.NODE_ENV !== "production") {
+                console.log("[DEV] dropped malformed auth cookie", { name: c.name });
+              }
+              continue;
+            }
+            all.push({ name: c.name, value: normalized });
+          } else {
+            all.push({ name: c.name, value: fixStrayPercent(c.value) });
+          }
+        }
         return all;
       },
       setAll(cookiesToSet: CookieToSet[]) {
