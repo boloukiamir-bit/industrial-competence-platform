@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Shield, Search, AlertTriangle, CheckCircle } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { CertificateInfo } from "@/types/domain";
+import { useOrg } from "@/hooks/useOrg";
 
 export default function SafetyCertificatesPage() {
+  const { currentOrg } = useOrg();
   const [certificates, setCertificates] = useState<CertificateInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [lineFilter, setLineFilter] = useState("");
@@ -16,6 +18,13 @@ export default function SafetyCertificatesPage() {
 
   useEffect(() => {
     async function load() {
+      if (!currentOrg) {
+        setCertificates([]);
+        setLines([]);
+        setSkills([]);
+        setLoading(false);
+        return;
+      }
       const [certsRes, linesRes, skillsRes] = await Promise.all([
         supabase
           .from("employee_skills")
@@ -26,8 +35,9 @@ export default function SafetyCertificatesPage() {
             employees!inner(id, name, line, team, is_active),
             skills!inner(id, name, code, category)
           `)
+          .eq("employees.org_id", currentOrg.id)
           .in("skills.category", ["safety", "certificate"]),
-        supabase.from("employees").select("line").eq("is_active", true),
+        supabase.from("employees").select("line").eq("org_id", currentOrg.id).eq("is_active", true),
         supabase.from("skills").select("id, name").in("category", ["safety", "certificate"]),
       ]);
 
@@ -96,7 +106,7 @@ export default function SafetyCertificatesPage() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [currentOrg]);
 
   const filteredCerts = certificates.filter((c) => {
     const matchesLine = !lineFilter || c.line === lineFilter;

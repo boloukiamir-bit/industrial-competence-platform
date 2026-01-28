@@ -133,11 +133,16 @@ export type CreateMeetingPayload = {
   location?: string;
   templateName?: string;
   sharedAgenda?: string;
+  orgId?: string;
 };
 
 export async function createMeeting(payload: CreateMeetingPayload): Promise<OneToOneMeeting | null> {
   if (!payload.employeeId || !payload.managerId || !payload.scheduledAt) {
     console.error("Invalid meeting payload: missing required fields");
+    return null;
+  }
+  if (!payload.orgId) {
+    console.error("Invalid meeting payload: missing orgId");
     return null;
   }
 
@@ -164,12 +169,14 @@ export async function createMeeting(payload: CreateMeetingPayload): Promise<OneT
   const { data: employeeData } = await supabase
     .from("employees")
     .select("name, email")
+    .eq("org_id", payload.orgId)
     .eq("id", payload.employeeId)
     .single();
 
   const { data: managerData } = await supabase
     .from("employees")
     .select("name, email")
+    .eq("org_id", payload.orgId)
     .eq("id", payload.managerId)
     .single();
 

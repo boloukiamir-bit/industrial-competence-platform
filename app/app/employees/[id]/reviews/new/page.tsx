@@ -5,11 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { ReviewTemplate, ReviewGoal } from "@/types/domain";
+import { useOrg } from "@/hooks/useOrg";
 
 export default function NewReviewPage() {
   const params = useParams();
   const router = useRouter();
   const employeeId = params.id as string;
+  const { currentOrg } = useOrg();
 
   const [templates, setTemplates] = useState<ReviewTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,9 +31,15 @@ export default function NewReviewPage() {
 
   useEffect(() => {
     async function load() {
+      if (!currentOrg) {
+        setTemplates([]);
+        setEmployeeName("");
+        setLoading(false);
+        return;
+      }
       const [templatesRes, employeeRes] = await Promise.all([
         supabase.from("review_templates").select("*").eq("is_active", true).order("name"),
-        supabase.from("employees").select("name").eq("id", employeeId).single(),
+        supabase.from("employees").select("name").eq("org_id", currentOrg.id).eq("id", employeeId).single(),
       ]);
 
       setTemplates(
@@ -48,7 +56,7 @@ export default function NewReviewPage() {
       setLoading(false);
     }
     load();
-  }, [employeeId]);
+  }, [employeeId, currentOrg]);
 
   function addGoal() {
     setGoals([

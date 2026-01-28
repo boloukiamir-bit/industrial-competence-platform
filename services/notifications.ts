@@ -209,7 +209,8 @@ Industrial Competence Platform`;
   return count;
 }
 
-export async function enqueueUpcomingOneToOnes(referenceDate: Date): Promise<number> {
+export async function enqueueUpcomingOneToOnes(referenceDate: Date, orgId?: string): Promise<number> {
+  if (!orgId) return 0;
   const meetings = await getUpcomingMeetings(7);
   const oneDayAgo = new Date(referenceDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -219,12 +220,14 @@ export async function enqueueUpcomingOneToOnes(referenceDate: Date): Promise<num
     const { data: employeeData } = await supabase
       .from("employees")
       .select("email")
+      .eq("org_id", orgId)
       .eq("id", meeting.employeeId)
       .single();
 
     const { data: managerData } = await supabase
       .from("employees")
       .select("email")
+      .eq("org_id", orgId)
       .eq("id", meeting.managerId)
       .single();
 

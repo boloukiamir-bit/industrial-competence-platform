@@ -129,10 +129,12 @@ export function canAccessEmployee(
   return false;
 }
 
-export async function getManagedEmployeeIds(managerId: string): Promise<string[]> {
+export async function getManagedEmployeeIds(managerId: string, orgId: string): Promise<string[]> {
+  if (!orgId) return [];
   const { data } = await supabase
     .from("employees")
     .select("id")
+    .eq("org_id", orgId)
     .eq("manager_id", managerId)
     .eq("is_active", true);
 

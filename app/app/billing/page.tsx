@@ -11,7 +11,7 @@ import { useOrg } from "@/hooks/useOrg";
 import { isHrAdmin } from "@/lib/auth";
 
 export default function BillingPage() {
-  const { currentRole } = useOrg();
+  const { currentRole, currentOrg } = useOrg();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [headcount, setHeadcount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -20,16 +20,30 @@ export default function BillingPage() {
 
   useEffect(() => {
     async function loadData() {
+      if (!currentOrg) {
+        setUser(await getCurrentUser());
+        setHeadcount(0);
+        setLoading(false);
+        return;
+      }
+      if (process.env.NODE_ENV !== "production") {
+        const requestId = crypto?.randomUUID?.() ?? String(Date.now());
+        console.log("[DEV Billing]", { requestId, orgId: currentOrg.id, table: "employees" });
+      }
       const [userData, headcountRes] = await Promise.all([
         getCurrentUser(),
-        supabase.from("employees").select("id", { count: "exact", head: true }).eq("is_active", true),
+        supabase
+          .from("employees")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", currentOrg.id)
+          .eq("is_active", true),
       ]);
       setUser(userData);
       setHeadcount(headcountRes.count || 0);
       setLoading(false);
     }
     loadData();
-  }, []);
+  }, [currentOrg]);
 
   if (loading) {
     return (

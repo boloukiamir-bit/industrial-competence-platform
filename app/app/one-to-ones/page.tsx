@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabaseClient";
 import { getAllMeetings, createMeeting } from "@/services/oneToOne";
 import type { OneToOneMeeting, OneToOneMeetingStatus, Employee } from "@/types/domain";
+import { useOrg } from "@/hooks/useOrg";
 
 const statusColors: Record<OneToOneMeetingStatus, string> = {
   planned: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -43,6 +44,7 @@ const statusLabels: Record<OneToOneMeetingStatus, string> = {
 };
 
 export default function OneToOnesListPage() {
+  const { currentOrg } = useOrg();
   const [meetings, setMeetings] = useState<OneToOneMeeting[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,9 +65,15 @@ export default function OneToOnesListPage() {
 
   useEffect(() => {
     async function loadData() {
+      if (!currentOrg) {
+        setMeetings([]);
+        setEmployees([]);
+        setLoading(false);
+        return;
+      }
       const [meetingsData, employeesRes] = await Promise.all([
         getAllMeetings(),
-        supabase.from("employees").select("id, name, role").eq("is_active", true).order("name"),
+        supabase.from("employees").select("id, name, role").eq("org_id", currentOrg.id).eq("is_active", true).order("name"),
       ]);
       
       setMeetings(meetingsData);
@@ -84,7 +92,7 @@ export default function OneToOnesListPage() {
       setLoading(false);
     }
     loadData();
-  }, []);
+  }, [currentOrg]);
 
   const filteredMeetings = meetings.filter((m) => {
     const matchesStatus = filterStatus === "all" || m.status === filterStatus;
@@ -109,6 +117,7 @@ export default function OneToOnesListPage() {
       location: newMeeting.location || undefined,
       templateName: newMeeting.templateName || undefined,
       sharedAgenda: newMeeting.sharedAgenda || undefined,
+      orgId: currentOrg?.id,
     });
 
     if (result) {

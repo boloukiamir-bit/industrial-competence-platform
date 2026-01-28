@@ -4,7 +4,6 @@ import { supabase } from "@/lib/supabaseClient";
 import {
   isDemoMode,
   getDemoOrg,
-  getDemoEmployees,
   getDemoSkills,
   getDemoPositions,
   getDemoOrgUnits,
@@ -16,10 +15,6 @@ import {
 import type { Employee, Skill, OrgUnit, GapItem } from "@/types/domain";
 
 export async function getOrg(orgId?: string) {
-  if (isDemoMode()) {
-    return getDemoOrg();
-  }
-
   if (!orgId) return null;
 
   const { data, error } = await supabase
@@ -37,15 +32,13 @@ export async function getOrg(orgId?: string) {
 }
 
 export async function getEmployees(orgId?: string): Promise<Employee[]> {
-  if (isDemoMode()) {
-    return getDemoEmployees();
-  }
-
-  let query = supabase.from("employees").select("*").eq("is_active", true).order("name");
-
-  if (orgId) {
-    query = query.eq("org_id", orgId);
-  }
+  if (!orgId) return [];
+  let query = supabase
+    .from("employees")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .order("name");
 
   const { data, error } = await query;
 

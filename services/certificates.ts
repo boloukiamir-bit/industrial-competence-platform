@@ -2,9 +2,11 @@ import { supabase } from "@/lib/supabaseClient";
 import type { CertificateInfo } from "@/types/domain";
 
 export async function getCertificates(filters?: {
+  orgId?: string;
   line?: string;
   skillName?: string;
 }): Promise<CertificateInfo[]> {
+  if (!filters?.orgId) return [];
   let query = supabase
     .from("employee_skills")
     .select(`
@@ -15,6 +17,7 @@ export async function getCertificates(filters?: {
       skills!inner(id, name, code, category)
     `)
     .eq("employees.is_active", true)
+    .eq("employees.org_id", filters.orgId)
     .in("skills.category", ["safety", "certificate"]);
 
   if (filters?.line) {
@@ -88,12 +91,13 @@ export async function getCertificates(filters?: {
   return results;
 }
 
-export async function getFilterOptionsForCertificates(): Promise<{
+export async function getFilterOptionsForCertificates(orgId: string): Promise<{
   lines: string[];
   skills: { id: string; name: string }[];
 }> {
+  if (!orgId) return { lines: [], skills: [] };
   const [linesResult, skillsResult] = await Promise.all([
-    supabase.from("employees").select("line").eq("is_active", true),
+    supabase.from("employees").select("line").eq("org_id", orgId).eq("is_active", true),
     supabase.from("skills").select("id, name").in("category", ["safety", "certificate"]),
   ]);
 

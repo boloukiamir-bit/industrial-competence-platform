@@ -162,10 +162,12 @@ export async function extendDueDate(eventId: string, days: number = 30): Promise
   }
 }
 
-export async function autoGenerateContractEvents(): Promise<void> {
+export async function autoGenerateContractEvents(orgId: string): Promise<void> {
+  if (!orgId) return;
   const { data: employees } = await supabase
     .from("employees")
     .select("id, name, contract_end_date, manager_id")
+    .eq("org_id", orgId)
     .eq("employment_type", "temporary")
     .not("contract_end_date", "is", null);
 

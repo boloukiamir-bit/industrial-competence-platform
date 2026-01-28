@@ -235,10 +235,12 @@ export async function createOrgUnit(payload: CreateOrgUnitPayload): Promise<OrgU
   };
 }
 
-export async function getEmployeesByOrgUnit(orgUnitId: string): Promise<Employee[]> {
+export async function getEmployeesByOrgUnit(orgUnitId: string, orgId: string): Promise<Employee[]> {
+  if (!orgId) return [];
   const { data, error } = await supabase
     .from("employees")
     .select("*")
+    .eq("org_id", orgId)
     .eq("org_unit_id", orgUnitId)
     .eq("is_active", true)
     .order("name");

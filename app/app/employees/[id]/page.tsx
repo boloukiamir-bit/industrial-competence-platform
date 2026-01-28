@@ -38,6 +38,7 @@ import type {
   OneToOneMeeting,
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
+import { useOrg } from "@/hooks/useOrg";
 import { getMeetingsForEmployee } from "@/services/oneToOne";
 
 type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "one-to-ones" | "documents" | "events" | "equipment";
@@ -70,6 +71,7 @@ export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const { currentOrg } = useOrg();
 
   const [data, setData] = useState<EmployeeData>({
     employee: null,
@@ -87,6 +89,21 @@ export default function EmployeeDetailPage() {
 
   useEffect(() => {
     async function loadData() {
+      if (!currentOrg) {
+        setData({
+          employee: null,
+          skills: [],
+          events: [],
+          documents: [],
+          equipment: [],
+          reviews: [],
+          currentSalary: null,
+          salaryRevisions: [],
+          meetings: [],
+        });
+        setLoading(false);
+        return;
+      }
       const [
         employeeRes,
         skillsRes,
@@ -98,7 +115,7 @@ export default function EmployeeDetailPage() {
         revisionsRes,
         meetingsData,
       ] = await Promise.all([
-        supabase.from("employees").select("*, manager:manager_id(name)").eq("id", id).single(),
+        supabase.from("employees").select("*, manager:manager_id(name)").eq("org_id", currentOrg.id).eq("id", id).single(),
         supabase.from("employee_skills").select("*, skills(*)").eq("employee_id", id),
         supabase.from("person_events").select("*").eq("employee_id", id).order("due_date"),
         supabase.from("documents").select("*").eq("employee_id", id).order("created_at", { ascending: false }),
@@ -248,7 +265,7 @@ export default function EmployeeDetailPage() {
       setLoading(false);
     }
     if (id) loadData();
-  }, [id]);
+  }, [id, currentOrg]);
 
   async function handleExportData() {
     const response = await fetch(`/api/gdpr/export-employee-data?employee_id=${id}`);

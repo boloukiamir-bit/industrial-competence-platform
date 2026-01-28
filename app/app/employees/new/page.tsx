@@ -15,13 +15,13 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, UserPlus, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { isDemoMode } from "@/lib/demoData";
+import { useOrg } from "@/hooks/useOrg";
 
 export default function NewEmployeePage() {
   const router = useRouter();
+  const { currentOrg } = useOrg();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDemoMessage, setShowDemoMessage] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -48,8 +48,8 @@ export default function NewEmployeePage() {
       return;
     }
 
-    if (isDemoMode()) {
-      setShowDemoMessage(true);
+    if (!currentOrg) {
+      setError("No active organization selected.");
       return;
     }
 
@@ -58,6 +58,7 @@ export default function NewEmployeePage() {
     try {
       // Use only columns that exist in Supabase schema
       const { error: dbError } = await supabase.from("employees").insert({
+        org_id: currentOrg.id,
         name: `${formData.firstName} ${formData.lastName}`,
         email: formData.email || null,
         employee_number: formData.employeeNumber || `EMP-${Date.now()}`,
@@ -90,25 +91,6 @@ export default function NewEmployeePage() {
         Back to Employees
       </Button>
 
-      {showDemoMessage && (
-        <Card className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-              <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">Demo Mode</p>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Employee creation is disabled in demo mode. Sign up for a full account to add employees.
-                </p>
-                <div className="flex gap-2 mt-3">
-                  <Button size="sm" onClick={() => router.push("/signup")}>Sign Up</Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowDemoMessage(false)}>Dismiss</Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

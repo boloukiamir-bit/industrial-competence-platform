@@ -125,7 +125,7 @@ function CompetenceMatrixContent() {
       setLoadingMatrix(true);
       setError(null);
       try {
-        const employees = await getEmployeesForPosition(selectedPositionId!);
+        const employees = await getEmployeesForPosition(selectedPositionId!, activeOrgId ?? undefined);
         
         if (employees.length === 0) {
           setColumns([]);
@@ -135,7 +135,7 @@ function CompetenceMatrixContent() {
         }
 
         const profiles = await Promise.all(
-          employees.map((emp) => getEmployeeCompetenceProfile(emp.id))
+          employees.map((emp) => getEmployeeCompetenceProfile(emp.id, undefined, activeOrgId ?? undefined))
         );
 
         const firstProfile = profiles[0];

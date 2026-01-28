@@ -1,7 +1,7 @@
 import { fuzzyMatch } from "@/lib/Import/fuzzyMatch";
 import { normalizeSkillLevel } from "@/lib/Import/normalizeSkillLevel";
 
-export async function importCsvData(rows: any[], supabase: any) {
+export async function importCsvData(rows: any[], supabase: any, orgId: string) {
   const { data: existingSkills } = await supabase
     .from("skills")
     .select("id, name");
@@ -15,13 +15,14 @@ export async function importCsvData(rows: any[], supabase: any) {
     let { data: emp } = await supabase
       .from("employees")
       .select("*")
+      .eq("org_id", orgId)
       .eq("name", employeeName)
       .single();
 
     if (!emp) {
       const { data: created } = await supabase
         .from("employees")
-        .insert([{ name: employeeName }])
+        .insert([{ name: employeeName, org_id: orgId }])
         .select()
         .single();
       emp = created;

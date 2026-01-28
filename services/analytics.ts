@@ -1,51 +1,53 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { HRAnalytics, HRAnalyticsV2 } from "@/types/domain";
 
-export async function getHRAnalytics(): Promise<HRAnalytics> {
+export async function getHRAnalytics(orgId: string): Promise<HRAnalytics> {
   const today = new Date().toISOString().split("T")[0];
   const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const ninetyDaysLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-  const [
-    headcountRes,
-    employeesWithOrgRes,
-    tempContractsRes,
-    allEventsRes,
-    skillsRes,
-    absencesRes,
-  ] = await Promise.all([
-    supabase.from("employees").select("id", { count: "exact", head: true }).eq("is_active", true),
-    
-    supabase
-      .from("employees")
-      .select("id, name, role, employment_type, contract_end_date, line, team, org_unit_id")
-      .eq("is_active", true),
-    
+  const employeesWithOrgRes = await supabase
+    .from("employees")
+    .select("id, name, role, employment_type, contract_end_date, line, team, org_unit_id")
+    .eq("org_id", orgId)
+    .eq("is_active", true);
+
+  const employees = employeesWithOrgRes.data || [];
+  const employeeIds = employees.map((e) => e.id);
+  const employeeIdList = employeeIds.length > 0 ? employeeIds : ["00000000-0000-0000-0000-000000000000"];
+
+  const [tempContractsRes, allEventsRes, skillsRes, absencesRes] = await Promise.all([
     supabase
       .from("employees")
       .select("id, name, role, contract_end_date")
+      .eq("org_id", orgId)
       .eq("is_active", true)
       .eq("employment_type", "temporary")
       .not("contract_end_date", "is", null)
       .lte("contract_end_date", ninetyDaysLater),
-    
-    supabase
-      .from("person_events")
-      .select("id, category, status, due_date, employee_id, employees:employee_id(line, team)")
-      .neq("status", "completed"),
-    
-    supabase
-      .from("employee_skills")
-      .select("level, skills(name)")
-      .order("level"),
-    
-    supabase
-      .from("absences")
-      .select("id, type, from_date, to_date"),
+    employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
+      ? supabase
+          .from("person_events")
+          .select("id, category, status, due_date, employee_id, employees:employee_id(line, team)")
+          .in("employee_id", employeeIdList)
+          .neq("status", "completed")
+      : Promise.resolve({ data: [], error: null }),
+    employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
+      ? supabase
+          .from("employee_skills")
+          .select("level, skills(name)")
+          .in("employee_id", employeeIdList)
+          .order("level")
+      : Promise.resolve({ data: [], error: null }),
+    employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
+      ? supabase
+          .from("absences")
+          .select("id, type, from_date, to_date")
+          .in("employee_id", employeeIdList)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const totalHeadcount = headcountRes.count || 0;
-  const employees = employeesWithOrgRes.data || [];
+  const totalHeadcount = employees.length;
 
   const orgUnitData: Record<string, { count: number; permanent: number; temporary: number; consultant: number }> = {};
   const employmentTypeCounts: Record<string, number> = {};
@@ -225,18 +227,32 @@ export async function getAbsenceSummary(fromDate: string, toDate: string): Promi
   };
 }
 
-export async function getHRAnalyticsV2(): Promise<HRAnalyticsV2> {
-  const baseAnalytics = await getHRAnalytics();
+export async function getHRAnalyticsV2(orgId: string): Promise<HRAnalyticsV2> {
+  const baseAnalytics = await getHRAnalytics(orgId);
   const today = new Date();
 
-  const [employeesRes, workflowsRes, gapsRes] = await Promise.all([
-    supabase.from("employees").select("id, name, start_date, employment_type, contract_end_date").eq("is_active", true),
-    supabase.from("hr_workflow_instances").select("template_id, template_name", { count: "exact" }).eq("status", "active"),
-    supabase.from("competence_requirements")
-      .select("line, skill_id, min_level, min_headcount, skills(name)")
+  const employeesRes = await supabase
+    .from("employees")
+    .select("id, name, start_date, employment_type, contract_end_date")
+    .eq("org_id", orgId)
+    .eq("is_active", true);
+  const employees = employeesRes.data || [];
+  const employeeIds = employees.map((e) => e.id);
+  const employeeIdList = employeeIds.length > 0 ? employeeIds : ["00000000-0000-0000-0000-000000000000"];
+
+  const [workflowsRes, gapsRes] = await Promise.all([
+    employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
+      ? supabase
+          .from("hr_workflow_instances")
+          .select("template_id, template_name", { count: "exact" })
+          .in("employee_id", employeeIdList)
+          .eq("status", "active")
+      : Promise.resolve({ data: [], count: 0, error: null }),
+    supabase
+      .from("competence_requirements")
+      .select("line, skill_id, min_level, min_headcount, skills(name)"),
   ]);
 
-  const employees = employeesRes.data || [];
   const tenureBands: Record<string, number> = { "0-1 years": 0, "1-3 years": 0, "3-5 years": 0, "5-10 years": 0, "10+ years": 0 };
   let totalTenure = 0;
   let attritionHighRisk = 0;

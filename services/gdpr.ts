@@ -12,7 +12,7 @@ export async function logEmployeeAccess(
   });
 }
 
-export async function exportEmployeeData(employeeId: string): Promise<Record<string, unknown>> {
+export async function exportEmployeeData(employeeId: string, orgId: string): Promise<Record<string, unknown>> {
   const [
     employeeResult,
     skillsResult,
@@ -23,7 +23,7 @@ export async function exportEmployeeData(employeeId: string): Promise<Record<str
     reviewsResult,
     equipmentResult,
   ] = await Promise.all([
-    supabase.from("employees").select("*").eq("id", employeeId).single(),
+    supabase.from("employees").select("*").eq("org_id", orgId).eq("id", employeeId).single(),
     supabase.from("employee_skills").select("*, skills(*)").eq("employee_id", employeeId),
     supabase.from("person_events").select("*").eq("employee_id", employeeId),
     supabase.from("salary_records").select("*").eq("employee_id", employeeId).order("effective_from", { ascending: false }),
@@ -84,7 +84,7 @@ export async function exportEmployeeData(employeeId: string): Promise<Record<str
   };
 }
 
-export async function anonymizeEmployee(employeeId: string): Promise<void> {
+export async function anonymizeEmployee(employeeId: string, orgId: string): Promise<void> {
   await supabase
     .from("employees")
     .update({
@@ -99,6 +99,7 @@ export async function anonymizeEmployee(employeeId: string): Promise<void> {
       date_of_birth: null,
       updated_at: new Date().toISOString(),
     })
+    .eq("org_id", orgId)
     .eq("id", employeeId);
 
   await logEmployeeAccess(employeeId, "delete_profile", { anonymized_at: new Date().toISOString() });

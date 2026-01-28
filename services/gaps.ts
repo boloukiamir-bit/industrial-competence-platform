@@ -1,7 +1,8 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { GapItem } from "@/types/domain";
 
-export async function calculateTomorrowsGaps(): Promise<GapItem[]> {
+export async function calculateTomorrowsGaps(orgId: string): Promise<GapItem[]> {
+  if (!orgId) return [];
   const { data: requirements, error: reqError } = await supabase
     .from("role_skill_requirements")
     .select("id, role, line, skill_id, required_level, required_headcount");
@@ -34,6 +35,7 @@ export async function calculateTomorrowsGaps(): Promise<GapItem[]> {
     const { data: employees } = await supabase
       .from("employees")
       .select("id")
+      .eq("org_id", orgId)
       .eq("role", role)
       .eq("line", line)
       .eq("is_active", true);

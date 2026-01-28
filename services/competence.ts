@@ -76,11 +76,13 @@ export async function getAllPositions(): Promise<PositionSummary[]> {
   return (data ?? []) as PositionSummary[];
 }
 
-export async function getEmployeesForPosition(positionId: string): Promise<SimpleEmployee[]> {
+export async function getEmployeesForPosition(positionId: string, orgId?: string): Promise<SimpleEmployee[]> {
+  if (!orgId) return [];
   const { data, error } = await supabase
     .from('employees')
     .select('id, name')
-    .eq('position_id', positionId);
+    .eq('position_id', positionId)
+    .eq('org_id', orgId);
 
   if (error) throw error;
 
@@ -439,8 +441,10 @@ export type PositionCoverageSummary = {
 };
 
 export async function getPositionCoverageForDate(
-  effectiveDate: string
+  effectiveDate: string,
+  orgId?: string
 ): Promise<PositionCoverageSummary[]> {
+  if (!orgId) return [];
   let positions: {
     id: string;
     name: string;
@@ -474,7 +478,7 @@ export async function getPositionCoverageForDate(
   const results: PositionCoverageSummary[] = [];
 
   for (const pos of positions) {
-    const employees = await getEmployeesForPosition(pos.id);
+    const employees = await getEmployeesForPosition(pos.id, orgId);
 
     if (employees.length === 0) {
       results.push({
@@ -495,7 +499,8 @@ export async function getPositionCoverageForDate(
     for (const emp of employees) {
       const profile = await getEmployeeCompetenceProfile(
         emp.id,
-        effectiveDate
+        effectiveDate,
+        orgId
       );
 
       const isFullyCompetent = profile.summary.gapCount === 0;

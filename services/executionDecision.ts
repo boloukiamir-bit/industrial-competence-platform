@@ -78,10 +78,14 @@ export interface ExecutionDecisionData {
   decisions: LineShiftDecision[];
 }
 
-async function getEmployeesForLine(lineCode: string): Promise<Array<{ id: string; name: string; employeeCode?: string }>> {
+async function getEmployeesForLine(
+  lineCode: string,
+  orgId: string
+): Promise<Array<{ id: string; name: string; employeeCode?: string }>> {
   const { data, error } = await supabase
     .from("employees")
     .select("id, name, employee_number")
+    .eq("org_id", orgId)
     .eq("line", lineCode)
     .eq("is_active", true);
 
@@ -249,7 +253,7 @@ export async function getExecutionDecisions(
 
   for (const line of linesData || []) {
     for (const shift of shifts) {
-      const employees = await getEmployeesForLine(line.line_code);
+      const employees = await getEmployeesForLine(line.line_code, orgId);
 
       if (employees.length === 0) {
         decisions.push({

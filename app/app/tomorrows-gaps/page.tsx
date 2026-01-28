@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useOrg } from "@/hooks/useOrg";
 
 function getTomorrowDateString(): string {
   const today = new Date();
@@ -101,6 +102,7 @@ export default function TomorrowsGapsPage() {
 }
 
 function TomorrowsGapsContent() {
+  const { currentOrg } = useOrg();
   const [positions, setPositions] = useState<PositionCoverageSummary[]>([]);
   const [effectiveDate, setEffectiveDate] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -108,6 +110,11 @@ function TomorrowsGapsContent() {
 
   useEffect(() => {
     async function fetchData() {
+      if (!currentOrg) {
+        setPositions([]);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       
@@ -115,7 +122,7 @@ function TomorrowsGapsContent() {
       setEffectiveDate(tomorrow);
       
       try {
-        const coverageData = await getPositionCoverageForDate(tomorrow);
+        const coverageData = await getPositionCoverageForDate(tomorrow, currentOrg.id);
         setPositions(coverageData);
       } catch (err) {
         console.error("Failed to load coverage data:", err);
@@ -126,7 +133,7 @@ function TomorrowsGapsContent() {
     }
     
     fetchData();
-  }, []);
+  }, [currentOrg]);
 
   const totalPositions = positions.length;
   const highRiskCount = positions.filter(p => p.riskLevel === "HIGH").length;

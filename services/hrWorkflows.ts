@@ -104,14 +104,17 @@ export async function startWorkflow(
   templateId: HRWorkflowTemplateId,
   employeeId: string,
   createdBy?: string,
-  notes?: string
+  notes?: string,
+  orgId?: string
 ): Promise<HRWorkflowInstance | null> {
   const template = getTemplateById(templateId);
   if (!template) return null;
+  if (!orgId) return null;
 
   const { data: employee } = await supabase
     .from("employees")
     .select("name")
+    .eq("org_id", orgId)
     .eq("id", employeeId)
     .single();
 

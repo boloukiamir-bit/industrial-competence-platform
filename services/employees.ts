@@ -1,10 +1,12 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { Employee, EmployeeSkill, PersonEvent, Document, EmployeeEquipment } from "@/types/domain";
 
-export async function getEmployees(): Promise<Employee[]> {
+export async function getEmployees(orgId: string): Promise<Employee[]> {
+  if (!orgId) return [];
   const { data, error } = await supabase
     .from("employees")
     .select("*, manager:manager_id(name)")
+    .eq("org_id", orgId)
     .eq("is_active", true)
     .order("name");
 
@@ -37,10 +39,12 @@ export async function getEmployees(): Promise<Employee[]> {
   }));
 }
 
-export async function getEmployeeById(id: string): Promise<Employee | null> {
+export async function getEmployeeById(id: string, orgId: string): Promise<Employee | null> {
+  if (!orgId) return null;
   const { data, error } = await supabase
     .from("employees")
     .select("*, manager:manager_id(name)")
+    .eq("org_id", orgId)
     .eq("id", id)
     .single();
 

@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useOrg } from "@/hooks/useOrg";
 
 export default function NewSalaryRevisionPage() {
   const params = useParams();
   const router = useRouter();
   const employeeId = params.id as string;
+  const { currentOrg } = useOrg();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -24,8 +26,13 @@ export default function NewSalaryRevisionPage() {
 
   useEffect(() => {
     async function load() {
+      if (!currentOrg) {
+        setEmployeeName("");
+        setLoading(false);
+        return;
+      }
       const [employeeRes, salaryRes] = await Promise.all([
-        supabase.from("employees").select("name").eq("id", employeeId).single(),
+        supabase.from("employees").select("name").eq("org_id", currentOrg.id).eq("id", employeeId).single(),
         supabase
           .from("salary_records")
           .select("salary_amount_sek, salary_type")
@@ -48,7 +55,7 @@ export default function NewSalaryRevisionPage() {
       setLoading(false);
     }
     load();
-  }, [employeeId]);
+  }, [employeeId, currentOrg]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

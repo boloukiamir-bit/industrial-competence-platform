@@ -8,7 +8,6 @@ import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { COPY } from "@/lib/copy";
-import { isDemoMode, getDemoEmployees } from "@/lib/demoRuntime";
 import { useOrg } from "@/hooks/useOrg";
 import type { Employee } from "@/types/domain";
 
@@ -22,12 +21,6 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     async function loadEmployees() {
-      if (isDemoMode()) {
-        setEmployees(getDemoEmployees());
-        setLoading(false);
-        return;
-      }
-
       if (!currentOrg) {
         setEmployees([]);
         setLoading(false);

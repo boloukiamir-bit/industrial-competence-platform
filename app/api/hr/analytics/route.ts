@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 import type { HRAnalyticsV2 } from "@/types/domain";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import { getRequestId } from "@/lib/server/requestId";
 
 const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
@@ -150,6 +151,15 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
+    const requestId = getRequestId(request);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[DEV hr-analytics]", { requestId, orgId: session.orgId, table: "sp_employees" });
+    }
+    if (session.orgId !== SPALJISTEN_ORG_ID) {
+      const res = NextResponse.json({ error: "Forbidden: org mismatch" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
     const analytics = await getSpaljistenAnalytics();
     const res = NextResponse.json(analytics);
     applySupabaseCookies(res, pendingCookies);

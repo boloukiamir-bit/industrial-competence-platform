@@ -13,11 +13,13 @@ import { ArrowLeft, Plus, Calendar, Clock, MapPin, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { getMeetingsForEmployee, createMeeting } from "@/services/oneToOne";
 import type { OneToOneMeeting, Employee } from "@/types/domain";
+import { useOrg } from "@/hooks/useOrg";
 
 export default function EmployeeOneToOnesPage() {
   const params = useParams();
   const router = useRouter();
   const employeeId = params.id as string;
+  const { currentOrg } = useOrg();
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [meetings, setMeetings] = useState<OneToOneMeeting[]>([]);
@@ -37,10 +39,17 @@ export default function EmployeeOneToOnesPage() {
 
   useEffect(() => {
     async function loadData() {
+      if (!currentOrg) {
+        setEmployee(null);
+        setMeetings([]);
+        setManagers([]);
+        setLoading(false);
+        return;
+      }
       const [empRes, meetingsData, managersRes] = await Promise.all([
-        supabase.from("employees").select("*").eq("id", employeeId).single(),
+        supabase.from("employees").select("*").eq("org_id", currentOrg.id).eq("id", employeeId).single(),
         getMeetingsForEmployee(employeeId),
-        supabase.from("employees").select("id, name").eq("is_active", true).order("name"),
+        supabase.from("employees").select("id, name").eq("org_id", currentOrg.id).eq("is_active", true).order("name"),
       ]);
 
       if (empRes.data) {
@@ -65,7 +74,7 @@ export default function EmployeeOneToOnesPage() {
       setLoading(false);
     }
     loadData();
-  }, [employeeId]);
+  }, [employeeId, currentOrg]);
 
   async function handleCreate() {
     if (!formData.managerId || !formData.scheduledAt) return;
@@ -79,6 +88,7 @@ export default function EmployeeOneToOnesPage() {
       location: formData.location || undefined,
       templateName: formData.templateName || undefined,
       sharedAgenda: formData.sharedAgenda || undefined,
+      orgId: currentOrg?.id,
     });
 
     if (result) {

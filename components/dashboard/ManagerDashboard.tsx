@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Users, ClipboardList, Calendar, ArrowRight } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { CurrentUser } from "@/lib/auth";
+import { useOrg } from "@/hooks/useOrg";
 
 type ManagerDashboardData = {
   teamHeadcount: number;
@@ -18,12 +19,13 @@ type ManagerDashboardData = {
 };
 
 export function ManagerDashboard({ user }: { user: CurrentUser }) {
+  const { currentOrg } = useOrg();
   const [data, setData] = useState<ManagerDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
-      if (!user.employeeId) {
+      if (!user.employeeId || !currentOrg) {
         setLoading(false);
         return;
       }
@@ -31,8 +33,17 @@ export function ManagerDashboard({ user }: { user: CurrentUser }) {
       const today = new Date().toISOString().split("T")[0];
       const fourteenDaysLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
+      if (process.env.NODE_ENV !== "production") {
+        const requestId = crypto?.randomUUID?.() ?? String(Date.now());
+        console.log("[DEV ManagerDashboard]", { requestId, orgId: currentOrg.id, table: "employees" });
+      }
       const [teamRes, eventsRes, meetingsRes] = await Promise.all([
-        supabase.from("employees").select("id, name", { count: "exact" }).eq("manager_id", user.employeeId).eq("is_active", true),
+        supabase
+          .from("employees")
+          .select("id, name", { count: "exact" })
+          .eq("org_id", currentOrg.id)
+          .eq("manager_id", user.employeeId)
+          .eq("is_active", true),
         supabase.from("person_events")
           .select("id, title, due_date, employees:employee_id(name)")
           .eq("owner_manager_id", user.employeeId)
@@ -82,7 +93,7 @@ export function ManagerDashboard({ user }: { user: CurrentUser }) {
       setLoading(false);
     }
     loadDashboard();
-  }, [user.employeeId]);
+  }, [user.employeeId, currentOrg]);
 
   if (loading) {
     return (

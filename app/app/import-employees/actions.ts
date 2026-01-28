@@ -1,6 +1,7 @@
 "use server";
 
-import { supabase } from "@/lib/supabaseClient";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getActiveOrgIdForRSC } from "@/lib/server/activeOrgRsc";
 import Papa from "papaparse";
 
 interface CsvRow {
@@ -57,7 +58,13 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
     };
   }
 
+  const orgId = await getActiveOrgIdForRSC();
+  if (!orgId) {
+    return { success: false, message: "No active organization selected" };
+  }
+
   const employeesToUpsert: {
+    org_id: string;
     name: string;
     employee_number: string;
     role: string;
@@ -78,6 +85,7 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
       row.is_active === "1";
 
     employeesToUpsert.push({
+      org_id: orgId,
       name: row.name.trim(),
       employee_number: row.employee_number.trim(),
       role: row.role.trim(),
@@ -91,6 +99,7 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
     return { success: false, message: "No valid employee rows found in CSV" };
   }
 
+  const { supabase } = await createSupabaseServerClient();
   const { error } = await supabase
     .from("employees")
     .upsert(employeesToUpsert, { onConflict: "employee_number" });

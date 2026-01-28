@@ -67,7 +67,7 @@ export default function HRWorkflowsPage() {
 }
 
 function HRWorkflowsPageContent() {
-  const { currentRole } = useOrg();
+  const { currentRole, currentOrg } = useOrg();
   const [templates] = useState<HRWorkflowTemplate[]>(getWorkflowTemplates());
   const [instances, setInstances] = useState<HRWorkflowInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,16 +108,22 @@ function HRWorkflowsPageContent() {
       }
       
       await loadInstances();
+      if (!currentOrg) {
+        setEmployees([]);
+        setLoading(false);
+        return;
+      }
       const { data } = await supabase
         .from("employees")
         .select("id, name")
+        .eq("org_id", currentOrg.id)
         .eq("is_active", true)
         .order("name");
       setEmployees(data || []);
       setLoading(false);
     }
     checkAuthAndLoad();
-  }, [loadInstances]);
+  }, [loadInstances, currentOrg]);
 
   const filteredInstances = instances.filter((i) => {
     if (!searchTerm) return true;

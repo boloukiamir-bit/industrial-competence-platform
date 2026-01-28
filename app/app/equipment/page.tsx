@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Package, CheckCircle, Loader2 } from "lucide-react";
 import type { Equipment, Employee } from "@/types/domain";
+import { useOrg } from "@/hooks/useOrg";
 
 interface EquipmentWithAssignment extends Equipment {
   assignedTo?: string;
@@ -17,6 +18,7 @@ interface EquipmentWithAssignment extends Equipment {
 }
 
 export default function EquipmentPage() {
+  const { currentOrg } = useOrg();
   const [equipment, setEquipment] = useState<EquipmentWithAssignment[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +26,12 @@ export default function EquipmentPage() {
   const [newEquipment, setNewEquipment] = useState({ name: "", serialNumber: "", category: "" });
 
   const fetchData = async () => {
+    if (!currentOrg) {
+      setEquipment([]);
+      setEmployees([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     const { data: equipmentData } = await supabase.from("equipment").select("*");
@@ -34,6 +42,7 @@ export default function EquipmentPage() {
     const { data: employeesData } = await supabase
       .from("employees")
       .select("id, name, employee_number, role, line, team, is_active")
+      .eq("org_id", currentOrg.id)
       .eq("is_active", true);
 
     const equipmentWithAssignments: EquipmentWithAssignment[] = (equipmentData || []).map((eq: any) => {
@@ -66,7 +75,7 @@ export default function EquipmentPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentOrg]);
 
   const handleAddEquipment = async () => {
     if (!newEquipment.name || !newEquipment.serialNumber) return;
