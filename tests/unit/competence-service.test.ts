@@ -37,7 +37,7 @@ test("competenceService.getEmployeesWithSkills returns only referenced skills", 
       employee_id: "e1",
       skill_id: "s1",
       level: 2,
-      skill: { id: "s1", code: "PRESS_A", name: "Press A", category: "Production", description: null },
+      skill: { id: "s1", code: "PRESS_A", name: "Press A", category: "Production" },
     },
   ];
 

@@ -191,7 +191,7 @@ export async function getEmployeesWithSkills(filters?: {
   const employeeIds = employees.map((e) => e.id);
   const employeeSkillsQuery = supabase
     .from("employee_skills")
-    .select("employee_id, skill_id, level, skill:skill_id(id, code, name, category, description)")
+    .select("employee_id, skill_id, level, skill:skill_id(id, code, name, category)")
     .in("employee_id", employeeIds);
 
   const employeeSkillsResult = await employeeSkillsQuery;

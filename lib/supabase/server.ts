@@ -72,7 +72,6 @@ export async function createSupabaseServerClient(): Promise<{
 
   const cookieStore = await cookies();
   const pendingCookies: CookieToSet[] = [];
-  let dropAuthCookie = false;
 
   // DEV-ONLY: Log cookie diagnostics
   if (process.env.NODE_ENV !== "production") {
@@ -84,39 +83,52 @@ export async function createSupabaseServerClient(): Promise<{
     console.log("[DEV createSupabaseServerClient] Project auth cookie exists:", !!projectAuthCookie);
   }
 
-  const cookiesConfig = {
-    getAll() {
-      const all = cookieStore.getAll();
-      const out: { name: string; value: string }[] = [];
+  function buildOptions(getAllFn: () => { name: string; value: string }[]) {
+    return {
+      cookies: {
+        getAll: getAllFn,
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach((c) => pendingCookies.push(c));
+        },
+      },
+    };
+  }
 
-      for (const c of all) {
-        if (dropAuthCookie && SB_AUTH_COOKIE_RE.test(c.name)) continue;
-        if (SB_AUTH_COOKIE_RE.test(c.name)) {
-          const normalized = normalizeSupabaseAuthCookie(c.name, c.value);
-          if (normalized == null) {
-            if (process.env.NODE_ENV !== "production") {
-              console.log("[DEV] dropped malformed auth cookie", { name: c.name });
-            }
-            continue;
+  const getAllWithAuth = (): { name: string; value: string }[] => {
+    const all = cookieStore.getAll();
+    const out: { name: string; value: string }[] = [];
+    for (const c of all) {
+      if (SB_AUTH_COOKIE_RE.test(c.name)) {
+        const normalized = normalizeSupabaseAuthCookie(c.name, c.value);
+        if (normalized == null) {
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[DEV] dropped malformed auth cookie", { name: c.name });
           }
-          out.push({ name: c.name, value: normalized });
-        } else {
-          out.push({ name: c.name, value: c.value });
+          continue;
         }
+        out.push({ name: c.name, value: normalized });
+      } else {
+        out.push({ name: c.name, value: c.value });
       }
-      return out;
-    },
-    setAll(cookiesToSet: CookieToSet[]) {
-      cookiesToSet.forEach((c) => pendingCookies.push(c));
-    },
+    }
+    return out;
+  };
+
+  const getAllWithoutAuth = (): { name: string; value: string }[] => {
+    const all = cookieStore.getAll();
+    const out: { name: string; value: string }[] = [];
+    for (const c of all) {
+      if (SB_AUTH_COOKIE_RE.test(c.name)) continue;
+      out.push({ name: c.name, value: c.value });
+    }
+    return out;
   };
 
   let supabase: ReturnType<typeof createServerClient>;
   try {
-    supabase = createServerClient(url, anonKey, cookiesConfig);
+    supabase = createServerClient(url, anonKey, buildOptions(getAllWithAuth));
   } catch {
-    dropAuthCookie = true;
-    supabase = createServerClient(url, anonKey, cookiesConfig);
+    supabase = createServerClient(url, anonKey, buildOptions(getAllWithoutAuth));
   }
 
   return { supabase, pendingCookies };
