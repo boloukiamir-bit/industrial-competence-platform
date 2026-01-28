@@ -9,3 +9,7 @@ project-audit.tar.gz
 .env.local
 cookie*.txt
 cookie.txt
+*.cookie
+req.sh
+req.txt
+test_*.sh

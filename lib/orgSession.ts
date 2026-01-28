@@ -71,14 +71,25 @@ export async function getOrgIdFromSession(
     let authError: { name?: string } | null = null;
 
     console.log(`[${requestId}] orgSession STEP 5 before getUser`);
-    if (accessToken) {
-      const result = await supabase.auth.getUser(accessToken);
-      user = result.data.user ?? undefined;
-      authError = result.error;
-    } else {
-      const result = await supabase.auth.getUser();
-      user = result.data.user ?? undefined;
-      authError = result.error;
+    try {
+      if (accessToken) {
+        const result = await supabase.auth.getUser(accessToken);
+        user = result.data.user ?? undefined;
+        authError = result.error;
+      } else {
+        const result = await supabase.auth.getUser();
+        user = result.data.user ?? undefined;
+        authError = result.error;
+      }
+    } catch (err: unknown) {
+      const errName =
+        err && typeof err === "object" && "name" in err ? (err as { name?: unknown }).name : undefined;
+      const errMessage =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : String(err);
+      console.error(`[${requestId}] orgSession GETUSER THREW`, { name: errName, message: errMessage });
+      return { success: false, error: "Invalid or expired session", status: 401 };
     }
     console.log(`[${requestId}] orgSession STEP 6 getUser done`, {
       hasUser: !!user,
