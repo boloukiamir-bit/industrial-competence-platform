@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import { getRequestId } from "@/lib/server/requestId";
 import {
   computeNetFactor,
   segmentNetHours,
@@ -47,6 +48,11 @@ export async function GET(request: NextRequest) {
       return res;
     }
     const activeOrgId = profile.active_org_id as string;
+
+    if (process.env.NODE_ENV !== "production") {
+      const requestId = getRequestId(request);
+      console.log("[DEV line-overview/week]", { requestId, orgId: activeOrgId, query: "stations,pl_machines,pl_machine_demand,pl_assignment_segments,shift_rules" });
+    }
 
     const { data: stations, error: stationsError } = await supabaseAdmin
       .from("stations")

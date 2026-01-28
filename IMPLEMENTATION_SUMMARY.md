@@ -1,5 +1,7 @@
 # Cockpit Resolve NO-GO - Implementation Summary
 
+**Data provenance (P0.1):** Page → API → DB → org_id mapping is in [docs/DATA_PROVENANCE.md](docs/DATA_PROVENANCE.md).
+
 ## Översikt
 Implementerat en stabil "Cockpit Resolve NO-GO" end-to-end med korrekt persistence och utan temp IDs.
 

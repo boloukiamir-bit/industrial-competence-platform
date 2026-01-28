@@ -1,6 +1,7 @@
-import type { CompetenceLevel } from "@/types/domain";
+import type { CompetenceLevel, Employee, Skill, EmployeeSkill } from "@/types/domain";
 import { seedDemoDataIfEmpty, getEmployeesWithSkills, getFilterOptions } from "@/services/competenceService";
 import { ExportCSVButton } from "@/components/ExportCSVButton";
+import { getActiveOrgIdForRSC } from "@/lib/server/activeOrgRsc";
 
 export const dynamic = "force-dynamic";
 
@@ -38,15 +39,27 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
   const selectedLine = params.line || "";
   const selectedTeam = params.team || "";
 
-  await seedDemoDataIfEmpty();
-  
-  const [{ employees, skills, employeeSkills }, filterOptions] = await Promise.all([
-    getEmployeesWithSkills({
-      line: selectedLine || undefined,
-      team: selectedTeam || undefined,
-    }),
-    getFilterOptions(),
-  ]);
+  const activeOrgId = await getActiveOrgIdForRSC();
+  const demoMode = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+  if (demoMode) {
+    await seedDemoDataIfEmpty();
+  }
+
+  const tenantScoped = activeOrgId != null || demoMode;
+  const [{ employees, skills, employeeSkills }, filterOptions] = tenantScoped
+    ? await Promise.all([
+        getEmployeesWithSkills({
+          orgId: activeOrgId ?? undefined,
+          line: selectedLine || undefined,
+          team: selectedTeam || undefined,
+        }),
+        getFilterOptions(activeOrgId ?? undefined),
+      ])
+    : [
+        { employees: [] as Employee[], skills: [] as Skill[], employeeSkills: [] as EmployeeSkill[] },
+        { lines: [] as string[], teams: [] as string[] },
+      ];
 
   function getSkillLevel(employeeId: string, skillId: string): CompetenceLevel["value"] {
     const found = employeeSkills.find(

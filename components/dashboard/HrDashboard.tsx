@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import { SetupProgressCard } from "@/components/SetupProgressCard";
 import { isDemoMode, getDemoMetrics } from "@/lib/demoRuntime";
+import { useOrg } from "@/hooks/useOrg";
 
 type DashboardData = {
   totalHeadcount: number;
@@ -30,15 +31,14 @@ type DashboardData = {
 };
 
 export function HrDashboard() {
+  const { currentOrg } = useOrg();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
-      const isProd = process.env.NODE_ENV === 'production';
-      
-      // Demo mode only allowed in non-production when no authenticated org exists
-      if (!isProd && isDemoMode()) {
+      // Demo data only when NEXT_PUBLIC_DEMO_MODE=true (dev). Production never.
+      if (isDemoMode()) {
         const demoMetrics = getDemoMetrics();
         setData({
           totalHeadcount: demoMetrics.totalEmployees,
@@ -54,20 +54,53 @@ export function HrDashboard() {
         return;
       }
 
+      // Tenant-scoped: require active org; single source of truth from DB
+      if (!currentOrg) {
+        setData({
+          totalHeadcount: 0,
+          overdueEvents: 0,
+          dueSoonEvents: 0,
+          expiringContracts: 0,
+          openWorkflows: 0,
+          riskUnits: [],
+        });
+        setLoading(false);
+        return;
+      }
+
+      const orgId = currentOrg.id;
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[DEV HrDashboard]", { orgId, query: "employees,person_events,hr_workflow_instances" });
+      }
+
       const today = new Date().toISOString().split("T")[0];
       const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       const ninetyDaysLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
+      // Tenant-scoped: employees have org_id; person_events/hr_workflow_instances scoped via employee_id
+      const { data: orgEmployees } = await supabase
+        .from("employees")
+        .select("id, line")
+        .eq("org_id", orgId)
+        .eq("is_active", true);
+      const employeeIds = (orgEmployees || []).map((e) => e.id);
+      const employeeIdList = employeeIds.length > 0 ? employeeIds : ["00000000-0000-0000-0000-000000000000"];
+
       const [headcountRes, eventsRes, contractsRes, workflowsRes] = await Promise.all([
-        supabase.from("employees").select("id, line", { count: "exact" }).eq("is_active", true),
-        supabase.from("person_events").select("id, due_date, category, employees:employee_id(line)").neq("status", "completed"),
+        supabase.from("employees").select("id, line", { count: "exact" }).eq("org_id", orgId).eq("is_active", true),
+        employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
+          ? supabase.from("person_events").select("id, due_date, category, employees:employee_id(line)").in("employee_id", employeeIdList).neq("status", "completed")
+          : Promise.resolve({ data: [], error: null }),
         supabase.from("employees")
           .select("id")
+          .eq("org_id", orgId)
           .eq("is_active", true)
           .eq("employment_type", "temporary")
           .not("contract_end_date", "is", null)
           .lte("contract_end_date", ninetyDaysLater),
-        supabase.from("hr_workflow_instances").select("id", { count: "exact" }).eq("status", "active"),
+        employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
+          ? supabase.from("hr_workflow_instances").select("id", { count: "exact" }).in("employee_id", employeeIdList).eq("status", "active")
+          : Promise.resolve({ data: [], count: 0, error: null }),
       ]);
 
       const events = eventsRes.data || [];

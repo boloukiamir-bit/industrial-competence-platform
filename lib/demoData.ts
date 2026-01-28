@@ -151,11 +151,9 @@ const DEMO_EMPLOYEE_SKILLS_DATA: DemoEmployeeSkill[] = [
 
 export const DEMO_EMPLOYEE_SKILLS: DemoEmployeeSkill[] = isProd ? [] : DEMO_EMPLOYEE_SKILLS_DATA;
 
+/** Demo data only when explicitly enabled. Default false. Production never. */
 export function isDemoMode(): boolean {
-  if (typeof window !== "undefined") {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("demo") === "true") return true;
-  }
+  if (process.env.NODE_ENV === "production") return false;
   return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 }
 

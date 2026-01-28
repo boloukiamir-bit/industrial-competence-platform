@@ -17,21 +17,9 @@ const DEMO_ORG = {
   createdAt: "2024-01-01T00:00:00Z",
 };
 
+/** Demo data only when explicitly enabled (NEXT_PUBLIC_DEMO_MODE=true). Default false. Production never. */
 export function isDemoMode(): boolean {
-  if (typeof window === "undefined") {
-    return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-  }
-  
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("demo") === "1" || urlParams.get("demo") === "true") {
-    sessionStorage.setItem("nadiplan_demo_mode", "true");
-    return true;
-  }
-  
-  if (sessionStorage.getItem("nadiplan_demo_mode") === "true") {
-    return true;
-  }
-  
+  if (process.env.NODE_ENV === "production") return false;
   return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 }
 

@@ -1,8 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { Employee, Skill, EmployeeSkill, CompetenceLevel } from "@/types/domain";
 
-const isProd = process.env.NODE_ENV === 'production';
-
 const demoEmployees: Omit<Employee, "id">[] = [
   { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Pressline 1", team: "Day", employmentType: "permanent", isActive: true },
   { name: "Erik Johansson", employeeNumber: "E1002", role: "Operator", line: "Pressline 1", team: "Night", employmentType: "permanent", isActive: true },
@@ -25,10 +23,10 @@ const demoSkillLevels: Record<string, Record<string, CompetenceLevel["value"]>> 
   "E1004": { "PRESS_A": 1, "PRESS_B": 0, "5S": 2, "SAFETY_BASIC": 1, "TRUCK_A1": 0 },
 };
 
+/** Only runs when NEXT_PUBLIC_DEMO_MODE=true (dev). Production never. */
 export async function seedDemoDataIfEmpty(): Promise<void> {
-  if (isProd) {
-    throw new Error("Demo data seeding is disabled in production");
-  }
+  if (process.env.NODE_ENV === "production") return;
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") return;
 
   const { data: existingEmployees, error: checkError } = await supabase
     .from("employees")
@@ -117,13 +115,15 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
   }
 }
 
-export async function getFilterOptions(): Promise<{
+export async function getFilterOptions(orgId?: string | null): Promise<{
   lines: string[];
   teams: string[];
 }> {
-  const { data, error } = await supabase
-    .from("employees")
-    .select("line, team");
+  let query = supabase.from("employees").select("line, team");
+  if (orgId) {
+    query = query.eq("org_id", orgId);
+  }
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch filter options: ${error.message}`);
@@ -136,6 +136,7 @@ export async function getFilterOptions(): Promise<{
 }
 
 export async function getEmployeesWithSkills(filters?: {
+  orgId?: string | null;
   line?: string;
   team?: string;
 }): Promise<{
@@ -144,7 +145,9 @@ export async function getEmployeesWithSkills(filters?: {
   employeeSkills: EmployeeSkill[];
 }> {
   let employeesQuery = supabase.from("employees").select("*");
-  
+  if (filters?.orgId) {
+    employeesQuery = employeesQuery.eq("org_id", filters.orgId);
+  }
   if (filters?.line) {
     employeesQuery = employeesQuery.eq("line", filters.line);
   }
@@ -181,7 +184,11 @@ export async function getEmployeesWithSkills(filters?: {
     isActive: row.is_active,
   }));
 
-  const skills: Skill[] = (skillsResult.data || []).map((row) => ({
+  const employeeIds = new Set(employees.map((e) => e.id));
+  const rawEmployeeSkills = (employeeSkillsResult.data || []).filter((row) => employeeIds.has(row.employee_id));
+  const skillIdsInUse = new Set(rawEmployeeSkills.map((row) => row.skill_id));
+
+  const allSkills: Skill[] = (skillsResult.data || []).map((row) => ({
     id: row.id,
     code: row.code,
     name: row.name,
@@ -189,7 +196,11 @@ export async function getEmployeesWithSkills(filters?: {
     description: row.description,
   }));
 
-  const employeeSkills: EmployeeSkill[] = (employeeSkillsResult.data || []).map((row) => ({
+  const skills: Skill[] = filters?.orgId
+    ? allSkills.filter((s) => skillIdsInUse.has(s.id))
+    : allSkills;
+
+  const employeeSkills: EmployeeSkill[] = rawEmployeeSkills.map((row) => ({
     employeeId: row.employee_id,
     skillId: row.skill_id,
     level: row.level as CompetenceLevel["value"],
