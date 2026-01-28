@@ -4,14 +4,27 @@ import type { NextResponse } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
 
+const SB_AUTH_COOKIE_RE = /^sb-[a-z0-9]+-auth-token$/i;
+
+/** Returns true only if base64url payload decodes to valid UTF-8 (fatal decode). */
+function isValidUtf8FromBase64Url(payload: string): boolean {
+  let b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4 !== 0) b64 += "=";
+  try {
+    const bytes = Buffer.from(b64, "base64");
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Normalize malformed Supabase auth cookie values to prevent auth-js crashes. */
 function normalizeSupabaseAuthCookie(name: string, value: string): string | null {
-  // Only handle Supabase project auth cookie: sb-<projectRef>-auth-token
-  if (!/^sb-[a-z0-9]+-auth-token$/i.test(name)) return value;
+  if (!SB_AUTH_COOKIE_RE.test(name)) return value;
 
   let v = (value ?? "").trim();
 
-  // Remove surrounding quotes if present
   if (
     (v.startsWith('"') && v.endsWith('"')) ||
     (v.startsWith("'") && v.endsWith("'"))
@@ -19,32 +32,24 @@ function normalizeSupabaseAuthCookie(name: string, value: string): string | null
     v = v.slice(1, -1).trim();
   }
 
-  // Replace stray % not followed by 2 hex digits (do NOT decode)
   if (v.includes("%")) {
     v = v.replace(/%(?![0-9A-Fa-f]{2})/g, "%25");
   }
 
-  // Fix common quoted-printable artifact and equivalent percent form (no decoding)
   if (v.includes("=3D") || v.includes("%3D") || v.includes("%3d")) {
     v = v.replace(/=3D/g, "=").replace(/%3D/gi, "=");
   }
 
-  // If Supabase storage uses base64- prefix, ensure payload is base64url-safe
   if (v.startsWith("base64-")) {
     let payload = v.slice("base64-".length);
-
-    // Convert standard base64 to base64url
     payload = payload.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 
-    // Validate base64url charset only
-    if (!/^[A-Za-z0-9\-_]+$/.test(payload)) {
-      return null; // Drop cookie (treat as no session)
-    }
+    if (!/^[A-Za-z0-9\-_]+$/.test(payload)) return null;
+    if (!isValidUtf8FromBase64Url(payload)) return null;
 
     return `base64-${payload}`;
   }
 
-  // Not base64- prefixed; return sanitized string as-is
   return v;
 }
 
@@ -67,6 +72,7 @@ export async function createSupabaseServerClient(): Promise<{
 
   const cookieStore = await cookies();
   const pendingCookies: CookieToSet[] = [];
+  let dropAuthCookie = false;
 
   // DEV-ONLY: Log cookie diagnostics
   if (process.env.NODE_ENV !== "production") {
@@ -78,37 +84,40 @@ export async function createSupabaseServerClient(): Promise<{
     console.log("[DEV createSupabaseServerClient] Project auth cookie exists:", !!projectAuthCookie);
   }
 
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        const all = cookieStore.getAll();
-        const out: { name: string; value: string }[] = [];
+  const cookiesConfig = {
+    getAll() {
+      const all = cookieStore.getAll();
+      const out: { name: string; value: string }[] = [];
 
-        for (const c of all) {
-          if (/^sb-[a-z0-9]+-auth-token$/i.test(c.name)) {
-            const normalized = normalizeSupabaseAuthCookie(c.name, c.value);
-
-            if (normalized == null) {
-              // Dev-only: log cookie name only
-              if (process.env.NODE_ENV !== "production") {
-                console.log("[DEV] dropped malformed auth cookie", { name: c.name });
-              }
-              continue; // OMIT the cookie
+      for (const c of all) {
+        if (dropAuthCookie && SB_AUTH_COOKIE_RE.test(c.name)) continue;
+        if (SB_AUTH_COOKIE_RE.test(c.name)) {
+          const normalized = normalizeSupabaseAuthCookie(c.name, c.value);
+          if (normalized == null) {
+            if (process.env.NODE_ENV !== "production") {
+              console.log("[DEV] dropped malformed auth cookie", { name: c.name });
             }
-
-            out.push({ name: c.name, value: normalized });
-          } else {
-            out.push({ name: c.name, value: c.value });
+            continue;
           }
+          out.push({ name: c.name, value: normalized });
+        } else {
+          out.push({ name: c.name, value: c.value });
         }
-
-        return out;
-      },
-      setAll(cookiesToSet: CookieToSet[]) {
-        cookiesToSet.forEach((c) => pendingCookies.push(c));
-      },
+      }
+      return out;
     },
-  });
+    setAll(cookiesToSet: CookieToSet[]) {
+      cookiesToSet.forEach((c) => pendingCookies.push(c));
+    },
+  };
+
+  let supabase: ReturnType<typeof createServerClient>;
+  try {
+    supabase = createServerClient(url, anonKey, cookiesConfig);
+  } catch {
+    dropAuthCookie = true;
+    supabase = createServerClient(url, anonKey, cookiesConfig);
+  }
 
   return { supabase, pendingCookies };
 }
