@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { getOrgTree, createOrgUnit, type OrgTreeResult } from "@/services/org";
 import { COPY } from "@/lib/copy";
-import { isDemoMode, getDemoOrgUnits } from "@/lib/demoRuntime";
 import { useOrg } from "@/hooks/useOrg";
 import { supabase } from "@/lib/supabaseClient";
 import type { OrgUnit } from "@/types/domain";
@@ -145,28 +144,17 @@ export default function OrgOverviewPage() {
   const [totalEmployees, setTotalEmployees] = useState(0);
 
   const loadData = async () => {
-    if (isDemoMode()) {
-      const allUnits = getDemoOrgUnits();
-      const rootUnits = allUnits.filter(u => !u.parentId);
-      const demoUnits: OrgUnit[] = rootUnits.map(u => ({
-        ...u,
-        children: allUnits.filter(c => c.parentId === u.id),
-      }));
-      setOrgTree(demoUnits);
-      setUnassignedCount(0); // Demo mode: no unassigned employees
-      // Demo mode: use sum of unit employeeCounts
-      const demoTotal = demoUnits.reduce((sum, u) => sum + (u.employeeCount || 0), 0);
-      setTotalEmployees(demoTotal);
-      setLoading(false);
-      return;
-    }
-
     if (!currentOrg) {
       setOrgTree([]);
       setUnassignedCount(0);
       setTotalEmployees(0);
       setLoading(false);
       return;
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      const requestId = crypto?.randomUUID?.() ?? String(Date.now());
+      console.log("[DEV OrgOverview]", { requestId, orgId: currentOrg.id, table: "org_units" });
     }
 
     // Load org tree (for unit structure and unit-specific employee counts)
@@ -191,6 +179,10 @@ export default function OrgOverviewPage() {
     // Tenant-scoped: Count ALL active employees for the org (same source as Employees page)
     // This ensures consistency between Employees page count and Org Overview total
     // First attempt WITH is_active filter
+    if (process.env.NODE_ENV !== "production") {
+      const requestId = crypto?.randomUUID?.() ?? String(Date.now());
+      console.log("[DEV OrgOverview]", { requestId, orgId: currentOrg.id, table: "employees" });
+    }
     let countQuery = supabase
       .from("employees")
       .select("*", { count: "exact", head: true })
@@ -266,7 +258,7 @@ export default function OrgOverviewPage() {
               Organization Overview
             </h1>
             <p className="text-muted-foreground">
-              0 units, 0 employees
+              {orgTree.length} units, {totalEmployees} employees
             </p>
           </div>
           <div className="flex items-center gap-2">

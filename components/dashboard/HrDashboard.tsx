@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { SetupProgressCard } from "@/components/SetupProgressCard";
-import { isDemoMode, getDemoMetrics } from "@/lib/demoRuntime";
 import { useOrg } from "@/hooks/useOrg";
 
 type DashboardData = {
@@ -37,23 +36,6 @@ export function HrDashboard() {
 
   useEffect(() => {
     async function loadDashboard() {
-      // Demo data only when NEXT_PUBLIC_DEMO_MODE=true (dev). Production never.
-      if (isDemoMode()) {
-        const demoMetrics = getDemoMetrics();
-        setData({
-          totalHeadcount: demoMetrics.totalEmployees,
-          overdueEvents: 3,
-          dueSoonEvents: 5,
-          expiringContracts: 2,
-          openWorkflows: 4,
-          avgReadiness: demoMetrics.avgReadiness,
-          topGapSkill: demoMetrics.topGapSkill,
-          riskUnits: [],
-        });
-        setLoading(false);
-        return;
-      }
-
       // Tenant-scoped: require active org; single source of truth from DB
       if (!currentOrg) {
         setData({
@@ -70,7 +52,12 @@ export function HrDashboard() {
 
       const orgId = currentOrg.id;
       if (process.env.NODE_ENV !== "production") {
-        console.log("[DEV HrDashboard]", { orgId, query: "employees,person_events,hr_workflow_instances" });
+        const requestId = crypto?.randomUUID?.() ?? String(Date.now());
+        console.log("[DEV HrDashboard]", {
+          requestId,
+          orgId,
+          tables: ["employees", "person_events", "hr_workflow_instances"],
+        });
       }
 
       const today = new Date().toISOString().split("T")[0];
