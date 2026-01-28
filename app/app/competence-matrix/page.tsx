@@ -53,8 +53,9 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
           orgId: activeOrgId ?? undefined,
           line: selectedLine || undefined,
           team: selectedTeam || undefined,
+          allowGlobal: demoMode,
         }),
-        getFilterOptions(activeOrgId ?? undefined),
+        getFilterOptions(activeOrgId ?? undefined, { allowGlobal: demoMode }),
       ])
     : [
         { employees: [] as Employee[], skills: [] as Skill[], employeeSkills: [] as EmployeeSkill[] },
@@ -67,6 +68,9 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
     );
     return found ? found.level : 0;
   }
+
+  const showEmptySkillsState =
+    employeeSkills.length === 0 && selectedLine === "" && selectedTeam === "" && tenantScoped;
 
   return (
     <div>
@@ -164,101 +168,130 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
         </form>
       </div>
 
-      <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-4">
-        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Legend
-        </h2>
-        <div className="flex flex-wrap gap-4">
-          {competenceLevels.map((level) => (
-            <div key={level.value} className="flex items-center gap-2">
-              <div
-                className={`w-6 h-6 rounded ${getLevelColor(level.value)}`}
-                data-testid={`legend-level-${level.value}`}
-              />
-              <div className="text-sm">
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {level.value} - {level.label}
-                </span>
-                <span className="text-gray-500 dark:text-gray-400 ml-1">
-                  ({level.description})
-                </span>
-              </div>
-            </div>
-          ))}
+      {showEmptySkillsState ? (
+        <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            No competencies recorded yet
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+            Import competencies or define requirements to populate the matrix.
+          </p>
+          <div className="flex items-center gap-2">
+            <a
+              href="/app/import-employees"
+              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              data-testid="button-import-competencies"
+            >
+              Import competencies
+            </a>
+            <a
+              href="/app/admin/competence"
+              className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              data-testid="button-edit-requirements-empty"
+            >
+              Edit requirements
+            </a>
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-4">
+            <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Legend
+            </h2>
+            <div className="flex flex-wrap gap-4">
+              {competenceLevels.map((level) => (
+                <div key={level.value} className="flex items-center gap-2">
+                  <div
+                    className={`w-6 h-6 rounded ${getLevelColor(level.value)}`}
+                    data-testid={`legend-level-${level.value}`}
+                  />
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {level.value} - {level.label}
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400 ml-1">
+                      ({level.description})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full" data-testid="competence-matrix-table">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left p-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50">
-                  Employee
-                </th>
-                {skills.map((skill) => (
-                  <th
-                    key={skill.id}
-                    className="text-center p-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 min-w-[100px]"
-                  >
-                    <div>{skill.code}</div>
-                    <div className="text-xs font-normal text-gray-500 dark:text-gray-400">
-                      {skill.name}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {employees.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={skills.length + 1}
-                    className="p-6 text-center text-gray-500 dark:text-gray-400"
-                    data-testid="no-results-message"
-                  >
-                    No employees match the selected filters.
-                  </td>
-                </tr>
-              ) : (
-                employees.map((employee, index) => (
-                  <tr
-                    key={employee.id}
-                    className={
-                      index < employees.length - 1
-                        ? "border-b border-gray-200 dark:border-gray-700"
-                        : ""
-                    }
-                    data-testid={`row-employee-${employee.id}`}
-                  >
-                    <td className="p-3">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {employee.name}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {employee.role} - {employee.team}
-                      </div>
-                    </td>
-                    {skills.map((skill) => {
-                      const level = getSkillLevel(employee.id, skill.id);
-                      return (
-                        <td key={skill.id} className="p-3 text-center">
-                          <div
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-medium text-gray-900 dark:text-white ${getLevelColor(level)}`}
-                            data-testid={`cell-${employee.id}-${skill.id}`}
-                          >
-                            {level}
+          <div className="bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full" data-testid="competence-matrix-table">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left p-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50">
+                      Employee
+                    </th>
+                    {skills.map((skill) => (
+                      <th
+                        key={skill.id}
+                        className="text-center p-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 min-w-[100px]"
+                      >
+                        <div>{skill.code}</div>
+                        <div className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                          {skill.name}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={skills.length + 1}
+                        className="p-6 text-center text-gray-500 dark:text-gray-400"
+                        data-testid="no-results-message"
+                      >
+                        No employees match the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    employees.map((employee, index) => (
+                      <tr
+                        key={employee.id}
+                        className={
+                          index < employees.length - 1
+                            ? "border-b border-gray-200 dark:border-gray-700"
+                            : ""
+                        }
+                        data-testid={`row-employee-${employee.id}`}
+                      >
+                        <td className="p-3">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {employee.name}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {employee.role} - {employee.team}
                           </div>
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                        {skills.map((skill) => {
+                          const level = getSkillLevel(employee.id, skill.id);
+                          return (
+                            <td key={skill.id} className="p-3 text-center">
+                              <div
+                                className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-medium text-gray-900 dark:text-white ${getLevelColor(level)}`}
+                                data-testid={`cell-${employee.id}-${skill.id}`}
+                              >
+                                {level}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

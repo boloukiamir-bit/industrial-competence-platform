@@ -115,10 +115,17 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
   }
 }
 
-export async function getFilterOptions(orgId?: string | null): Promise<{
+export async function getFilterOptions(
+  orgId?: string | null,
+  options?: { allowGlobal?: boolean }
+): Promise<{
   lines: string[];
   teams: string[];
 }> {
+  const allowGlobal = options?.allowGlobal === true;
+  if (!orgId && !allowGlobal) {
+    return { lines: [], teams: [] };
+  }
   let query = supabase.from("employees").select("line, team");
   if (orgId) {
     query = query.eq("org_id", orgId);
@@ -139,11 +146,16 @@ export async function getEmployeesWithSkills(filters?: {
   orgId?: string | null;
   line?: string;
   team?: string;
+  allowGlobal?: boolean;
 }): Promise<{
   employees: Employee[];
   skills: Skill[];
   employeeSkills: EmployeeSkill[];
 }> {
+  const allowGlobal = filters?.allowGlobal === true;
+  if (!filters?.orgId && !allowGlobal) {
+    return { employees: [], skills: [], employeeSkills: [] };
+  }
   let employeesQuery = supabase.from("employees").select("*");
   if (filters?.orgId) {
     employeesQuery = employeesQuery.eq("org_id", filters.orgId);
@@ -155,22 +167,10 @@ export async function getEmployeesWithSkills(filters?: {
     employeesQuery = employeesQuery.eq("team", filters.team);
   }
 
-  const [employeesResult, skillsResult, employeeSkillsResult] = await Promise.all([
-    employeesQuery,
-    supabase.from("skills").select("*"),
-    supabase.from("employee_skills").select("*"),
-  ]);
+  const employeesResult = await employeesQuery;
 
   if (employeesResult.error) {
     throw new Error(`Failed to fetch employees: ${employeesResult.error.message}`);
-  }
-
-  if (skillsResult.error) {
-    throw new Error(`Failed to fetch skills: ${skillsResult.error.message}`);
-  }
-
-  if (employeeSkillsResult.error) {
-    throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
   }
 
   const employees: Employee[] = (employeesResult.data || []).map((row) => ({
@@ -184,27 +184,41 @@ export async function getEmployeesWithSkills(filters?: {
     isActive: row.is_active,
   }));
 
-  const employeeIds = new Set(employees.map((e) => e.id));
-  const rawEmployeeSkills = (employeeSkillsResult.data || []).filter((row) => employeeIds.has(row.employee_id));
-  const skillIdsInUse = new Set(rawEmployeeSkills.map((row) => row.skill_id));
+  if (employees.length === 0) {
+    return { employees, skills: [], employeeSkills: [] };
+  }
 
-  const allSkills: Skill[] = (skillsResult.data || []).map((row) => ({
-    id: row.id,
-    code: row.code,
-    name: row.name,
-    category: row.category,
-    description: row.description,
-  }));
+  const employeeIds = employees.map((e) => e.id);
+  const employeeSkillsQuery = supabase
+    .from("employee_skills")
+    .select("employee_id, skill_id, level, skill:skill_id(id, code, name, category, description)")
+    .in("employee_id", employeeIds);
 
-  const skills: Skill[] = filters?.orgId
-    ? allSkills.filter((s) => skillIdsInUse.has(s.id))
-    : allSkills;
+  const employeeSkillsResult = await employeeSkillsQuery;
+  if (employeeSkillsResult.error) {
+    throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
+  }
 
-  const employeeSkills: EmployeeSkill[] = rawEmployeeSkills.map((row) => ({
-    employeeId: row.employee_id,
-    skillId: row.skill_id,
-    level: row.level as CompetenceLevel["value"],
-  }));
+  const skillMap = new Map<string, Skill>();
+  const employeeSkills: EmployeeSkill[] = (employeeSkillsResult.data || []).map((row) => {
+    const skillRow = row.skill as Skill | null | undefined;
+    if (skillRow && !skillMap.has(skillRow.id)) {
+      skillMap.set(skillRow.id, {
+        id: skillRow.id,
+        code: skillRow.code,
+        name: skillRow.name,
+        category: skillRow.category,
+        description: skillRow.description,
+      });
+    }
+    return {
+      employeeId: row.employee_id,
+      skillId: row.skill_id,
+      level: row.level as CompetenceLevel["value"],
+    };
+  });
+
+  const skills = Array.from(skillMap.values());
 
   return { employees, skills, employeeSkills };
 }
