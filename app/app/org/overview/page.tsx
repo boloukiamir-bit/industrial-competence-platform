@@ -19,10 +19,9 @@ import {
   Loader2,
   AlertTriangle
 } from "lucide-react";
-import { getOrgTree, createOrgUnit, type OrgTreeResult } from "@/services/org";
+import { createOrgUnit } from "@/services/org";
 import { COPY } from "@/lib/copy";
 import { useOrg } from "@/hooks/useOrg";
-import { supabase } from "@/lib/supabaseClient";
 import type { OrgUnit } from "@/types/domain";
 
 function OrgUnitCard({
@@ -142,89 +141,66 @@ export default function OrgOverviewPage() {
   const [newUnitCode, setNewUnitCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [totalEmployees, setTotalEmployees] = useState(0);
+  const [totalUnitsRaw, setTotalUnitsRaw] = useState(0);
+  const [rootUnitsCount, setRootUnitsCount] = useState(0);
+  const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(null);
+  const [unitsWarning, setUnitsWarning] = useState<string | null>(null);
 
   const loadData = async () => {
-    if (!currentOrg) {
-      setOrgTree([]);
-      setUnassignedCount(0);
-      setTotalEmployees(0);
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
+    setUnitsWarning(null);
+    try {
+      const res = await fetch("/api/org/units", { credentials: "include" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEffectiveOrgId(null);
+        setOrgTree([]);
+        setUnassignedCount(0);
+        setTotalEmployees(0);
+        if (res.status !== 403) console.error("Error loading org units:", json.error ?? res.statusText);
+        return;
+      }
+      const tree = Array.isArray(json.tree) ? json.tree : [];
+      const meta = (json.meta ?? {}) as Record<string, unknown>;
+      const unitsRaw =
+        typeof meta.totalUnitsRaw === "number" ? meta.totalUnitsRaw : tree.length;
+      const rootsCount =
+        typeof meta.rootUnitsCount === "number" ? meta.rootUnitsCount : tree.length;
+      const employeesCount =
+        typeof meta.totalEmployeesAfterSiteFilter === "number"
+          ? meta.totalEmployeesAfterSiteFilter
+          : typeof json.totalEmployees === "number"
+            ? json.totalEmployees
+            : 0;
 
-    if (process.env.NODE_ENV !== "production") {
-      const requestId = crypto?.randomUUID?.() ?? String(Date.now());
-      console.log("[DEV OrgOverview]", { requestId, orgId: currentOrg.id, table: "org_units" });
-    }
-
-    // Load org tree (for unit structure and unit-specific employee counts)
-    const result: OrgTreeResult = await getOrgTree(currentOrg.id);
-    setOrgTree(result.tree);
-    setUnassignedCount(result.unassignedCount);
-
-    // Helper to check if error indicates missing is_active column
-    const isMissingColumnError = (err: any): boolean => {
-      if (!err) return false;
-      const code = err.code;
-      const message = err.message?.toLowerCase() || "";
-      return (
-        code === "42703" || // PostgreSQL undefined column
-        message.includes("is_active") && (
-          message.includes("does not exist") ||
-          message.includes("column") && message.includes("not found")
-        )
+      setOrgTree(tree);
+      setUnassignedCount(typeof json.unassignedCount === "number" ? json.unassignedCount : 0);
+      setTotalEmployees(employeesCount);
+      setTotalUnitsRaw(unitsRaw);
+      setRootUnitsCount(rootsCount);
+      setEffectiveOrgId(json.activeOrgId ?? null);
+      setUnitsWarning(
+        unitsRaw > 0 && rootsCount === 0
+          ? "Org structure has no root unit (parent_id NULL). Set a top-level unit."
+          : null
       );
-    };
-
-    // Tenant-scoped: Count ALL active employees for the org (same source as Employees page)
-    // This ensures consistency between Employees page count and Org Overview total
-    // First attempt WITH is_active filter
-    if (process.env.NODE_ENV !== "production") {
-      const requestId = crypto?.randomUUID?.() ?? String(Date.now());
-      console.log("[DEV OrgOverview]", { requestId, orgId: currentOrg.id, table: "employees" });
+    } finally {
+      setLoading(false);
     }
-    let countQuery = supabase
-      .from("employees")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", currentOrg.id)
-      .eq("is_active", true);
-
-    let { count, error } = await countQuery;
-
-    // If error indicates missing is_active column, retry without it
-    if (error && isMissingColumnError(error)) {
-      countQuery = supabase
-        .from("employees")
-        .select("*", { count: "exact", head: true })
-        .eq("org_id", currentOrg.id);
-      
-      const retryResult = await countQuery;
-      count = retryResult.count;
-      error = retryResult.error;
-    }
-
-    if (error) {
-      console.error("Error counting employees:", error);
-      setTotalEmployees(0);
-    } else {
-      setTotalEmployees(count || 0);
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-  }, [currentOrg]);
+  }, []);
 
   const handleCreateUnit = async () => {
-    if (!newUnitName.trim() || !currentOrg) return;
+    if (!newUnitName.trim() || !effectiveOrgId) return;
     
     setCreating(true);
     const result = await createOrgUnit({
       name: newUnitName.trim(),
       code: newUnitCode.trim() || undefined,
-      orgId: currentOrg.id,
+      orgId: effectiveOrgId,
     });
     
     if (result) {
@@ -258,8 +234,14 @@ export default function OrgOverviewPage() {
               Organization Overview
             </h1>
             <p className="text-muted-foreground">
-              {orgTree.length} units, {totalEmployees} employees
+              {totalUnitsRaw} units ({rootUnitsCount} roots), {totalEmployees} employees
             </p>
+            {unitsWarning && (
+              <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 inline-block" data-testid="org-units-warning">
+                <AlertTriangle className="h-4 w-4 inline-block mr-2 align-middle" />
+                {unitsWarning}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={() => setShowCreateUnitModal(true)} data-testid="button-create-unit">
@@ -360,7 +342,7 @@ export default function OrgOverviewPage() {
           </h1>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-muted-foreground">
-              {orgTree.length} units, {totalEmployees} total employees
+              {totalUnitsRaw} units ({rootUnitsCount} roots), {totalEmployees} employees
             </p>
             {unassignedCount > 0 && (
               <Badge variant="destructive" className="text-xs">
@@ -370,6 +352,12 @@ export default function OrgOverviewPage() {
             )}
           </div>
         </div>
+        {unitsWarning && (
+          <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200" data-testid="org-units-warning">
+            <AlertTriangle className="h-4 w-4 inline-block mr-2 align-middle" />
+            {unitsWarning}
+          </div>
+        )}
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Show employees</span>

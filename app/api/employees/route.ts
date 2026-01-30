@@ -1,43 +1,79 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
+/**
+ * GET /api/employees — tenant-scoped by session (active_org_id),
+ * optionally filtered by active_site_id when present.
+ */
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const orgId = searchParams.get("org_id");
-
-    if (!orgId) {
-      return NextResponse.json({ error: "org_id is required" }, { status: 400 });
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const org = await getActiveOrgFromSession(request, supabase);
+    if (!org.ok) {
+      const res = NextResponse.json({ error: org.error }, { status: org.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
-    // First try regular employees table
+    const activeSiteId = org.activeSiteId ?? null;
     const result = await pool.query(
-      `SELECT id, name, email 
+      `SELECT id, name, first_name, last_name, employee_number, email, phone, date_of_birth,
+              role, line, team, employment_type, start_date, contract_end_date, manager_id,
+              address, city, postal_code, country, is_active
        FROM employees 
-       WHERE org_id = $1 
+       WHERE org_id = $1
+         AND is_active = true
+         AND ($2::uuid IS NULL OR site_id = $2)
        ORDER BY name 
-       LIMIT 100`,
-      [orgId]
+       LIMIT 500`,
+      [org.activeOrgId, activeSiteId]
     );
 
-    // If no employees found and this is Spaljisten org, check sp_employees
-    if (result.rows.length === 0 && orgId === SPALJISTEN_ORG_ID) {
+    if (result.rows.length === 0 && org.activeOrgId === SPALJISTEN_ORG_ID) {
       const spResult = await pool.query(
         `SELECT id, employee_name as name, email 
          FROM sp_employees 
          WHERE org_id = $1 
          ORDER BY employee_name 
          LIMIT 100`,
-        [orgId]
+        [org.activeOrgId]
       );
-      return NextResponse.json({ employees: spResult.rows });
+      const res = NextResponse.json({ employees: spResult.rows });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
-    return NextResponse.json({ employees: result.rows });
+    const employees = result.rows.map((row) => ({
+      id: row.id,
+      name: row.name ?? "",
+      firstName: row.first_name ?? undefined,
+      lastName: row.last_name ?? undefined,
+      employeeNumber: row.employee_number ?? "",
+      email: row.email ?? undefined,
+      phone: row.phone ?? undefined,
+      dateOfBirth: row.date_of_birth ?? undefined,
+      role: row.role ?? "",
+      line: row.line ?? "",
+      team: row.team ?? "",
+      employmentType: row.employment_type ?? "permanent",
+      startDate: row.start_date ?? undefined,
+      contractEndDate: row.contract_end_date ?? undefined,
+      managerId: row.manager_id ?? undefined,
+      address: row.address ?? undefined,
+      city: row.city ?? undefined,
+      postalCode: row.postal_code ?? undefined,
+      country: row.country ?? "Sweden",
+      isActive: row.is_active ?? true,
+    }));
+    const res = NextResponse.json({ employees });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (err) {
     console.error("GET /api/employees failed:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
