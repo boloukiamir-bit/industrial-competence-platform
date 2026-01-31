@@ -170,6 +170,7 @@ export async function createMeeting(payload: CreateMeetingPayload): Promise<OneT
     .from("employees")
     .select("name, email")
     .eq("org_id", payload.orgId)
+    .eq("is_active", true)
     .eq("id", payload.employeeId)
     .single();
 
@@ -177,6 +178,7 @@ export async function createMeeting(payload: CreateMeetingPayload): Promise<OneT
     .from("employees")
     .select("name, email")
     .eq("org_id", payload.orgId)
+    .eq("is_active", true)
     .eq("id", payload.managerId)
     .single();
 

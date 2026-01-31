@@ -18,6 +18,7 @@ export async function getCertificates(filters?: {
     `)
     .eq("employees.is_active", true)
     .eq("employees.org_id", filters.orgId)
+    .eq("skills.org_id", filters.orgId)
     .in("skills.category", ["safety", "certificate"]);
 
   if (filters?.line) {
@@ -98,7 +99,7 @@ export async function getFilterOptionsForCertificates(orgId: string): Promise<{
   if (!orgId) return { lines: [], skills: [] };
   const [linesResult, skillsResult] = await Promise.all([
     supabase.from("employees").select("line").eq("org_id", orgId).eq("is_active", true),
-    supabase.from("skills").select("id, name").in("category", ["safety", "certificate"]),
+    supabase.from("skills").select("id, name").eq("org_id", orgId).in("category", ["safety", "certificate"]),
   ]);
 
   const lines = [...new Set((linesResult.data || []).map((r) => r.line).filter(Boolean))].sort();

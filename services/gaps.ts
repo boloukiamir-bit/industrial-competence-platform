@@ -20,7 +20,8 @@ export async function calculateTomorrowsGaps(orgId: string): Promise<GapItem[]> 
   const { data: skills } = await supabase
     .from("skills")
     .select("id, name")
-    .in("id", skillIds);
+    .in("id", skillIds)
+    .eq("org_id", orgId);
 
   const skillMap = new Map<string, string>();
   for (const skill of skills || []) {
@@ -147,11 +148,16 @@ export function getOverstaffedSkills(skillsStats: Record<string, SkillStats>) {
     .sort((a, b) => b.countLevel3or4 - a.countLevel3or4);
 }
 
-export async function getSkillStats(): Promise<Record<string, SkillStats>> {
-  const { data: skills } = await supabase.from("skills").select("id, name");
+export async function getSkillStats(orgId: string): Promise<Record<string, SkillStats>> {
+  if (!orgId) return {};
+  const { data: skills } = await supabase
+    .from("skills")
+    .select("id, name")
+    .eq("org_id", orgId);
   const { data: empSkills } = await supabase
     .from("employee_skills")
-    .select("skill_id, level");
+    .select("skill_id, level, employees!inner(org_id)")
+    .eq("employees.org_id", orgId);
 
   const stats: Record<string, SkillStats> = {};
 

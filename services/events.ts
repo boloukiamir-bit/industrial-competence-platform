@@ -168,6 +168,7 @@ export async function autoGenerateContractEvents(orgId: string): Promise<void> {
     .from("employees")
     .select("id, name, contract_end_date, manager_id")
     .eq("org_id", orgId)
+    .eq("is_active", true)
     .eq("employment_type", "temporary")
     .not("contract_end_date", "is", null);
 

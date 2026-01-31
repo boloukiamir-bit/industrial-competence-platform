@@ -1,10 +1,8 @@
 // services/gapEngine.ts
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { type ShiftRule } from "@/lib/lineOverviewNet";
 
 // Tables that require org_id scoping
 const ORG_SCOPED_TABLES = [
-  "shift_rules",
   "pl_employees",
   "employees",
   "stations",
@@ -12,8 +10,8 @@ const ORG_SCOPED_TABLES = [
   "competences",
 ] as const;
 
-// Fallback net shift hours if shift_rules is not available
-const FALLBACK_NET_SHIFT_HOURS = 8.0;
+// Gross hours per head for requiredHeadcount (matches Line Overview; shift_rules not used in Cockpit MVP)
+const GROSS_HOURS_PER_HEAD = 8;
 
 /**
  * Get employee competence levels for specific competences.
@@ -70,39 +68,6 @@ async function getEmployeeCompetenceLevels(
   }
   
   return competenceLevels;
-}
-
-/**
- * Calculate net shift hours from shift rules.
- * Returns net hours (after breaks) for the shift, or fallback if rules unavailable.
- */
-function calculateNetShiftHours(shiftRule: ShiftRule | null, shiftType: string): number {
-  if (!shiftRule || !shiftRule.shift_start || !shiftRule.shift_end) {
-    // Fallback: use constant for each shift type
-    return FALLBACK_NET_SHIFT_HOURS;
-  }
-  
-  // Calculate gross shift minutes
-  const timeToMinutes = (t: string): number => {
-    const [h, m] = t.split(":").map(Number);
-    return (h ?? 0) * 60 + (m ?? 0);
-  };
-  
-  const startMins = timeToMinutes(shiftRule.shift_start);
-  const endMins = timeToMinutes(shiftRule.shift_end);
-  const grossMins = endMins <= startMins 
-    ? 24 * 60 - startMins + endMins  // overnight shift
-    : endMins - startMins;
-  
-  if (grossMins <= 0) {
-    return FALLBACK_NET_SHIFT_HOURS;
-  }
-  
-  // Calculate net minutes: gross - break + paid_break
-  const netMins = grossMins - (shiftRule.break_minutes || 0) + (shiftRule.paid_break_minutes || 0);
-  const netHours = Math.max(0, netMins) / 60;
-  
-  return netHours > 0 ? netHours : FALLBACK_NET_SHIFT_HOURS;
 }
 
 export interface CompetenceGap {
@@ -188,7 +153,7 @@ export interface ComputeLineGapsResult {
  * Compute gaps for a line on a given date and shift.
  * 
  * This is the unified gap engine that:
- * - Calculates requiredHeadcount from demand + netShiftHours
+ * - Calculates requiredHeadcount from demand + gross hours per head
  * - Calculates assignedHeadcount from assignments
  * - Determines competence status (OK/GAP/RISK/NO-GO) for each machine
  * - Returns machine rows with nested competence gaps
@@ -235,19 +200,7 @@ export async function computeLineGaps(
     return { machineRows: [] };
   }
 
-  // 2. Get shift rules for net hours calculation
-  // Table: shift_rules (requires org_id scoping)
-  const { data: shiftRuleData } = await supabaseClient
-    .from("shift_rules")
-    .select("shift_start,shift_end,break_minutes,paid_break_minutes")
-    .eq("org_id", orgId)
-    .eq("shift_type", shiftType)
-    .maybeSingle();
-
-  const shiftRule = shiftRuleData as ShiftRule | null;
-  const netShiftHours = calculateNetShiftHours(shiftRule, shiftType);
-
-  // 3. Calculate staffing gaps per machine
+  // 2. Calculate staffing gaps per machine (gross hours; shift_rules not used in Cockpit MVP)
   const machineToEmployees = new Map<string, Array<{ employeeCode: string; employeeId?: string }>>();
 
   for (const machine of machines) {
@@ -269,9 +222,9 @@ export async function computeLineGaps(
     
     const assignedHeadcount = assignedPeople.size;
     
-    // Calculate required headcount: ceil(required_hours / netShiftHours)
+    // Required headcount: ceil(required_hours / gross hours per head)
     const requiredHeadcount = requiredHours > 0 
-      ? Math.ceil(requiredHours / netShiftHours)
+      ? Math.ceil(requiredHours / GROSS_HOURS_PER_HEAD)
       : 0;
     
     // Store employee codes for this machine for competence checking
@@ -313,14 +266,16 @@ export async function computeLineGaps(
       // Table: employees (requires org_id scoping)
       const { data: employees } = await supabaseClient
         .from("employees")
-        .select("id, code")
+        .select("id, employee_number")
         .eq("org_id", orgId)
-        .in("code", [...new Set(allEmployeeCodes)]);
+        .eq("is_active", true)
+        .in("employee_number", [...new Set(allEmployeeCodes)]);
       
       if (employees) {
-        employees.forEach((e: any) => {
-          if (e.code && !employeeCodeToId.has(e.code)) {
-            employeeCodeToId.set(e.code, e.id);
+        employees.forEach((e: { id: string; employee_number?: string }) => {
+          const code = e.employee_number;
+          if (code && !employeeCodeToId.has(code)) {
+            employeeCodeToId.set(code, e.id);
           }
         });
       }
@@ -456,7 +411,8 @@ export async function computeLineGaps(
       .from("employees")
       .select("id, name")
       .in("id", uniqueEmployeeIds)
-      .eq("org_id", orgId);
+      .eq("org_id", orgId)
+      .eq("is_active", true);
     
     if (employeesData) {
       employeesData.forEach((e: any) => {
@@ -522,7 +478,7 @@ export async function computeLineGaps(
     
     const assignedHeadcount = assignedPeople.size;
     const requiredHeadcount = requiredHours > 0 
-      ? Math.ceil(requiredHours / netShiftHours)
+      ? Math.ceil(requiredHours / GROSS_HOURS_PER_HEAD)
       : 0;
     const staffingGap = Math.max(requiredHeadcount - assignedHeadcount, 0);
     

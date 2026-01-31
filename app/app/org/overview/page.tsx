@@ -157,7 +157,7 @@ export default function OrgOverviewPage() {
         setOrgTree([]);
         setUnassignedCount(0);
         setTotalEmployees(0);
-        if (res.status !== 403) console.error("Error loading org units:", json.error ?? res.statusText);
+        if (res.status !== 403) console.error("Error loading org units:", json.error ?? res.statusText, json.details ?? "");
         return;
       }
       const tree = Array.isArray(json.tree) ? json.tree : [];
@@ -179,11 +179,12 @@ export default function OrgOverviewPage() {
       setTotalUnitsRaw(unitsRaw);
       setRootUnitsCount(rootsCount);
       setEffectiveOrgId(json.activeOrgId ?? null);
-      setUnitsWarning(
+      const metaWarning = typeof meta.warning === "string" ? meta.warning : null;
+      const rootWarning =
         unitsRaw > 0 && rootsCount === 0
           ? "Org structure has no root unit (parent_id NULL). Set a top-level unit."
-          : null
-      );
+          : null;
+      setUnitsWarning(metaWarning ?? rootWarning);
     } finally {
       setLoading(false);
     }

@@ -36,8 +36,8 @@ export async function getOrgIdFromSession(
       return { success: false, error: "Supabase not configured", status: 401 };
     }
 
-    const authHeader = request.headers.get("Authorization");
-    const accessToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
+    const accessToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : undefined;
 
     let supabase: SupabaseClient;
 

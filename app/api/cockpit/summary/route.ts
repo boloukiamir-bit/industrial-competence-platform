@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import { normalizeShift, normalizeShiftTypeOrDefault } from "@/lib/shift";
+import { lineShiftTargetId } from "@/lib/tomorrowsGapsDecisions";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,7 +46,18 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date") || undefined;
-    const shift = searchParams.get("shift") || undefined;
+    const shiftRaw = searchParams.get("shift");
+    const shift =
+      shiftRaw === null || shiftRaw === undefined ? undefined : normalizeShift(shiftRaw);
+    if (shiftRaw != null && shiftRaw !== "" && shift === null) {
+      const res = NextResponse.json(
+        { ok: false, error: "Invalid shift parameter", step: "validation", details: { shift: shiftRaw } },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const shiftFilter = shift ?? undefined;
     const line = searchParams.get("line") || undefined;
 
     const { data: profile } = await supabaseAdmin
@@ -66,11 +79,11 @@ export async function GET(request: NextRequest) {
     if (date || shift || line) {
       let shiftsQuery = supabaseAdmin
         .from("shifts")
-        .select("id")
+        .select("id, shift_date, shift_type, line")
         .eq("org_id", activeOrgId);
 
       if (date) shiftsQuery = shiftsQuery.eq("shift_date", date);
-      if (shift) shiftsQuery = shiftsQuery.eq("shift_type", shift);
+      if (shiftFilter) shiftsQuery = shiftsQuery.eq("shift_type", shiftFilter);
       if (line) shiftsQuery = shiftsQuery.eq("line", line);
 
       const { data: shiftRows, error: shiftsErr } = await shiftsQuery;
@@ -82,7 +95,8 @@ export async function GET(request: NextRequest) {
         return res;
       }
 
-      const shiftIds = (shiftRows || []).map((r: { id: string }) => r.id).filter(Boolean);
+      const shifts = (shiftRows || []) as Array<{ id: string; shift_date?: string | null; shift_type?: string | null; line?: string | null }>;
+      const shiftIds = shifts.map((r) => r.id).filter(Boolean);
       if (shiftIds.length === 0) {
         const body: CockpitSummaryResponse = {
           active_total: 0,
@@ -95,6 +109,20 @@ export async function GET(request: NextRequest) {
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
+
+      const lineShiftIds = [
+        ...new Set(
+          shifts
+            .filter((s) => s.shift_date != null && s.shift_type != null && s.line != null)
+            .map((s) =>
+              lineShiftTargetId(
+                String(s.shift_date).slice(0, 10),
+                normalizeShiftTypeOrDefault(s.shift_type),
+                String(s.line).trim()
+              )
+            )
+        ),
+      ];
 
       const { data: saRows, error: saErr } = await supabaseAdmin
         .from("shift_assignments")
@@ -109,39 +137,50 @@ export async function GET(request: NextRequest) {
       }
 
       const saIds = (saRows || []).map((r: { id: string }) => r.id).filter(Boolean);
-      if (saIds.length === 0) {
-        const body: CockpitSummaryResponse = {
-          active_total: 0,
-          active_blocking: 0,
-          active_nonblocking: 0,
-          top_actions: [],
-          by_type: [],
-        };
-        const res = NextResponse.json(body);
-        applySupabaseCookies(res, pendingCookies);
-        return res;
-      }
 
-      let edQuery = supabaseAdmin
+      let legacyEdQuery = supabaseAdmin
         .from("execution_decisions")
         .select("root_cause, actions")
         .eq("org_id", activeOrgId)
         .eq("status", "active")
         .eq("target_type", "shift_assignment")
         .in("target_id", saIds);
-
       if (activeSiteId) {
-        edQuery = edQuery.or(`site_id.is.null,site_id.eq.${activeSiteId}`);
+        legacyEdQuery = legacyEdQuery.or(`site_id.is.null,site_id.eq.${activeSiteId}`);
       }
-
-      const { data: rows, error } = await edQuery;
-      if (error) {
-        console.error("cockpit/summary: execution_decisions query error", error);
+      const { data: legacyRows, error: legacyErr } = await legacyEdQuery;
+      if (legacyErr) {
+        console.error("cockpit/summary: execution_decisions (legacy) query error", legacyErr);
         const res = NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
-      list = (rows || []) as Array<{ root_cause: unknown; actions: unknown }>;
+
+      let lineShiftList: Array<{ root_cause: unknown; actions: unknown }> = [];
+      if (lineShiftIds.length > 0) {
+        let lineShiftEdQuery = supabaseAdmin
+          .from("execution_decisions")
+          .select("root_cause, actions")
+          .eq("org_id", activeOrgId)
+          .eq("status", "active")
+          .eq("decision_type", "resolve_no_go")
+          .eq("target_type", "line_shift")
+          .in("target_id", lineShiftIds);
+        if (activeSiteId) {
+          lineShiftEdQuery = lineShiftEdQuery.or(`site_id.is.null,site_id.eq.${activeSiteId}`);
+        }
+        const { data: lineShiftRows, error: lineShiftErr } = await lineShiftEdQuery;
+        if (lineShiftErr) {
+          console.error("cockpit/summary: execution_decisions (line_shift) query error", lineShiftErr);
+        } else {
+          lineShiftList = (lineShiftRows || []) as Array<{ root_cause: unknown; actions: unknown }>;
+        }
+      }
+
+      list = [
+        ...((legacyRows || []) as Array<{ root_cause: unknown; actions: unknown }>),
+        ...lineShiftList,
+      ];
     } else {
       let query = supabaseAdmin
         .from("execution_decisions")

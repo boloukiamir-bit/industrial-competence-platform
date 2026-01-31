@@ -1,7 +1,12 @@
 import type { CompetenceLevel, Employee, Skill, EmployeeSkill } from "@/types/domain";
-import { seedDemoDataIfEmpty, getEmployeesWithSkills, getFilterOptions } from "@/services/competenceService";
+import { getEmployeesWithSkills, getFilterOptions } from "@/services/competenceService";
 import { ExportCSVButton } from "@/components/ExportCSVButton";
+import { Card, CardContent } from "@/components/ui/card";
 import { getActiveOrgIdForRSC } from "@/lib/server/activeOrgRsc";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import StationSafetyRequirementsPanel from "./StationSafetyRequirementsPanel";
+import { RequestErrorCard } from "@/components/RequestErrorCard";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -40,27 +45,38 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
   const selectedTeam = params.team || "";
 
   const activeOrgId = await getActiveOrgIdForRSC();
-  const demoMode = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const tenantScoped = activeOrgId != null;
 
-  if (demoMode) {
-    await seedDemoDataIfEmpty();
-  }
+  let employees: Employee[] = [];
+  let skills: Skill[] = [];
+  let employeeSkills: EmployeeSkill[] = [];
+  let filterOptions: { lines: string[]; teams: string[] } = { lines: [], teams: [] };
+  let loadError: string | null = null;
 
-  const tenantScoped = activeOrgId != null || demoMode;
-  const [{ employees, skills, employeeSkills }, filterOptions] = tenantScoped
-    ? await Promise.all([
+  if (tenantScoped) {
+    try {
+      const { supabase: serverSupabase } = await createSupabaseServerClient();
+      const [matrixData, options] = await Promise.all([
         getEmployeesWithSkills({
           orgId: activeOrgId ?? undefined,
           line: selectedLine || undefined,
           team: selectedTeam || undefined,
-          allowGlobal: demoMode,
+          supabaseClient: serverSupabase,
         }),
-        getFilterOptions(activeOrgId ?? undefined, { allowGlobal: demoMode }),
-      ])
-    : [
-        { employees: [] as Employee[], skills: [] as Skill[], employeeSkills: [] as EmployeeSkill[] },
-        { lines: [] as string[], teams: [] as string[] },
-      ];
+        getFilterOptions(activeOrgId ?? undefined, { supabaseClient: serverSupabase }),
+      ]);
+      employees = matrixData.employees;
+      skills = matrixData.skills;
+      employeeSkills = matrixData.employeeSkills;
+      filterOptions = options;
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : "Failed to load competence matrix";
+      console.error("[competence-matrix] load error:", err);
+    }
+  } else {
+    filterOptions = { lines: [], teams: [] };
+    loadError = "Invalid or expired session";
+  }
 
   function getSkillLevel(employeeId: string, skillId: string): CompetenceLevel["value"] {
     const found = employeeSkills.find(
@@ -70,7 +86,52 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
   }
 
   const showEmptySkillsState =
-    employeeSkills.length === 0 && selectedLine === "" && selectedTeam === "" && tenantScoped;
+    employeeSkills.length === 0 && selectedLine === "" && selectedTeam === "" && tenantScoped && !loadError;
+
+  if (loadError) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4" data-testid="heading-competence-matrix">
+          Competence Matrix
+        </h1>
+        <RequestErrorCard
+          message={loadError}
+          toastMessage={
+            loadError === "Invalid or expired session"
+              ? "Request failed (401) — Session expired. Please reload/login."
+              : `Request failed — ${loadError}`
+          }
+        />
+      </div>
+    );
+  }
+
+  const noSkillsCatalog = tenantScoped && !loadError && skills.length === 0;
+
+  if (noSkillsCatalog) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6" data-testid="heading-competence-matrix">
+          Competence Matrix
+        </h1>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-lg font-medium text-foreground mb-2">No competencies imported yet.</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Import a skills catalog to build the matrix.
+            </p>
+            <Link
+              href="/app/import-competencies"
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              data-testid="empty-cta-import-competencies"
+            >
+              Import competencies
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -87,7 +148,7 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
             Edit Requirements
           </a>
           <ExportCSVButton
-            headers={["Employee", ...skills.map(s => s.code)]}
+            headers={["Employee", ...skills.map((s) => s.code ?? "")]}
             rows={employees.map(emp => [
               emp.name,
               ...skills.map(s => getSkillLevel(emp.id, s.id).toString())
@@ -168,6 +229,8 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
         </form>
       </div>
 
+      <StationSafetyRequirementsPanel selectedLine={selectedLine} />
+
       {showEmptySkillsState ? (
         <div className="mb-6 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -178,7 +241,7 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
           </p>
           <div className="flex items-center gap-2">
             <a
-              href="/app/import-employees"
+              href="/app/import-competencies"
               className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               data-testid="button-import-competencies"
             >
@@ -232,9 +295,9 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
                         key={skill.id}
                         className="text-center p-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 min-w-[100px]"
                       >
-                        <div>{skill.code}</div>
+                        <div>{skill.code ?? ""}</div>
                         <div className="text-xs font-normal text-gray-500 dark:text-gray-400">
-                          {skill.name}
+                          {skill.name ?? ""}
                         </div>
                       </th>
                     ))}
@@ -267,7 +330,7 @@ export default async function CompetenceMatrixPage({ searchParams }: PageProps) 
                             {employee.name}
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">
-                            {employee.role} - {employee.team}
+                            {employee.role ?? "—"} - {employee.team ?? "—"}
                           </div>
                         </td>
                         {skills.map((skill) => {

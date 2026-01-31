@@ -37,6 +37,7 @@ export async function getHRAnalytics(orgId: string): Promise<HRAnalytics> {
           .from("employee_skills")
           .select("level, skills(name)")
           .in("employee_id", employeeIdList)
+          .eq("skills.org_id", orgId)
           .order("level")
       : Promise.resolve({ data: [], error: null }),
     employeeIdList[0] !== "00000000-0000-0000-0000-000000000000"
@@ -250,7 +251,8 @@ export async function getHRAnalyticsV2(orgId: string): Promise<HRAnalyticsV2> {
       : Promise.resolve({ data: [], count: 0, error: null }),
     supabase
       .from("competence_requirements")
-      .select("line, skill_id, min_level, min_headcount, skills(name)"),
+      .select("line, skill_id, min_level, min_headcount, skills(name)")
+      .eq("skills.org_id", orgId),
   ]);
 
   const tenureBands: Record<string, number> = { "0-1 years": 0, "1-3 years": 0, "3-5 years": 0, "5-10 years": 0, "10+ years": 0 };

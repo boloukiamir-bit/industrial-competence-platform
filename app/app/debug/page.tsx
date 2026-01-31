@@ -110,7 +110,7 @@ export default function DebugPage() {
     try {
       const [employeesCount, unitsCount, skillsCount, positionsCount] = await Promise.all([
         safeCount(
-          async () => await supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', currentOrg.id),
+          async () => await supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', currentOrg.id).eq('is_active', true),
           'employees'
         ),
         safeCount(

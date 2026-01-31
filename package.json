@@ -10,6 +10,8 @@
     "test": "bash -lc 'node --test --import tsx --test-reporter spec $(find tests/unit -type f -name \"*.test.ts\" -print)'",
     "test:all": "bash -lc 'node --test --import tsx --test-reporter spec $(find tests -type f -name \"*.test.ts\" -print)'",
     "smoke:gap": "npx tsx scripts/smoke-gap-engine.ts",
+    "smoke:eligibility": "npx tsx scripts/smoke-eligibility-line.ts",
+    "smoke:is-active": "npx tsx scripts/smoke-is-active-filter.ts",
     "db:smoke": "npx tsx scripts/db_smoke.ts"
   },
   "dependencies": {

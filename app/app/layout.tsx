@@ -9,6 +9,7 @@ import {
   Upload, 
   Users, 
   Settings,
+  Settings2,
   ShieldAlert,
   Package,
   Newspaper,
@@ -51,7 +52,7 @@ const coreNavItems: NavItem[] = [
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
   { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
-  { name: "Tomorrow's Gaps", href: "/app/gaps", icon: TrendingUp },
+  { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: TrendingUp },
   { name: "Setup", href: "/app/setup", icon: Clipboard },
   { name: "Admin", href: "/app/admin", icon: Wrench, hrAdminOnly: true },
 ];

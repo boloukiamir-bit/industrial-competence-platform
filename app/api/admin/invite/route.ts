@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { getActiveOrgFromSession } from '@/lib/server/activeOrg';
+import { createSupabaseServerClient, applySupabaseCookies } from '@/lib/supabase/server';
 
 const inviteSchema = z.object({
-  orgId: z.string().uuid(),
   email: z.string().email(),
   role: z.enum(['admin', 'hr', 'manager', 'user']),
 });
@@ -21,23 +22,6 @@ function getServiceSupabase() {
   });
 }
 
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-  
-  const token = authHeader.substring(7);
-  const supabase = getServiceSupabase();
-  
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) {
-    return null;
-  }
-  
-  return user;
-}
-
 async function isOrgAdmin(supabase: ReturnType<typeof getServiceSupabase>, orgId: string, userId: string) {
   const { data } = await supabase
     .from('memberships')
@@ -52,9 +36,12 @@ async function isOrgAdmin(supabase: ReturnType<typeof getServiceSupabase>, orgId
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const org = await getActiveOrgFromSession(request, supabase);
+    if (!org.ok) {
+      const res = NextResponse.json({ error: org.error }, { status: org.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     const body = await request.json();
@@ -64,24 +51,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid input', details: parsed.error.errors }, { status: 400 });
     }
 
-    const { orgId, email, role } = parsed.data;
-    const supabase = getServiceSupabase();
+    const { email, role } = parsed.data;
+    const orgId = org.activeOrgId;
+    const userId = org.userId;
+    const supabaseAdmin = getServiceSupabase();
 
     // Verify user is org admin
-    const isAdmin = await isOrgAdmin(supabase, orgId, user.id);
+    const isAdmin = await isOrgAdmin(supabaseAdmin, orgId, userId);
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+      const res = NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     // Check if user is already a member
-    const { data: existingUser } = await supabase
+    const { data: existingUser } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('email', email.toLowerCase())
       .single();
 
     if (existingUser) {
-      const { data: existingMembership } = await supabase
+      const { data: existingMembership } = await supabaseAdmin
         .from('memberships')
         .select('user_id')
         .eq('org_id', orgId)
@@ -89,12 +80,14 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (existingMembership) {
-        return NextResponse.json({ error: 'User is already a member of this organization' }, { status: 409 });
+        const res = NextResponse.json({ error: 'User is already a member of this organization' }, { status: 409 });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
       }
     }
 
     // Check for existing pending invite
-    const { data: existingInvite } = await supabase
+    const { data: existingInvite } = await supabaseAdmin
       .from('invites')
       .select('id')
       .eq('org_id', orgId)
@@ -103,37 +96,43 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingInvite) {
-      return NextResponse.json({ error: 'Pending invite already exists for this email' }, { status: 409 });
+      const res = NextResponse.json({ error: 'Pending invite already exists for this email' }, { status: 409 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     // Create invite
-    const { data: invite, error: inviteError } = await supabase
+    const { data: invite, error: inviteError } = await supabaseAdmin
       .from('invites')
       .insert({
         org_id: orgId,
         email: email.toLowerCase(),
         role,
-        invited_by: user.id,
+        invited_by: userId,
       })
       .select()
       .single();
 
     if (inviteError) {
       console.error('Error creating invite:', inviteError);
-      return NextResponse.json({ error: 'Failed to create invite' }, { status: 500 });
+      const res = NextResponse.json({ error: 'Failed to create invite' }, { status: 500 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
     // Write audit log
-    await supabase.from('audit_logs').insert({
+    await supabaseAdmin.from('audit_logs').insert({
       org_id: orgId,
-      actor_user_id: user.id,
+      actor_user_id: userId,
       action: 'user.invited',
       target_type: 'invite',
       target_id: invite.id,
       metadata: { email, role },
     });
 
-    return NextResponse.json({ success: true, invite });
+    const res = NextResponse.json({ success: true, invite });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error('Invite error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -1,103 +1,100 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Search, ChevronRight, Upload, UserPlus } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import { Users, Search, ChevronRight, Upload, UserPlus, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { COPY } from "@/lib/copy";
 import { useOrg } from "@/hooks/useOrg";
 import type { Employee } from "@/types/domain";
+import { useToast } from "@/hooks/use-toast";
+import { withDevBearer } from "@/lib/devBearer";
 
 export default function EmployeesPage() {
   const router = useRouter();
   const { currentOrg } = useOrg();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [lineFilter, setLineFilter] = useState<string>("");
+  const [menuRowId, setMenuRowId] = useState<string | null>(null);
+  const [deactivateEmployee, setDeactivateEmployee] = useState<Employee | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    async function loadEmployees() {
-      if (!currentOrg) {
+  const loadEmployees = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/employees", {
+        credentials: "include",
+        headers: withDevBearer(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
         setEmployees([]);
-        setLoading(false);
+        const message = json.error ?? res.statusText;
+        const friendly = res.status === 401 ? "Invalid or expired session" : String(message || "Request failed");
+        const toastMessage =
+          res.status === 401
+            ? "Request failed (401) — Session expired. Please reload/login."
+            : `Request failed (${res.status}) — ${friendly}`;
+        toast({ title: toastMessage, variant: "destructive" });
+        setError(friendly);
         return;
       }
-
-      // Helper to check if error indicates missing is_active column
-      const isMissingColumnError = (err: any): boolean => {
-        if (!err) return false;
-        const code = err.code;
-        const message = err.message?.toLowerCase() || "";
-        return (
-          code === "42703" || // PostgreSQL undefined column
-          message.includes("is_active") && (
-            message.includes("does not exist") ||
-            message.includes("column") && message.includes("not found")
-          )
-        );
-      };
-
-      // Tenant-scoped: filter by org_id
-      // First attempt WITH is_active filter
-      let query = supabase
-        .from("employees")
-        .select("*")
-        .eq("org_id", currentOrg.id)
-        .eq("is_active", true)
-        .order("name");
-
-      let { data, error } = await query;
-
-      // If error indicates missing is_active column, retry without it
-      if (error && isMissingColumnError(error)) {
-        query = supabase
-          .from("employees")
-          .select("*")
-          .eq("org_id", currentOrg.id)
-          .order("name");
-        
-        const retryResult = await query;
-        data = retryResult.data;
-        error = retryResult.error;
-      }
-
-      if (!error && data) {
-        setEmployees(
-          data.map((row) => ({
-            id: row.id,
-            name: row.name || "",
-            firstName: row.first_name || undefined,
-            lastName: row.last_name || undefined,
-            employeeNumber: row.employee_number || "",
-            email: row.email || undefined,
-            phone: row.phone || undefined,
-            dateOfBirth: row.date_of_birth || undefined,
-            role: row.role || "",
-            line: row.line || "",
-            team: row.team || "",
-            employmentType: row.employment_type || "permanent",
-            startDate: row.start_date || undefined,
-            contractEndDate: row.contract_end_date || undefined,
-            managerId: row.manager_id || undefined,
-            managerName: undefined,
-            address: row.address || undefined,
-            city: row.city || undefined,
-            postalCode: row.postal_code || undefined,
-            country: row.country || "Sweden",
-            isActive: row.is_active ?? true,
-          }))
-        );
-      } else if (error) {
-        console.error("Error loading employees:", error);
-      }
+      const list = Array.isArray(json.employees) ? json.employees : [];
+      setEmployees(
+        list.map((row: Record<string, unknown>) => ({
+          id: String(row.id ?? ""),
+          name: String(row.name ?? ""),
+          firstName: row.firstName as string | undefined,
+          lastName: row.lastName as string | undefined,
+          employeeNumber: String(row.employeeNumber ?? ""),
+          email: row.email as string | undefined,
+          phone: row.phone as string | undefined,
+          dateOfBirth: row.dateOfBirth as string | undefined,
+          role: String(row.role ?? ""),
+          line: String(row.line ?? ""),
+          team: String(row.team ?? ""),
+          employmentType: (row.employmentType as string) ?? "permanent",
+          startDate: row.startDate as string | undefined,
+          contractEndDate: row.contractEndDate as string | undefined,
+          managerId: row.managerId as string | undefined,
+          managerName: undefined,
+          address: row.address as string | undefined,
+          city: row.city as string | undefined,
+          postalCode: row.postalCode as string | undefined,
+          country: (row.country as string) ?? "Sweden",
+          isActive: row.isActive !== false,
+        }))
+      );
+    } finally {
       setLoading(false);
     }
+  }, [toast]);
+
+  useEffect(() => {
     loadEmployees();
-  }, [currentOrg]);
+  }, [loadEmployees]);
+
+  useEffect(() => {
+    if (!menuRowId) return;
+    const close = () => setMenuRowId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menuRowId]);
 
   const lines = [...new Set(employees.map((e) => e.line).filter(Boolean))].sort();
 
@@ -117,6 +114,20 @@ export default function EmployeesPage() {
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48" />
           <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-8 text-center">
+            <Users className="h-10 w-10 mx-auto text-destructive mb-3" />
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -147,15 +158,15 @@ export default function EmployeesPage() {
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              {COPY.emptyStates.employees.title}
+              No employees imported yet.
             </h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
-              {COPY.emptyStates.employees.description}
+              Import employees from CSV or add them manually to get started.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button onClick={() => router.push("/app/import-employees")} data-testid="button-import-csv-empty">
                 <Upload className="h-4 w-4 mr-2" />
-                {COPY.actions.importCsv}
+                Import employees
               </Button>
               <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee-empty">
                 <UserPlus className="h-4 w-4 mr-2" />
@@ -269,19 +280,110 @@ export default function EmployeesPage() {
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                   {employee.role || "-"}
                 </td>
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/app/employees/${employee.id}`}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                <td className="px-4 py-3 relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuRowId(menuRowId === employee.id ? null : employee.id);
+                    }}
+                    data-testid={`menu-trigger-${employee.id}`}
+                    aria-label="Actions"
                   >
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                  {menuRowId === employee.id && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border bg-white dark:bg-gray-800 shadow-lg py-1"
+                      role="menu"
+                    >
+                      <Link
+                        href={`/app/employees/${employee.id}`}
+                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setMenuRowId(null)}
+                      >
+                        View
+                      </Link>
+                      <Link
+                        href={`/app/employees/${employee.id}`}
+                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => setMenuRowId(null)}
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        role="menuitem"
+                        onClick={() => {
+                          setDeactivateEmployee(employee);
+                          setMenuRowId(null);
+                        }}
+                      >
+                        Deactivate
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <Dialog open={!!deactivateEmployee} onOpenChange={(open) => !open && setDeactivateEmployee(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate employee</DialogTitle>
+            <DialogDescription>
+              {deactivateEmployee
+                ? `Deactivate employee ${deactivateEmployee.name} (${deactivateEmployee.employeeNumber})?`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeactivateEmployee(null)}
+              disabled={deactivating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deactivating}
+              onClick={async () => {
+                if (!deactivateEmployee) return;
+                setDeactivating(true);
+                try {
+                  const res = await fetch(`/api/employees/${deactivateEmployee.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ is_active: false }),
+                    credentials: "include",
+                  });
+                  if (res.ok) {
+                    setDeactivateEmployee(null);
+                    await loadEmployees();
+                  } else {
+                    const j = await res.json().catch(() => ({}));
+                    console.error("Deactivate failed", j);
+                  }
+                } finally {
+                  setDeactivating(false);
+                }
+              }}
+            >
+              {deactivating ? "Deactivating…" : "Deactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

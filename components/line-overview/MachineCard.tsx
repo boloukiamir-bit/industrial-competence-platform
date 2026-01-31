@@ -51,12 +51,15 @@ export function MachineCard({ data, viewMode, onClick, onSuggest, onImportDemand
   const { machine, requiredHours, assignedHours, gap, overAssigned, status, assignedPeople } = data;
   const style = statusStyles[status];
   const hasDemand = requiredHours > 0;
+  const stationKey = machine.stationId ?? machine.id ?? machine.machineCode;
+  const displayName = machine.stationName ?? machine.machineName;
+  const displayCode = machine.stationCode ?? machine.machineCode;
 
   return (
     <Card
       className={`cursor-pointer transition-all hover-elevate ${style.border} ${hasDemand ? style.bg : ""}`}
       onClick={onClick}
-      data-testid={`machine-card-${machine.machineCode}`}
+      data-testid={`machine-card-${stationKey}`}
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
@@ -65,8 +68,8 @@ export function MachineCard({ data, viewMode, onClick, onSuggest, onImportDemand
               <Cog className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <h4 className="font-semibold text-sm">{machine.machineName}</h4>
-              <p className="text-xs text-muted-foreground">{machine.machineCode}</p>
+              <h4 className="font-semibold text-sm">{displayName}</h4>
+              <p className="text-xs text-muted-foreground">{displayCode}</p>
             </div>
           </div>
           {hasDemand && (
@@ -147,7 +150,7 @@ export function MachineCard({ data, viewMode, onClick, onSuggest, onImportDemand
                   e.stopPropagation();
                   onClick();
                 }}
-                data-testid={`button-assign-${machine.machineCode}`}
+                data-testid={`button-assign-${stationKey}`}
               >
                 Assign
               </Button>
@@ -159,7 +162,7 @@ export function MachineCard({ data, viewMode, onClick, onSuggest, onImportDemand
                     e.stopPropagation();
                     onSuggest();
                   }}
-                  data-testid={`button-suggest-${machine.machineCode}`}
+                  data-testid={`button-suggest-${stationKey}`}
                 >
                   <Zap className="h-3.5 w-3.5 mr-1" />
                   Suggest
@@ -178,7 +181,7 @@ export function MachineCard({ data, viewMode, onClick, onSuggest, onImportDemand
                 e.stopPropagation();
                 onImportDemand?.();
               }}
-              data-testid={`button-import-demand-${machine.machineCode}`}
+              data-testid={`button-import-demand-${stationKey}`}
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               Add demand

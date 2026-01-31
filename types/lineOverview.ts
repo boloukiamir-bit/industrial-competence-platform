@@ -12,6 +12,11 @@ export interface PLLine {
 export interface PLMachine {
   id: string;
   orgId: string;
+  /** Canonical key: station UUID. Use for demand/assignments. */
+  stationId?: string;
+  /** Display only (from stations.code). */
+  stationCode?: string;
+  stationName?: string;
   machineCode: string;
   machineName: string;
   lineCode: string;
@@ -23,6 +28,8 @@ export interface PLMachine {
 export interface PLEmployee {
   id: string;
   orgId: string;
+  /** Canonical id from public.employees (e.g. "0001"). Use for eligibility and assignments. */
+  employeeNumber: string;
   employeeCode: string;
   fullName: string;
   departmentCode?: string;
@@ -60,6 +67,7 @@ export interface PLAssignmentSegment {
   orgId: string;
   planDate: string;
   shiftType: ShiftType;
+  stationId?: string;
   machineCode: string;
   employeeCode?: string;
   startTime: string;
@@ -129,4 +137,11 @@ export interface EmployeeSuggestion {
   currentAssignedHours: number;
   availableHours: number;
   score: number;
+  eligible: boolean;
+  stationsPassed: number;
+  stationsRequired: number;
+  /** Unique skills passed (when present from eligibility). */
+  skillsPassedCount?: number;
+  /** Unique skills required for line (when present from eligibility). */
+  requiredSkillsCount?: number;
 }

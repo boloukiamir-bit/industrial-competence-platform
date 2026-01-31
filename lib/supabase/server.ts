@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
 
-type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
+export type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
 
 const SB_AUTH_COOKIE_RE = /^sb-[a-z0-9]+-auth-token$/i;
 

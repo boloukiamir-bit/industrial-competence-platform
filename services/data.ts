@@ -38,6 +38,7 @@ export async function getEmployees(orgId?: string): Promise<Employee[]> {
     .select("*")
     .eq("org_id", orgId)
     .eq("is_active", true)
+    .eq("is_active", true)
     .order("name");
 
   const { data, error } = await query;

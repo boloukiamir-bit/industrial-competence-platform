@@ -1,34 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getActiveOrgFromSession } from '@/lib/server/activeOrg';
+import { createSupabaseServerClient, applySupabaseCookies } from '@/lib/supabase/server';
 
 function getServiceSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!url || !serviceKey) {
-    throw new Error('Missing Supabase configuration');
-  }
-  
-  return createClient(url, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  });
-}
-
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-  
-  const token = authHeader.substring(7);
-  const supabase = getServiceSupabase();
-  
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) {
-    return null;
-  }
-  
-  return user;
+  if (!url || !serviceKey) throw new Error('Missing Supabase configuration');
+  return createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 async function isOrgAdmin(supabase: ReturnType<typeof getServiceSupabase>, orgId: string, userId: string) {
@@ -39,35 +18,21 @@ async function isOrgAdmin(supabase: ReturnType<typeof getServiceSupabase>, orgId
     .eq('user_id', userId)
     .eq('status', 'active')
     .single();
-  
   return data?.role === 'admin';
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json({ 
-        error: 'Unauthorized', 
-        code: 'AUTH_REQUIRED',
-        message: 'Authentication required to access audit logs'
-      }, { status: 401 });
+    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const org = await getActiveOrgFromSession(request, supabase);
+    if (!org.ok) {
+      const res = NextResponse.json({ error: org.error, code: org.status === 401 ? 'AUTH_REQUIRED' : 'NO_ORG', message: org.error }, { status: org.status });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
 
-    const { searchParams } = new URL(request.url);
-    const orgId = searchParams.get('orgId');
-
-    if (!orgId) {
-      return NextResponse.json({ 
-        error: 'Missing orgId', 
-        code: 'MISSING_ORG',
-        message: 'Organization ID is required'
-      }, { status: 400 });
-    }
-
-    const supabase = getServiceSupabase();
-
-    const isAdmin = await isOrgAdmin(supabase, orgId, user.id);
+    const supabaseAdmin = getServiceSupabase();
+    const isAdmin = await isOrgAdmin(supabaseAdmin, org.activeOrgId, org.userId);
     if (!isAdmin) {
       return NextResponse.json({ 
         error: 'Forbidden', 
@@ -87,7 +52,7 @@ export async function GET(request: NextRequest) {
         metadata,
         created_at
       `)
-      .eq('org_id', orgId)
+      .eq('org_id', org.activeOrgId)
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -101,7 +66,7 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const actorIds = [...new Set((logs || []).map(l => l.actor_user_id).filter(Boolean))];
+    const actorIds = [...new Set((logs || []).map((l: { actor_user_id: string | null }) => l.actor_user_id).filter(Boolean))];
     
     let profilesMap: Record<string, string> = {};
     if (actorIds.length > 0) {
@@ -111,20 +76,30 @@ export async function GET(request: NextRequest) {
         .in('id', actorIds);
       
       if (profiles) {
-        profilesMap = Object.fromEntries(profiles.map(p => [p.id, p.email]));
+        type ProfileRow = { id: string; email: string | null };
+        profilesMap = Object.fromEntries(
+          (profiles as ProfileRow[]).map((p: ProfileRow) => [p.id, p.email ?? ""])
+        );
       }
     }
 
-    const enrichedLogs = (logs || []).map(log => ({
+    type AuditLogRow = {
+      id: string;
+      actor_user_id: string | null;
+      action: string;
+      target_type: string | null;
+      target_id: string | null;
+      metadata: unknown;
+      created_at: string;
+    };
+    const enrichedLogs = (logs || []).map((log: AuditLogRow) => ({
       ...log,
-      actor_email: profilesMap[log.actor_user_id] || null
+      actor_email: log.actor_user_id ? (profilesMap[log.actor_user_id] ?? null) : null
     }));
 
-    return NextResponse.json({ 
-      success: true, 
-      logs: enrichedLogs,
-      count: enrichedLogs.length
-    });
+    const res = NextResponse.json({ success: true, logs: enrichedLogs, count: enrichedLogs.length });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   } catch (error) {
     console.error('Audit logs error:', error);
     return NextResponse.json({ 

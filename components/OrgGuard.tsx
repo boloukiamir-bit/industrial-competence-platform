@@ -7,11 +7,14 @@ import { useOrg } from '@/hooks/useOrg';
 interface OrgGuardProps {
   children: ReactNode;
   requireAdmin?: boolean;
+  /** When true, allow admin or hr (for master-data, audit, etc.). */
+  requireAdminOrHr?: boolean;
 }
 
-export function OrgGuard({ children, requireAdmin = false }: OrgGuardProps) {
-  const { currentOrg, isLoading, memberships, isAdmin } = useOrg();
+export function OrgGuard({ children, requireAdmin = false, requireAdminOrHr = false }: OrgGuardProps) {
+  const { currentOrg, isLoading, memberships, isAdmin, isAdminOrHr } = useOrg();
   const router = useRouter();
+  const allowed = requireAdminOrHr ? isAdminOrHr : requireAdmin ? isAdmin : true;
 
   useEffect(() => {
     if (isLoading) return;
@@ -28,12 +31,12 @@ export function OrgGuard({ children, requireAdmin = false }: OrgGuardProps) {
       return;
     }
 
-    // If admin required but user is not admin
-    if (requireAdmin && !isAdmin) {
+    // If admin (or admin/hr) required but user not allowed
+    if ((requireAdmin || requireAdminOrHr) && !allowed) {
       router.replace('/app');
       return;
     }
-  }, [currentOrg, isLoading, memberships, isAdmin, requireAdmin, router]);
+  }, [currentOrg, isLoading, memberships, allowed, requireAdmin, requireAdminOrHr, router]);
 
   if (isLoading) {
     return (
@@ -47,7 +50,7 @@ export function OrgGuard({ children, requireAdmin = false }: OrgGuardProps) {
     return null;
   }
 
-  if (requireAdmin && !isAdmin) {
+  if ((requireAdmin || requireAdminOrHr) && !allowed) {
     return null;
   }
 

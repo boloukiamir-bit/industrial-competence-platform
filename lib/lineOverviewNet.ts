@@ -17,6 +17,20 @@ export function segmentGrossMinutes(startTime: string, endTime: string): number 
   return e - s;
 }
 
+/** Gross hours for a segment (same basis as created segment duration). */
+export function segmentGrossHours(startTime: string, endTime: string): number {
+  return segmentGrossMinutes(startTime, endTime) / 60;
+}
+
+/** Add decimal hours to a time string "HH:MM". Handles overnight (wraps at 24h). */
+export function addHoursToTime(time: string, hours: number): string {
+  const totalMinutes = timeToMinutes(time) + hours * 60;
+  const wrapped = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(wrapped / 60);
+  const m = Math.round(wrapped % 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
 /** Gross shift minutes from shift_start/end. Handles overnight (e.g. Night 22:00-06:00). */
 function shiftGrossMinutes(shiftStart: string, shiftEnd: string): number {
   const s = timeToMinutes(shiftStart);

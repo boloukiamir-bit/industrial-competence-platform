@@ -186,6 +186,14 @@ export type RootCauseMissingItem = {
   valid_until?: string | null;
 };
 
+/** Competence root cause from eligibility (station_skill_requirements + employee_skills). */
+export type CompetenceRootCause = {
+  requiredSkillCodes: string[];
+  requiredSkills: { code: string; name: string }[];
+  stationsRequired: number;
+  eligibleOperators: { employee_number: string; name: string }[];
+};
+
 export type RootCausePayload = {
   type: RootCauseType;
   message: string;
@@ -211,4 +219,6 @@ export type RootCausePayload = {
       suggestedAction: "No action" | "Train" | "Swap" | "Buddy";
     }>;
   };
+  /** Set when line is known and eligibility was computed (e.g. NO-GO machine). */
+  competence_root_cause?: CompetenceRootCause;
 };

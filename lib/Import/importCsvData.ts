@@ -2,9 +2,13 @@ import { fuzzyMatch } from "@/lib/Import/fuzzyMatch";
 import { normalizeSkillLevel } from "@/lib/Import/normalizeSkillLevel";
 
 export async function importCsvData(rows: any[], supabase: any, orgId: string) {
+  if (!orgId) {
+    throw new Error("orgId is required for skills import");
+  }
   const { data: existingSkills } = await supabase
     .from("skills")
-    .select("id, name");
+    .select("id, name")
+    .eq("org_id", orgId);
 
   const skillNames = existingSkills?.map((s: { id: string; name: string }) => s.name) || [];
 
@@ -16,6 +20,7 @@ export async function importCsvData(rows: any[], supabase: any, orgId: string) {
       .from("employees")
       .select("*")
       .eq("org_id", orgId)
+      .eq("is_active", true)
       .eq("name", employeeName)
       .single();
 
@@ -41,7 +46,7 @@ export async function importCsvData(rows: any[], supabase: any, orgId: string) {
       if (!skillId) {
         const { data: newSkill } = await supabase
           .from("skills")
-          .insert([{ name: rawSkill }])
+          .insert([{ name: rawSkill, org_id: orgId }])
           .select()
           .single();
 

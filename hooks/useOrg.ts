@@ -28,6 +28,7 @@ interface OrgContextType {
   selectOrg: (orgId: string) => void;
   refreshMemberships: () => Promise<void>;
   isAdmin: boolean;
+  isAdminOrHr: boolean;
 }
 
 const ORG_STORAGE_KEY = 'nadiplan_current_org';
@@ -90,22 +91,35 @@ export function useOrgState() {
 
       // Try to restore previously selected org
       const storedOrgId = localStorage.getItem(ORG_STORAGE_KEY);
+      let activeOrgId: string | null = null;
       if (storedOrgId) {
         const membership = formattedMemberships.find(m => m.org_id === storedOrgId);
         if (membership && membership.organization) {
           setCurrentOrg(membership.organization);
           setCurrentRole(membership.role);
+          activeOrgId = membership.org_id;
         } else if (formattedMemberships.length === 1 && formattedMemberships[0].organization) {
-          // Auto-select if only one org
           setCurrentOrg(formattedMemberships[0].organization);
           setCurrentRole(formattedMemberships[0].role);
           localStorage.setItem(ORG_STORAGE_KEY, formattedMemberships[0].org_id);
+          activeOrgId = formattedMemberships[0].org_id;
         }
       } else if (formattedMemberships.length === 1 && formattedMemberships[0].organization) {
-        // Auto-select if only one org
         setCurrentOrg(formattedMemberships[0].organization);
         setCurrentRole(formattedMemberships[0].role);
         localStorage.setItem(ORG_STORAGE_KEY, formattedMemberships[0].org_id);
+        activeOrgId = formattedMemberships[0].org_id;
+      }
+      if (activeOrgId) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          fetch('/api/me/active-org', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ org_id: activeOrgId }),
+            credentials: 'include',
+          }).catch((e) => console.error('Failed to sync active org', e));
+        }
       }
     } catch (err) {
       console.error('Error in refreshMemberships:', err);
@@ -115,14 +129,30 @@ export function useOrgState() {
     }
   }, []);
 
+  const syncActiveOrgToSession = useCallback(async (orgId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      await fetch('/api/me/active-org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ org_id: orgId }),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to sync active org to session', e);
+    }
+  }, []);
+
   const selectOrg = useCallback((orgId: string) => {
     const membership = memberships.find(m => m.org_id === orgId);
     if (membership && membership.organization) {
       setCurrentOrg(membership.organization);
       setCurrentRole(membership.role);
       localStorage.setItem(ORG_STORAGE_KEY, orgId);
+      syncActiveOrgToSession(orgId);
     }
-  }, [memberships]);
+  }, [memberships, syncActiveOrgToSession]);
 
   useEffect(() => {
     refreshMemberships();
@@ -137,6 +167,7 @@ export function useOrgState() {
     selectOrg,
     refreshMemberships,
     isAdmin: currentRole === 'admin',
+    isAdminOrHr: currentRole === 'admin' || currentRole === 'hr',
   };
 }
 

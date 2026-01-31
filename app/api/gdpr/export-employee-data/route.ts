@@ -19,7 +19,17 @@ export async function GET(request: NextRequest) {
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
-    const data = await exportEmployeeData(employeeId, session.orgId);
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", session.userId)
+      .single();
+    if (!profile?.active_org_id) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const data = await exportEmployeeData(employeeId, profile.active_org_id);
     const res = NextResponse.json(data);
     applySupabaseCookies(res, pendingCookies);
     return res;

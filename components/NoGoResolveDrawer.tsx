@@ -238,10 +238,83 @@ export function NoGoResolveDrawer({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {rootCause?.message ?? "Root cause not yet classified"}
+                {rootCause?.type === "competence" && rootCause?.competence_root_cause
+                  ? "Missing required skills"
+                  : rootCause?.message ?? "Root cause not yet classified"}
               </p>
             )}
           </div>
+
+          {rootCause?.type === "competence" && rootCause?.competence_root_cause && (
+            <div className="rounded-md border p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground">Required skills</p>
+              <ul className="space-y-1">
+                {(rootCause.competence_root_cause.requiredSkills?.length
+                  ? rootCause.competence_root_cause.requiredSkills
+                  : rootCause.competence_root_cause.requiredSkillCodes?.map((code) => ({
+                      code,
+                      name: code,
+                    })) ?? []
+                ).map((s, idx) => (
+                  <li key={`${s.code}-${idx}`} className="text-sm">
+                    <span className="font-medium">{s.code}</span>
+                    {s.name !== s.code && (
+                      <span className="text-muted-foreground"> — {s.name}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {rootCause.competence_root_cause.eligibleOperators?.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-muted-foreground pt-1">
+                    Eligible operators (meet line requirements)
+                  </p>
+                  {rootCause.competence_root_cause.stationsRequired != null &&
+                    rootCause.competence_root_cause.stationsRequired > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Line has {rootCause.competence_root_cause.stationsRequired} station
+                        requirement(s)
+                        {rootCause.competence_root_cause.requiredSkillCodes?.length != null &&
+                          rootCause.competence_root_cause.requiredSkillCodes.length > 0 && (
+                            <> and {rootCause.competence_root_cause.requiredSkillCodes.length} unique skill(s)</>
+                          )}
+                        .
+                      </p>
+                    )}
+                  <ul className="space-y-1">
+                    {rootCause.competence_root_cause.eligibleOperators.map((op, idx) => (
+                      <li key={`${op.employee_number}-${idx}`} className="text-sm">
+                        <span className="font-medium">{op.employee_number}</span>
+                        {op.name && (
+                          <span className="text-muted-foreground"> — {op.name}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (cockpitDate) params.set("date", cockpitDate);
+                      if (cockpitShift) params.set("shift", cockpitShift);
+                      if (cockpitLine && cockpitLine !== "all") params.set("line", cockpitLine);
+                      const sid = rootCause?.details?.station_id?.trim();
+                      if (sid) params.set("station_id", sid);
+                      if (shiftAssignmentId) params.set("shift_assignment_id", shiftAssignmentId);
+                      const q = params.toString();
+                      router.push(`/app/line-overview${q ? `?${q}` : ""}`);
+                    }}
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1.5" />
+                    Assign eligible
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
 
           {rootCause?.missing && rootCause.missing.length > 0 && (
             <div className="rounded-md border p-3">

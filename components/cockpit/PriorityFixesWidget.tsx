@@ -3,8 +3,10 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Users, Shield, FileWarning, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Users, Shield, FileWarning, ChevronRight, ExternalLink, Calendar } from "lucide-react";
 import type { PriorityItem } from "@/types/cockpit";
+import { toQueryShiftType } from "@/lib/shiftType";
 
 export type SummarySlice = {
   active_total: number;
@@ -19,6 +21,9 @@ interface PriorityFixesWidgetProps {
   summary?: SummarySlice | null;
   summaryLoading?: boolean;
   summaryError?: string | null;
+  /** For all-clear state: show date/shift and CTAs (Tomorrow's Gaps, Line Overview) */
+  date?: string;
+  shiftType?: string;
 }
 
 const typeConfig = {
@@ -27,7 +32,7 @@ const typeConfig = {
   safety: { icon: Shield, label: "Safety", color: "text-amber-600 dark:text-amber-400" },
 };
 
-export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading, summaryError }: PriorityFixesWidgetProps) {
+export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading, summaryError, date, shiftType }: PriorityFixesWidgetProps) {
   if (items.length > 0) {
     return (
       <Card className="border-red-200 dark:border-red-900/50 bg-gradient-to-br from-red-50/80 to-orange-50/50 dark:from-red-950/20 dark:to-orange-950/10">
@@ -128,15 +133,38 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
     );
   }
 
+  const shiftLabel = shiftType ?? "—";
+  const dateLabel = date ?? "";
+
   return (
     <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10">
-      <CardContent className="flex items-center justify-center py-8">
-        <div className="text-center">
+      <CardContent className="flex flex-col items-center justify-center py-8">
+        <div className="text-center mb-4">
           <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
             <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
           </div>
-          <p className="font-medium text-green-700 dark:text-green-300">All clear</p>
-          <p className="text-sm text-muted-foreground">No critical issues right now</p>
+          <p className="font-medium text-green-700 dark:text-green-300">
+            All clear — no active risks for {dateLabel} {shiftLabel}.
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">No critical issues right now</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Link
+            href={date && shiftType ? `/app/tomorrows-gaps?date=${date}&shift=${toQueryShiftType(shiftType as "Day" | "Evening" | "Night")}` : "/app/tomorrows-gaps"}
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            data-testid="cockpit-empty-cta-tomorrows-gaps"
+          >
+            <Calendar className="h-4 w-4 mr-1.5" />
+            View Tomorrow&apos;s Gaps
+          </Link>
+          <Link
+            href={date && shiftType ? `/app/line-overview?date=${date}&shift=${toQueryShiftType(shiftType as "Day" | "Evening" | "Night")}` : "/app/line-overview"}
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            data-testid="cockpit-empty-cta-line-overview"
+          >
+            <ExternalLink className="h-4 w-4 mr-1.5" />
+            Go to Line Overview
+          </Link>
         </div>
       </CardContent>
     </Card>

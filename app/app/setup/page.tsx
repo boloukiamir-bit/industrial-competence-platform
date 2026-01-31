@@ -16,8 +16,6 @@ import {
   ArrowRight 
 } from "lucide-react";
 import { COPY } from "@/lib/copy";
-import { supabase } from "@/lib/supabaseClient";
-import { useOrg } from "@/hooks/useOrg";
 
 interface SetupStep {
   id: string;
@@ -32,7 +30,6 @@ interface SetupStep {
 
 export default function SetupPage() {
   const router = useRouter();
-  const { currentOrg } = useOrg();
   const [progress, setProgress] = useState<Record<string, boolean>>({
     orgUnit: false,
     employees: false,
@@ -45,152 +42,24 @@ export default function SetupPage() {
 
   useEffect(() => {
     async function checkSetupProgress() {
-      // Check 1: Organization exists & active_org_id present
-      let hasOrg = false;
-      let activeOrgId: string | null = null;
-
-      if (currentOrg) {
-        hasOrg = true;
-        activeOrgId = currentOrg.id;
-      } else {
-        // Also check profile for active_org_id
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("active_org_id")
-            .eq("id", user.id)
-            .single();
-          
-          if (profile?.active_org_id) {
-            hasOrg = true;
-            activeOrgId = profile.active_org_id;
-          }
-        }
-      }
-
-      if (!hasOrg || !activeOrgId) {
-        setHasActiveOrg(false);
+      setLoading(true);
+      try {
+        const res = await fetch("/api/setup/progress", { credentials: "include" });
+        const json = await res.json().catch(() => ({}));
+        setHasActiveOrg(Boolean(json.hasActiveOrg));
         setProgress({
-          orgUnit: false,
-          employees: false,
-          skills: false,
-          positions: false,
-          gaps: false,
+          orgUnit: Boolean(json.progress?.orgUnit),
+          employees: Boolean(json.progress?.employees),
+          skills: Boolean(json.progress?.skills),
+          positions: Boolean(json.progress?.positions),
+          gaps: Boolean(json.progress?.gaps),
         });
+      } finally {
         setLoading(false);
-        return;
       }
-
-      setHasActiveOrg(true);
-
-      // Tenant-scoped checks using activeOrgId
-      // Check 2: Employees imported (employees count > 0 for org)
-      // Try with is_active filter first, fallback if column doesn't exist
-      let employeesQuery = supabase
-        .from("employees")
-        .select("*", { count: "exact", head: true })
-        .eq("org_id", activeOrgId)
-        .eq("is_active", true);
-      
-      let employeesRes = await employeesQuery;
-      
-      // If error indicates missing is_active column, retry without it
-      if (employeesRes.error) {
-        const errorCode = (employeesRes.error as any).code;
-        const errorMessage = (employeesRes.error as any).message?.toLowerCase() || "";
-        if (errorCode === "42703" || (errorMessage.includes("is_active") && errorMessage.includes("does not exist"))) {
-          employeesQuery = supabase
-            .from("employees")
-            .select("*", { count: "exact", head: true })
-            .eq("org_id", activeOrgId);
-          employeesRes = await employeesQuery;
-        }
-      }
-
-      // Check 3: Stations/Lines exist (stations count > 0 for org)
-      // Try with is_active filter first, fallback if column doesn't exist
-      let stationsQuery = supabase
-        .from("stations")
-        .select("*", { count: "exact", head: true })
-        .eq("org_id", activeOrgId)
-        .eq("is_active", true);
-      
-      let stationsRes = await stationsQuery;
-      
-      // If error indicates missing is_active column, retry without it
-      if (stationsRes.error) {
-        const errorCode = (stationsRes.error as any).code;
-        const errorMessage = (stationsRes.error as any).message?.toLowerCase() || "";
-        if (errorCode === "42703" || (errorMessage.includes("is_active") && errorMessage.includes("does not exist"))) {
-          stationsQuery = supabase
-            .from("stations")
-            .select("*", { count: "exact", head: true })
-            .eq("org_id", activeOrgId);
-          stationsRes = await stationsQuery;
-        }
-      }
-
-      const [competencesRes, positionsRes] = await Promise.all([
-        // Check 4: Competences exist (competences count > 0 for org)
-        supabase
-          .from("competences")
-          .select("*", { count: "exact", head: true })
-          .eq("org_id", activeOrgId),
-        
-        // Check 5a: Positions exist (positions count > 0 for org)
-        supabase
-          .from("positions")
-          .select("*", { count: "exact", head: true })
-          .eq("org_id", activeOrgId),
-      ]);
-
-      // Also check org_units for orgUnit step
-      const { count: orgUnitsCount } = await supabase
-        .from("org_units")
-        .select("*", { count: "exact", head: true })
-        .eq("org_id", activeOrgId);
-
-      const employeesCount = employeesRes.count || 0;
-      if (employeesRes.error && !employeesRes.count) {
-        console.error("Error checking employees:", employeesRes.error);
-      }
-
-      // Check if positions have requirements by checking if any position has requirements
-      // We need to join through positions to get org-scoped requirements
-      let hasRequirements = false;
-      if (positionsRes.count && positionsRes.count > 0) {
-        // Get one position to check if it has requirements
-        const { data: samplePosition } = await supabase
-          .from("positions")
-          .select("id")
-          .eq("org_id", activeOrgId)
-          .limit(1)
-          .single();
-        
-        if (samplePosition) {
-          const { count: reqCount } = await supabase
-            .from("position_competence_requirements")
-            .select("*", { count: "exact", head: true })
-            .eq("position_id", samplePosition.id);
-          
-          hasRequirements = (reqCount || 0) > 0;
-        }
-      }
-
-      setProgress({
-        orgUnit: (orgUnitsCount || 0) > 0,
-        employees: employeesCount > 0,
-        skills: (competencesRes.count || 0) > 0,
-        positions: (positionsRes.count || 0) > 0 || hasRequirements,
-        gaps: false, // Gaps step is manual completion
-      });
-
-      setLoading(false);
     }
-
     checkSetupProgress();
-  }, [currentOrg]);
+  }, []);
 
   const steps: SetupStep[] = [
     {
@@ -233,7 +102,7 @@ export default function SetupPage() {
       completed: progress.gaps ?? false,
       icon: TrendingUp,
       action: () => {
-        router.push("/app/gaps");
+        router.push("/app/tomorrows-gaps");
       },
       buttonLabel: COPY.setup.steps.gaps.button,
     },

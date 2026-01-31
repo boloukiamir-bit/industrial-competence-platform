@@ -11,26 +11,44 @@ import type {
   ShiftType,
   EmployeeSuggestion,
 } from "@/types/lineOverview";
+import { withDevBearer } from "@/lib/devBearer";
+import { fetchJson, type FetchJsonResult } from "@/lib/coreFetch";
 
-export async function fetchLineOverviewData(
+type ApiError = Error & { status?: number };
+
+function makeApiError(status: number, message: string): ApiError {
+  const error = new Error(message) as ApiError;
+  error.status = status;
+  return error;
+}
+
+export async function fetchLineOverviewDataResult(
   planDate: string,
   shiftType: ShiftType
-): Promise<LineOverviewData> {
+): Promise<FetchJsonResult<any>> {
   const shiftParam = shiftType.toLowerCase();
-  const response = await fetch(`/api/line-overview?date=${planDate}&shift=${shiftParam}`);
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch line overview data");
-  }
-  
-  const data = await response.json();
-  
+  return fetchJson<LineOverviewData & { weekDates?: string[] }>(
+    `/api/line-overview?date=${planDate}&shift=${shiftParam}`
+  );
+}
+
+export async function fetchWeekOverviewDataResult(
+  startDate: string,
+  shiftType: ShiftType
+): Promise<FetchJsonResult<any>> {
+  const shiftParam = shiftType.toLowerCase();
+  return fetchJson<LineOverviewData & { weekDates?: string[] }>(
+    `/api/line-overview/week?startDate=${startDate}&shift=${shiftParam}`
+  );
+}
+
+export function mapLineOverviewApiData(data: any): LineOverviewData {
   const lines: LineWithMachines[] = (data.lines || []).map((lineData: any) => ({
     line: {
-      id: lineData.line.id,
+      id: lineData.lineCode,
       orgId: "",
-      lineCode: lineData.line.lineCode,
-      lineName: lineData.line.lineName,
+      lineCode: lineData.lineCode,
+      lineName: lineData.lineName,
       departmentCode: "",
       notes: undefined,
     } as PLLine,
@@ -38,6 +56,9 @@ export async function fetchLineOverviewData(
       machine: {
         id: m.machine.id,
         orgId: "",
+        stationId: m.machine.stationId ?? m.machine.id,
+        stationCode: m.machine.stationCode ?? m.machine.machineCode,
+        stationName: m.machine.stationName ?? m.machine.machineName,
         machineCode: m.machine.machineCode,
         machineName: m.machine.machineName,
         lineCode: m.machine.lineCode,
@@ -49,6 +70,7 @@ export async function fetchLineOverviewData(
         orgId: "",
         planDate: a.planDate,
         shiftType: a.shiftType as ShiftType,
+        stationId: a.stationId,
         machineCode: a.machineCode,
         employeeCode: a.employeeCode,
         startTime: a.startTime,
@@ -67,18 +89,22 @@ export async function fetchLineOverviewData(
         endTime: p.endTime,
       })),
     } as MachineWithData)),
-    totalRequiredHours: lineData.totalRequired,
-    totalAssignedHours: lineData.totalAssigned,
-    totalGap: lineData.totalGap,
-    totalOverAssigned: lineData.totalOverAssigned || 0,
+    totalRequiredHours: lineData.demandHours ?? 0,
+    totalAssignedHours: lineData.assignedHours ?? 0,
+    totalGap: lineData.gapHours ?? 0,
+    totalOverAssigned: lineData.overAssignedHours ?? 0,
   } as LineWithMachines));
 
-  const employees: PLEmployee[] = (data.employees || []).map((e: any) => ({
-    id: e.id,
-    orgId: "",
-    employeeCode: e.employeeCode,
-    fullName: e.fullName,
-  }));
+  const employees: PLEmployee[] = (data.employees || []).map((e: any) => {
+    const num = e.employee_number ?? e.employeeCode;
+    return {
+      id: e.id,
+      orgId: "",
+      employeeNumber: num,
+      employeeCode: num,
+      fullName: e.fullName ?? e.name ?? "",
+    };
+  });
 
   const metrics: LineOverviewMetrics = {
     hasDemand: data.kpis?.hasDemand ?? false,
@@ -114,21 +140,25 @@ export async function fetchWeekOverviewData(
   startDate: string,
   shiftType: ShiftType
 ): Promise<LineOverviewData & { weekDates: string[] }> {
-  const shiftParam = shiftType.toLowerCase();
-  const response = await fetch(`/api/line-overview/week?startDate=${startDate}&shift=${shiftParam}`);
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch week overview data");
+  const result = await fetchWeekOverviewDataResult(startDate, shiftType);
+  if (!result.ok) {
+    throw makeApiError(
+      result.status,
+      result.error ? `Failed to fetch week overview data: ${result.error}` : "Failed to fetch week overview data"
+    );
   }
-  
-  const data = await response.json();
-  
+  return mapWeekOverviewApiData(result.data);
+}
+
+export function mapWeekOverviewApiData(
+  data: any
+): LineOverviewData & { weekDates: string[] } {
   const lines: LineWithMachines[] = (data.lines || []).map((lineData: any) => ({
     line: {
-      id: lineData.line.id,
+      id: lineData.lineCode,
       orgId: "",
-      lineCode: lineData.line.lineCode,
-      lineName: lineData.line.lineName,
+      lineCode: lineData.lineCode,
+      lineName: lineData.lineName,
       departmentCode: "",
       notes: undefined,
     } as PLLine,
@@ -136,6 +166,9 @@ export async function fetchWeekOverviewData(
       machine: {
         id: m.machine.id,
         orgId: "",
+        stationId: m.machine.stationId ?? m.machine.id,
+        stationCode: m.machine.stationCode ?? m.machine.machineCode,
+        stationName: m.machine.stationName ?? m.machine.machineName,
         machineCode: m.machine.machineCode,
         machineName: m.machine.machineName,
         lineCode: m.machine.lineCode,
@@ -147,6 +180,7 @@ export async function fetchWeekOverviewData(
         orgId: "",
         planDate: a.planDate,
         shiftType: a.shiftType as ShiftType,
+        stationId: a.stationId,
         machineCode: a.machineCode,
         employeeCode: a.employeeCode,
         startTime: a.startTime,
@@ -165,10 +199,10 @@ export async function fetchWeekOverviewData(
         endTime: p.endTime,
       })),
     } as MachineWithData)),
-    totalRequiredHours: lineData.totalRequired,
-    totalAssignedHours: lineData.totalAssigned,
-    totalGap: lineData.totalGap,
-    totalOverAssigned: lineData.totalOverAssigned || 0,
+    totalRequiredHours: lineData.demandHours ?? 0,
+    totalAssignedHours: lineData.assignedHours ?? 0,
+    totalGap: lineData.gapHours ?? 0,
+    totalOverAssigned: lineData.overAssignedHours ?? 0,
   } as LineWithMachines));
 
   const metrics: LineOverviewMetrics = {
@@ -190,7 +224,22 @@ export async function fetchWeekOverviewData(
   };
 }
 
+export async function fetchLineOverviewData(
+  planDate: string,
+  shiftType: ShiftType
+): Promise<LineOverviewData> {
+  const result = await fetchLineOverviewDataResult(planDate, shiftType);
+  if (!result.ok) {
+    throw makeApiError(
+      result.status,
+      result.error ? `Failed to fetch line overview data: ${result.error}` : "Failed to fetch line overview data"
+    );
+  }
+  return mapLineOverviewApiData(result.data);
+}
+
 export async function getSuggestions(
+  lineCode: string,
   machineCode: string,
   date: string,
   shift: ShiftType,
@@ -199,7 +248,8 @@ export async function getSuggestions(
   const shiftParam = shift.toLowerCase();
   const response = await fetch("/api/line-overview/suggestions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withDevBearer({ "Content-Type": "application/json" }),
+    credentials: "include",
     body: JSON.stringify({ machineCode, date, shift: shiftParam, hoursNeeded }),
   });
   
@@ -208,34 +258,87 @@ export async function getSuggestions(
   }
   
   const data = await response.json();
-  return (data.suggestions || []).map((s: any) => ({
-    employee: {
-      id: s.employee.id,
-      orgId: "",
-      employeeCode: s.employee.employeeCode,
-      fullName: s.employee.fullName,
-    } as PLEmployee,
-    currentAssignedHours: s.currentHours,
-    availableHours: s.availableHours,
-    score: s.score,
-  }));
+  const suggestions = (data.suggestions || []).map((s: any) => {
+    const num = s.employee?.employee_number ?? s.employee?.employeeCode ?? "";
+    return {
+      employee: {
+        id: s.employee.id,
+        orgId: "",
+        employeeNumber: num,
+        employeeCode: num,
+        fullName: s.employee.full_name ?? s.employee.fullName ?? "",
+      } as PLEmployee,
+      currentAssignedHours: s.currentHours,
+      availableHours: s.availableHours,
+      score: s.score,
+    } as EmployeeSuggestion;
+  });
+
+  const eligibilityRes = await fetch(`/api/eligibility/line?line=${encodeURIComponent(lineCode)}`, {
+    credentials: "include",
+    headers: withDevBearer(),
+  });
+  if (!eligibilityRes.ok) {
+    const body = await eligibilityRes.json().catch(() => ({}));
+    const message = (body as { error?: string })?.error;
+    throw new Error(message ? `Failed to fetch eligibility: ${message}` : "Failed to fetch eligibility");
+  }
+
+  const eligibilityData = await eligibilityRes.json();
+  const stationsRequired = eligibilityData?.stations_required ?? 0;
+  const requiredSkillsCount = eligibilityData?.required_skills_count ?? 0;
+  const eligibilityByNumber = new Map<
+    string,
+    { eligible: boolean; stationsPassed: number; skillsPassedCount: number; requiredSkillsCount: number }
+  >(
+    (eligibilityData?.employees || []).map((emp: any) => [
+      emp.employee_number,
+      {
+        eligible: !!emp.eligible,
+        stationsPassed: emp.stations_passed ?? 0,
+        skillsPassedCount: emp.skills_passed_count ?? 0,
+        requiredSkillsCount: emp.required_skills_count ?? requiredSkillsCount,
+      },
+    ])
+  );
+
+  return suggestions.map((suggestion: EmployeeSuggestion) => {
+    const eligibility = eligibilityByNumber.get(suggestion.employee.employeeNumber);
+    return {
+      ...suggestion,
+      eligible: eligibility?.eligible ?? false,
+      stationsPassed: eligibility?.stationsPassed ?? 0,
+      stationsRequired,
+      skillsPassedCount: eligibility?.skillsPassedCount,
+      requiredSkillsCount: eligibility?.requiredSkillsCount ?? requiredSkillsCount,
+    };
+  });
 }
 
 export async function createAssignment(params: {
-  machineCode: string;
+  stationId?: string;
+  machineCode?: string;
   employeeCode: string;
   date: string;
   shift: ShiftType;
   startTime: string;
   endTime: string;
 }): Promise<{ success: boolean; assignment?: any }> {
+  const body: Record<string, unknown> = {
+    employeeCode: params.employeeCode,
+    date: params.date,
+    shift: params.shift.toLowerCase(),
+    startTime: params.startTime,
+    endTime: params.endTime,
+  };
+  if (params.stationId) body.stationId = params.stationId;
+  else if (params.machineCode) body.machineCode = params.machineCode;
+
   const response = await fetch("/api/line-overview/assignments", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      ...params,
-      shift: params.shift.toLowerCase(),
-    }),
+    headers: withDevBearer({ "Content-Type": "application/json" }),
+    credentials: "include",
+    body: JSON.stringify(body),
   });
   
   if (!response.ok) {
@@ -249,6 +352,8 @@ export async function createAssignment(params: {
 export async function deleteAssignment(assignmentId: string): Promise<boolean> {
   const response = await fetch(`/api/line-overview/assignments/${assignmentId}`, {
     method: "DELETE",
+    headers: withDevBearer(),
+    credentials: "include",
   });
   
   return response.ok;
@@ -260,7 +365,8 @@ export async function updateAssignment(
 ): Promise<{ success: boolean; assignment?: any }> {
   const response = await fetch(`/api/line-overview/assignments/${assignmentId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: withDevBearer({ "Content-Type": "application/json" }),
+    credentials: "include",
     body: JSON.stringify(updates),
   });
   

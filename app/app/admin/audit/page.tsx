@@ -62,7 +62,7 @@ function AdminAuditContent() {
     setError(null);
 
     try {
-      const data = await apiGet<{ logs: AuditLog[] }>(`/api/admin/audit?orgId=${currentOrg.id}`);
+      const data = await apiGet<{ logs: AuditLog[] }>('/api/admin/audit');
       let filteredLogs = data.logs || [];
       if (actionFilter) {
         filteredLogs = filteredLogs.filter((l: AuditLog) => l.action === actionFilter);

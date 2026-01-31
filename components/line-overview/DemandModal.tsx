@@ -70,6 +70,7 @@ export function DemandModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          stationId: machine.machine.stationId ?? machine.machine.id,
           machineCode: machine.machine.machineCode,
           date: planDate,
           shift: shiftType.toLowerCase(),

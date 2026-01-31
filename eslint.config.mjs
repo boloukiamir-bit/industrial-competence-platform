@@ -91,6 +91,34 @@ export default [
       'no-undef': 'off',
     },
   },
+  // CORE pages: data must come from server APIs scoped by getActiveOrgFromSession; no client Supabase.
+  {
+    files: [
+      'app/app/(cockpit)/cockpit/page.tsx',
+      'app/app/line-overview/page.tsx',
+      'app/app/tomorrows-gaps/page.tsx',
+      'app/app/employees/page.tsx',
+      'app/app/employees/[id]/page.tsx',
+      'app/app/org/overview/page.tsx',
+      'app/app/competence-matrix/page.tsx',
+      'app/app/setup/page.tsx',
+      'app/app/admin/users/page.tsx',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/lib/supabaseClient',
+              message:
+                'CORE pages must not use client Supabase. Use server APIs scoped by getActiveOrgFromSession instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

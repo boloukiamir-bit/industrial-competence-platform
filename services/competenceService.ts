@@ -1,5 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import type { Employee, Skill, EmployeeSkill, CompetenceLevel } from "@/types/domain";
+import { employeesBaseQuery } from "@/lib/employeesBaseQuery";
 
 const demoEmployees: Omit<Employee, "id">[] = [
   { name: "Anna Lindberg", employeeNumber: "E1001", role: "Operator", line: "Pressline 1", team: "Day", employmentType: "permanent", isActive: true },
@@ -23,14 +25,36 @@ const demoSkillLevels: Record<string, Record<string, CompetenceLevel["value"]>> 
   "E1004": { "PRESS_A": 1, "PRESS_B": 0, "5S": 2, "SAFETY_BASIC": 1, "TRUCK_A1": 0 },
 };
 
-/** Only runs when NEXT_PUBLIC_DEMO_MODE=true (dev). Production never. */
-export async function seedDemoDataIfEmpty(): Promise<void> {
-  if (process.env.NODE_ENV === "production") return;
-  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") return;
+/** Strict allowlist of org IDs allowed for demo seeding (comma-separated). Server-side only. */
+const DEMO_SEED_ORG_IDS = (process.env.DEMO_SEED_ORG_IDS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/** Only runs in non-production when org is explicitly allowed (is_demo or DEMO_SEED_ORG_IDS). Throws in production. */
+export async function seedDemoDataIfEmpty(orgId?: string | null): Promise<void> {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Demo seeding is not allowed in production.");
+  }
+  if (!orgId) return;
+  const inAllowlist = DEMO_SEED_ORG_IDS.includes(orgId);
+  if (!inAllowlist) {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("is_demo")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (org?.is_demo !== true) {
+      throw new Error(
+        "Demo seeding not allowed: organization is not in DEMO_SEED_ORG_IDS and organizations.is_demo is not true for this org."
+      );
+    }
+  }
 
   const { data: existingEmployees, error: checkError } = await supabase
     .from("employees")
     .select("id")
+    .eq("org_id", orgId)
     .limit(1);
 
   if (checkError) {
@@ -45,6 +69,7 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
     .from("employees")
     .insert(
       demoEmployees.map((emp) => ({
+        org_id: orgId,
         name: emp.name,
         employee_number: emp.employeeNumber,
         role: emp.role,
@@ -63,6 +88,7 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
     .from("skills")
     .insert(
       demoSkills.map((skill) => ({
+        org_id: orgId,
         code: skill.code,
         name: skill.name,
         category: skill.category,
@@ -117,27 +143,29 @@ export async function seedDemoDataIfEmpty(): Promise<void> {
 
 export async function getFilterOptions(
   orgId?: string | null,
-  options?: { allowGlobal?: boolean }
+  options?: { allowGlobal?: boolean; supabaseClient?: SupabaseClient }
 ): Promise<{
   lines: string[];
   teams: string[];
 }> {
+  const client = options?.supabaseClient ?? supabase;
   const allowGlobal = options?.allowGlobal === true;
   if (!orgId && !allowGlobal) {
     return { lines: [], teams: [] };
   }
-  let query = supabase.from("employees").select("line, team");
-  if (orgId) {
-    query = query.eq("org_id", orgId);
-  }
+  const query = orgId
+    ? employeesBaseQuery(client, orgId, "line, team")
+    : client.from("employees").select("line, team").eq("is_active", true);
   const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch filter options: ${error.message}`);
   }
 
-  const lines = [...new Set((data || []).map((row) => row.line).filter(Boolean))].sort();
-  const teams = [...new Set((data || []).map((row) => row.team).filter(Boolean))].sort();
+  type Row = { line?: string | null; team?: string | null };
+  const rows = (data || []) as Row[];
+  const lines = [...new Set(rows.map((row) => row.line).filter((x): x is string => Boolean(x)))].sort();
+  const teams = [...new Set(rows.map((row) => row.team).filter((x): x is string => Boolean(x)))].sort();
 
   return { lines, teams };
 }
@@ -147,19 +175,43 @@ export async function getEmployeesWithSkills(filters?: {
   line?: string;
   team?: string;
   allowGlobal?: boolean;
+  supabaseClient?: SupabaseClient;
 }): Promise<{
   employees: Employee[];
   skills: Skill[];
   employeeSkills: EmployeeSkill[];
 }> {
-  const allowGlobal = filters?.allowGlobal === true;
-  if (!filters?.orgId && !allowGlobal) {
+  const orgId = filters?.orgId ?? null;
+  const client = filters?.supabaseClient ?? supabase;
+  if (!orgId) {
     return { employees: [], skills: [], employeeSkills: [] };
   }
-  let employeesQuery = supabase.from("employees").select("*");
-  if (filters?.orgId) {
-    employeesQuery = employeesQuery.eq("org_id", filters.orgId);
+
+  const { data: catalogRows, error: catalogError } = await client
+    .from("skills")
+    .select("id, code, name, category")
+    .eq("org_id", orgId)
+    .order("category")
+    .order("code");
+
+  if (catalogError) {
+    throw new Error(`Failed to fetch skills catalog: ${catalogError.message}`);
   }
+
+  type SkillRow = {
+    id: string;
+    code: string;
+    name: string;
+    category: string;
+  };
+  const skills: Skill[] = (catalogRows || []).map((row: SkillRow) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    category: row.category,
+  }));
+
+  let employeesQuery = employeesBaseQuery(client, orgId).select("*");
   if (filters?.line) {
     employeesQuery = employeesQuery.eq("line", filters.line);
   }
@@ -184,49 +236,25 @@ export async function getEmployeesWithSkills(filters?: {
     isActive: row.is_active,
   }));
 
-  if (employees.length === 0) {
-    return { employees, skills: [], employeeSkills: [] };
-  }
+  let employeeSkills: EmployeeSkill[] = [];
+  if (employees.length > 0) {
+    const employeeIds = employees.map((e) => e.id);
+    const employeeSkillsResult = await client
+      .from("employee_skills")
+      .select("employee_id, skill_id, level")
+      .in("employee_id", employeeIds);
 
-  const employeeIds = employees.map((e) => e.id);
-  const employeeSkillsQuery = supabase
-    .from("employee_skills")
-    .select("employee_id, skill_id, level, skill:skill_id(id, code, name, category)")
-    .in("employee_id", employeeIds);
-
-  const employeeSkillsResult = await employeeSkillsQuery;
-  if (employeeSkillsResult.error) {
-    throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
-  }
-
-  type SkillRow = {
-    id: string;
-    code: string;
-    name: string;
-    category: string;
-    description?: string | null;
-  };
-  const skillMap = new Map<string, Skill>();
-  const employeeSkills: EmployeeSkill[] = (employeeSkillsResult.data || []).map((row) => {
-    const skillValue = row.skill as unknown;
-    const skillRow = (Array.isArray(skillValue) ? skillValue[0] : skillValue) as SkillRow | null | undefined;
-    if (skillRow && !skillMap.has(skillRow.id)) {
-      skillMap.set(skillRow.id, {
-        id: skillRow.id,
-        code: skillRow.code,
-        name: skillRow.name,
-        category: skillRow.category,
-        description: skillRow.description ?? undefined,
-      });
+    if (employeeSkillsResult.error) {
+      throw new Error(`Failed to fetch employee_skills: ${employeeSkillsResult.error.message}`);
     }
-    return {
+
+    const skillIds = new Set(skills.map((s) => s.id));
+    employeeSkills = (employeeSkillsResult.data || []).map((row) => ({
       employeeId: row.employee_id,
       skillId: row.skill_id,
       level: row.level as CompetenceLevel["value"],
-    };
-  });
-
-  const skills = Array.from(skillMap.values());
+    })).filter((es) => skillIds.has(es.skillId));
+  }
 
   return { employees, skills, employeeSkills };
 }
@@ -242,7 +270,8 @@ export interface CompetenceGap {
   missingHeadcount: number;
 }
 
-export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
+export async function getTomorrowsGaps(orgId?: string | null): Promise<CompetenceGap[]> {
+  if (!orgId) return [];
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + 1);
   const targetDateStr = targetDate.toISOString().slice(0, 10);
@@ -264,7 +293,8 @@ export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
   const { data: skills, error: skillsError } = await supabase
     .from("skills")
     .select("id, code, name")
-    .in("id", skillIds);
+    .in("id", skillIds)
+    .eq("org_id", orgId);
 
   if (skillsError) {
     throw new Error(`Failed to fetch skills: ${skillsError.message}`);
@@ -283,9 +313,11 @@ export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
     const skillInfo = skillMap.get(skill_id);
     if (!skillInfo) continue;
 
-    const { data: matchingEmployees, error: empError } = await supabase
-      .from("employees")
-      .select("id")
+    const { data: matchingEmployees, error: empError } = await employeesBaseQuery(
+      supabase,
+      orgId,
+      "id"
+    )
       .eq("line", line)
       .eq("team", team);
 
@@ -293,7 +325,7 @@ export async function getTomorrowsGaps(): Promise<CompetenceGap[]> {
       throw new Error(`Failed to fetch employees for ${line}/${team}: ${empError.message}`);
     }
 
-    const employeeIds = (matchingEmployees || []).map((e) => e.id);
+    const employeeIds = ((matchingEmployees || []) as unknown as { id: string }[]).map((e) => e.id);
 
     let actualHeadcount = 0;
 

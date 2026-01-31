@@ -35,23 +35,87 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     const activeOrgId = profile?.active_org_id || null;
-    const orgId = activeOrgId ?? session.orgId;
+    if (!activeOrgId) {
+      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const smokeTest = {
+      line: "Bearbetning",
+      employee_number: "0001",
+      expected: {
+        stations_required: 23,
+        stations_passed: 23,
+        eligible: true,
+      },
+      actual: null as null | {
+        stations_required: number;
+        stations_passed: number;
+        eligible: boolean;
+      },
+      pass: false,
+      error: null as null | string,
+    };
+    try {
+      const smokeRes = await pool.query(
+        `WITH requirements AS (
+           SELECT r.skill_id, r.required_level
+           FROM station_skill_requirements r
+           JOIN stations s ON s.id = r.station_id
+           WHERE s.org_id = $1
+             AND s.line = $2
+         ),
+         target_employee AS (
+           SELECT id
+           FROM employees
+           WHERE org_id = $1
+             AND employee_number = $3
+           LIMIT 1
+         ),
+         matched AS (
+           SELECT 1
+           FROM requirements req
+           JOIN employee_skills es ON es.skill_id = req.skill_id
+           JOIN target_employee te ON te.id = es.employee_id
+           WHERE es.level >= req.required_level
+         )
+         SELECT
+           (SELECT COUNT(*) FROM requirements)::int AS stations_required,
+           (SELECT COUNT(*) FROM matched)::int AS stations_passed`,
+        [activeOrgId, smokeTest.line, smokeTest.employee_number]
+      );
+      const stationsRequired = smokeRes.rows[0]?.stations_required ?? 0;
+      const stationsPassed = smokeRes.rows[0]?.stations_passed ?? 0;
+      smokeTest.actual = {
+        stations_required: stationsRequired,
+        stations_passed: stationsPassed,
+        eligible: stationsRequired > 0 && stationsRequired === stationsPassed,
+      };
+      smokeTest.pass =
+        smokeTest.actual.eligible === smokeTest.expected.eligible &&
+        smokeTest.actual.stations_required === smokeTest.expected.stations_required &&
+        smokeTest.actual.stations_passed === smokeTest.expected.stations_passed;
+    } catch (error) {
+      smokeTest.error = error instanceof Error ? error.message : "Smoke test failed";
+    }
 
     const employeeCountRes = await pool.query(
-      "SELECT COUNT(*)::int AS count FROM employees WHERE org_id = $1",
-      [orgId]
+      "SELECT COUNT(*)::int AS count FROM employees WHERE org_id = $1 AND is_active = true",
+      [activeOrgId]
     );
 
     const topSkillsRes = await pool.query(
       `SELECT s.code, COUNT(*)::int AS count
        FROM employee_skills es
-       JOIN employees e ON e.id = es.employee_id
+       JOIN employees e ON e.id = es.employee_id AND e.is_active = true
        JOIN skills s ON s.id = es.skill_id
        WHERE e.org_id = $1
+         AND s.org_id = $1
        GROUP BY s.code
        ORDER BY count DESC, s.code ASC
        LIMIT 50`,
-      [orgId]
+      [activeOrgId]
     );
 
     const demoCountsRes = await pool.query(
@@ -60,9 +124,10 @@ export async function GET(request: NextRequest) {
        JOIN employees e ON e.id = es.employee_id
        JOIN skills s ON s.id = es.skill_id
        WHERE e.org_id = $1
+         AND s.org_id = $1
          AND s.code = ANY($2::text[])
        GROUP BY s.code`,
-      [orgId, DEMO_CODES]
+      [activeOrgId, DEMO_CODES]
     );
 
     const demoCounts = DEMO_CODES.reduce<Record<string, number>>((acc, code) => {
@@ -75,10 +140,11 @@ export async function GET(request: NextRequest) {
 
     const res = NextResponse.json({
       active_org_id: activeOrgId,
-      org_id_used: orgId,
+      org_id_used: activeOrgId,
       employee_count: employeeCountRes.rows[0]?.count ?? 0,
       top_skill_codes: topSkillsRes.rows,
       demo_code_counts: demoCounts,
+      eligibility_smoke_test: smokeTest,
     });
     applySupabaseCookies(res, pendingCookies);
     return res;

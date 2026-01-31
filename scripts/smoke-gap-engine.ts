@@ -39,11 +39,7 @@ try {
 
 import { createClient } from "@supabase/supabase-js";
 import { computeLineGaps, type LineOverviewData } from "../services/gapEngine";
-import {
-  computeNetFactor,
-  segmentNetHours,
-  type ShiftRule,
-} from "../lib/lineOverviewNet";
+import { segmentGrossHours } from "../lib/lineOverviewNet";
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -96,8 +92,8 @@ async function fetchLineOverviewData(
 
   const machineCodes = machines.map((m: any) => m.machine_code);
 
-  // Fetch demand, assignments, and shift rules in parallel
-  const [demandRes, assignmentsRes, shiftRulesRes] = await Promise.all([
+  // Fetch demand and assignments (gross hours; shift_rules not used for Cockpit MVP)
+  const [demandRes, assignmentsRes] = await Promise.all([
     supabaseAdmin
       .from("pl_machine_demand")
       .select("*")
@@ -112,12 +108,6 @@ async function fetchLineOverviewData(
       .eq("plan_date", date)
       .eq("shift_type", shift)
       .in("machine_code", machineCodes),
-    supabaseAdmin
-      .from("shift_rules")
-      .select("shift_start,shift_end,break_minutes,paid_break_minutes")
-      .eq("org_id", orgId)
-      .eq("shift_type", shift)
-      .maybeSingle(),
   ]);
 
   if (demandRes.error || assignmentsRes.error) {
@@ -130,8 +120,6 @@ async function fetchLineOverviewData(
 
   const demands = demandRes.data || [];
   const assignments = assignmentsRes.data || [];
-  const shiftRule = (shiftRulesRes.error ? null : shiftRulesRes.data) as ShiftRule | null;
-  const netFactor = computeNetFactor(shiftRule);
 
   const demandMap = new Map(demands.map((d: any) => [d.machine_code, d]));
   const assignmentsByMachine = new Map<string, typeof assignments>();
@@ -159,7 +147,7 @@ async function fetchLineOverviewData(
     }> = [];
 
     machineAssignments.forEach((a: any) => {
-      const hours = segmentNetHours(a.start_time, a.end_time, netFactor);
+      const hours = segmentGrossHours(a.start_time, a.end_time);
       assignedHours += hours;
 
       assignedPeople.push({

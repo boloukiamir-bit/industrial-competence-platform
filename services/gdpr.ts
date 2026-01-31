@@ -24,7 +24,11 @@ export async function exportEmployeeData(employeeId: string, orgId: string): Pro
     equipmentResult,
   ] = await Promise.all([
     supabase.from("employees").select("*").eq("org_id", orgId).eq("id", employeeId).single(),
-    supabase.from("employee_skills").select("*, skills(*)").eq("employee_id", employeeId),
+    supabase
+      .from("employee_skills")
+      .select("*, skills(*)")
+      .eq("employee_id", employeeId)
+      .eq("skills.org_id", orgId),
     supabase.from("person_events").select("*").eq("employee_id", employeeId),
     supabase.from("salary_records").select("*").eq("employee_id", employeeId).order("effective_from", { ascending: false }),
     supabase.from("salary_revisions").select("*").eq("employee_id", employeeId).order("revision_date", { ascending: false }),

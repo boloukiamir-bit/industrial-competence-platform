@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useProfile } from "@/hooks/useProfile";
+import { useToast } from "@/hooks/use-toast";
+import { apiPost } from "@/lib/apiClient";
 import { 
   Wrench, 
   Briefcase, 
@@ -11,8 +13,22 @@ import {
   ChevronRight,
   AlertCircle,
   Building2,
-  ClipboardList
+  ClipboardList,
+  FileUp,
+  Trash2,
+  Loader2,
+  Layers,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 interface AdminCard {
   title: string;
@@ -41,6 +57,18 @@ const adminCards: AdminCard[] = [
     icon: ClipboardList,
   },
   {
+    title: "Import Employees",
+    description: "Upload CSV to import or update employees (v1).",
+    href: "/app/admin/import",
+    icon: FileUp,
+  },
+  {
+    title: "Master Data: Lines & Stations",
+    description: "Manage lines (areas), area leaders, and stations. Import/export CSV.",
+    href: "/app/admin/master-data/lines",
+    icon: Layers,
+  },
+  {
     title: "Competence Admin",
     description: "Manage competence groups and competences used in matrices and gap analysis.",
     href: "/admin/competence",
@@ -66,10 +94,68 @@ const adminCards: AdminCard[] = [
   },
 ];
 
-export default function AdminDashboard() {
-  const { profile, loading } = useProfile();
+const PURGE_CONFIRM_TEXT = "PURGE";
 
-  if (loading) {
+type AdminMe = { email: string | null; active_org_id: string; membership_role: string } | null;
+
+export default function AdminDashboard() {
+  const { toast, toasts } = useToast();
+  const [adminMe, setAdminMe] = useState<AdminMe>(null);
+  const [adminMeLoading, setAdminMeLoading] = useState(true);
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+  const [purgeConfirmInput, setPurgeConfirmInput] = useState("");
+  const [purgeLoading, setPurgeLoading] = useState(false);
+
+  const fetchAdminMe = useCallback(async () => {
+    setAdminMeLoading(true);
+    try {
+      const res = await fetch("/api/admin/me", { credentials: "include" });
+      if (!res.ok) {
+        setAdminMe(null);
+        return;
+      }
+      const data = await res.json();
+      setAdminMe({
+        email: data.email ?? null,
+        active_org_id: data.active_org_id,
+        membership_role: data.membership_role ?? "",
+      });
+    } catch {
+      setAdminMe(null);
+    } finally {
+      setAdminMeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAdminMe();
+  }, [fetchAdminMe]);
+
+  const handlePurgeDemo = async () => {
+    if (purgeConfirmInput.trim() !== PURGE_CONFIRM_TEXT) return;
+    setPurgeLoading(true);
+    try {
+      const data = await apiPost<{ deactivatedEmployees: number }>("/api/admin/data-hygiene/purge-demo", {});
+      const count = data?.deactivatedEmployees ?? 0;
+      toast({
+        title: "Demo data purged",
+        description: count > 0 ? `${count} employee(s) deactivated.` : "No matching employees to deactivate.",
+      });
+      setPurgeDialogOpen(false);
+      setPurgeConfirmInput("");
+      window.location.reload();
+    } catch (err) {
+      toast({
+        title: "Purge failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setPurgeLoading(false);
+    }
+  };
+
+  if (adminMeLoading) {
     return (
       <div className="p-6">
         <div className="animate-pulse">
@@ -80,7 +166,8 @@ export default function AdminDashboard() {
     );
   }
 
-  const isAdmin = profile?.role === "admin";
+  const membershipRole = adminMe?.membership_role ?? "";
+  const isAdmin = membershipRole === "admin" || membershipRole === "hr";
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -135,16 +222,92 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      {profile && (
+      {isAdmin && (
+        <div className="mt-8 p-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Data Hygiene</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Deactivate demo/test employees for the active organization (E9*, E100*, TEST*, name containing &quot;Test&quot;, or configured numbers). Idempotent; safe to run multiple times.
+          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => setPurgeDialogOpen(true)}
+            data-testid="button-purge-demo"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Purge demo/test data
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Purge demo/test data</DialogTitle>
+            <DialogDescription>
+              This will set is_active=false for demo/test employees in the active organization. Type <strong>{PURGE_CONFIRM_TEXT}</strong> below to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label htmlFor="purge-confirm">Confirmation</Label>
+              <Input
+                id="purge-confirm"
+                type="text"
+                value={purgeConfirmInput}
+                onChange={(e) => setPurgeConfirmInput(e.target.value)}
+                placeholder={PURGE_CONFIRM_TEXT}
+                className="mt-1 font-mono"
+                data-testid="input-purge-confirm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPurgeDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handlePurgeDemo}
+                disabled={purgeConfirmInput.trim() !== PURGE_CONFIRM_TEXT || purgeLoading}
+                data-testid="button-purge-confirm"
+              >
+                {purgeLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Purge
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`rounded-lg border px-4 py-3 shadow-lg ${
+                t.variant === "destructive"
+                  ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/80"
+                  : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
+              }`}
+            >
+              {t.title && <p className="font-medium text-sm">{t.title}</p>}
+              {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adminMe && (
         <div className="mt-8 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Signed in as{" "}
             <span className="font-medium text-gray-700 dark:text-gray-300">
-              {profile.email}
+              {adminMe.email ?? "—"}
             </span>
             {" "}with role{" "}
             <span className="font-mono text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded">
-              {profile.role || "not set"}
+              {adminMe.membership_role || "not set"}
             </span>
           </p>
         </div>

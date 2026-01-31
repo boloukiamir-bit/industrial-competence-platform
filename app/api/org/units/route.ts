@@ -25,6 +25,78 @@ type OrgUnitRow = {
 
 type EmployeeRow = { id: string; name: string; role: string | null; org_unit_id: string | null };
 
+type Node = {
+  id: string;
+  name: string;
+  code?: string;
+  parentId?: string;
+  type?: string;
+  managerEmployeeId?: string;
+  createdAt?: string | null;
+  children: Node[];
+  employees: { id: string; name: string; role: string; orgUnitId?: string; isActive: boolean }[];
+  employeeCount: number;
+};
+
+function buildTreeFromUnitsAndEmployees(
+  units: OrgUnitRow[],
+  employees: EmployeeRow[]
+): { roots: Node[]; unassignedCount: number } {
+  const unitMap = new Map<string, Node>();
+  units.forEach((row) => {
+    unitMap.set(row.id, {
+      id: row.id,
+      name: row.name,
+      code: row.code ?? undefined,
+      parentId: row.parent_id ?? undefined,
+      type: row.type ?? undefined,
+      managerEmployeeId: row.manager_employee_id ?? undefined,
+      createdAt: row.created_at,
+      children: [],
+      employees: [],
+      employeeCount: 0,
+    });
+  });
+  let unassignedCount = 0;
+  employees.forEach((e) => {
+    const emp = {
+      id: e.id,
+      name: e.name || "",
+      role: e.role || "",
+      orgUnitId: e.org_unit_id ?? undefined,
+      isActive: true,
+    };
+    if (e.org_unit_id) {
+      const unit = unitMap.get(e.org_unit_id);
+      if (unit) {
+        unit.employees.push(emp);
+        unit.employeeCount += 1;
+      }
+    } else {
+      unassignedCount++;
+    }
+  });
+  const roots: Node[] = [];
+  units.forEach((row) => {
+    const node = unitMap.get(row.id)!;
+    if (row.parent_id) {
+      const parent = unitMap.get(row.parent_id);
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  function aggregate(node: Node): number {
+    let n = node.employeeCount;
+    node.children.forEach((c) => (n += aggregate(c)));
+    node.employeeCount = n;
+    return n;
+  }
+  roots.forEach(aggregate);
+  return { roots, unassignedCount };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { supabase, pendingCookies } = await createSupabaseServerClient();
@@ -81,8 +153,30 @@ export async function GET(request: NextRequest) {
       return res;
     }
     if (employeesRes.error) {
-      console.error("[api/org/units] employees error", employeesRes.error);
-      const res = NextResponse.json({ error: "Failed to load employees" }, { status: 500 });
+      const err = employeesRes.error;
+      console.error("[api/org/units] employees error", err);
+      const message = err?.message ?? "Failed to load employees";
+      // Return units with empty employee data so Overview page still loads; include details for debugging
+      const units = (unitsRes.data || []) as OrgUnitRow[];
+      const employees: EmployeeRow[] = [];
+      const totalEmployeesRaw = 0;
+      const totalEmployeesAfterSiteFilter = 0;
+      const { roots, unassignedCount: unassignedCountFallback } = buildTreeFromUnitsAndEmployees(units, employees);
+      const res = NextResponse.json({
+        tree: roots,
+        unassignedCount: unassignedCountFallback,
+        totalEmployees: 0,
+        activeOrgId,
+        meta: {
+          activeOrgId,
+          activeSiteId,
+          totalUnitsRaw: units.length,
+          rootUnitsCount: roots.length,
+          totalEmployeesRaw,
+          totalEmployeesAfterSiteFilter,
+          warning: `Employees could not be loaded: ${message}`,
+        },
+      });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
@@ -99,77 +193,7 @@ export async function GET(request: NextRequest) {
     const totalEmployeesRaw = countRawRes.count ?? employees.length;
     const totalEmployeesAfterSiteFilter = countFilteredRes.count ?? employees.length;
 
-    type Node = {
-      id: string;
-      name: string;
-      code?: string;
-      parentId?: string;
-      type?: string;
-      managerEmployeeId?: string;
-      createdAt?: string | null;
-      children: Node[];
-      employees: { id: string; name: string; role: string; orgUnitId?: string; isActive: boolean }[];
-      employeeCount: number;
-    };
-
-    const unitMap = new Map<string, Node>();
-    units.forEach((row) => {
-      unitMap.set(row.id, {
-        id: row.id,
-        name: row.name,
-        code: row.code ?? undefined,
-        parentId: row.parent_id ?? undefined,
-        type: row.type ?? undefined,
-        managerEmployeeId: row.manager_employee_id ?? undefined,
-        createdAt: row.created_at,
-        children: [],
-        employees: [],
-        employeeCount: 0,
-      });
-    });
-
-    let unassignedCount = 0;
-    employees.forEach((e) => {
-      const emp = {
-        id: e.id,
-        name: e.name || "",
-        role: e.role || "",
-        orgUnitId: e.org_unit_id ?? undefined,
-        isActive: true,
-      };
-      if (e.org_unit_id) {
-        const unit = unitMap.get(e.org_unit_id);
-        if (unit) {
-          unit.employees.push(emp);
-          unit.employeeCount += 1;
-        }
-      } else {
-        unassignedCount++;
-      }
-    });
-
-    const roots: Node[] = [];
-    units.forEach((row) => {
-      const node = unitMap.get(row.id)!;
-      if (row.parent_id) {
-        const parent = unitMap.get(row.parent_id);
-        if (parent) {
-          parent.children.push(node);
-        } else {
-          roots.push(node);
-        }
-      } else {
-        roots.push(node);
-      }
-    });
-
-    function aggregate(node: Node): number {
-      let n = node.employeeCount;
-      node.children.forEach((c) => (n += aggregate(c)));
-      node.employeeCount = n;
-      return n;
-    }
-    roots.forEach(aggregate);
+    const { roots, unassignedCount } = buildTreeFromUnitsAndEmployees(units, employees);
 
     const res = NextResponse.json({
       tree: roots,

@@ -1,0 +1,6 @@
+code,name,category,description
+PRESS_A,Pressline A,Production,Operate press line A
+PRESS_B,Pressline B,Production,Operate press line B
+5S,5S Basics,Lean,5S methodology basics
+SAFETY_BASIC,Safety Basic,Safety,Basic safety training
+TRUCK_A1,Truck A1 License,Logistics,Forklift A1 license

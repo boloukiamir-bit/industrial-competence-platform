@@ -67,6 +67,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
         .from("employees")
         .select("id")
         .eq("org_id", profile.active_org_id)
+        .eq("is_active", true)
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -79,6 +80,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
           .from("employees")
           .select("id")
           .eq("org_id", profile.active_org_id)
+          .eq("is_active", true)
           .eq("email", userEmail)
           .maybeSingle();
 

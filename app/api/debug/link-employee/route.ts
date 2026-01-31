@@ -97,6 +97,7 @@ export async function POST() {
       .from("employees")
       .select("id, name, email, user_id")
       .eq("org_id", profile.active_org_id)
+      .eq("is_active", true)
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -108,6 +109,7 @@ export async function POST() {
         .from("employees")
         .select("id, name, email, user_id")
         .eq("org_id", profile.active_org_id)
+        .eq("is_active", true)
         .eq("email", userEmail)
         .maybeSingle();
 

@@ -43,7 +43,7 @@ const demoSteps = [
     title: "Generate Tomorrow's Gaps",
     description: "Click 'Generate Gaps' to analyze skill shortages for tomorrow's shift. See the summary card with top missing skills and recommendations.",
     icon: TrendingUp,
-    link: "/app/gaps?demo=true",
+    link: "/app/tomorrows-gaps?demo=true",
     linkText: "Open Gaps",
   },
   {
@@ -51,7 +51,7 @@ const demoSteps = [
     title: "Export Action Plan",
     description: "Download the gaps table as CSV to share with your team or import into your planning system.",
     icon: Download,
-    link: "/app/gaps?demo=true",
+    link: "/app/tomorrows-gaps?demo=true",
     linkText: "Export CSV",
   },
 ];

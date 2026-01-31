@@ -221,6 +221,7 @@ export async function enqueueUpcomingOneToOnes(referenceDate: Date, orgId?: stri
       .from("employees")
       .select("email")
       .eq("org_id", orgId)
+      .eq("is_active", true)
       .eq("id", meeting.employeeId)
       .single();
 
@@ -228,6 +229,7 @@ export async function enqueueUpcomingOneToOnes(referenceDate: Date, orgId?: stri
       .from("employees")
       .select("email")
       .eq("org_id", orgId)
+      .eq("is_active", true)
       .eq("id", meeting.managerId)
       .single();
 

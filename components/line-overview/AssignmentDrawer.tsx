@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Cog, Plus, Trash2, User, Clock, Save } from "lucide-react";
+import { Cog, Plus, Trash2, User, Clock, Save, Search } from "lucide-react";
 import type { MachineWithData, PLEmployee, PLAttendance, ShiftType } from "@/types/lineOverview";
 import { createAssignment, deleteAssignment, updateAssignment } from "@/services/lineOverview";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +58,7 @@ export function AssignmentDrawer({
   const [newEndTime, setNewEndTime] = useState(shiftTimes[shiftType].end);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -65,23 +66,40 @@ export function AssignmentDrawer({
       setNewEndTime(shiftTimes[shiftType].end);
       setNewEmployee("");
       setShowNewForm(false);
+      setEmployeeSearchQuery("");
     }
   }, [open, shiftType]);
 
   if (!machine) return null;
 
-  const presentEmployees = attendance
-    .filter((a) => a.status === "present" || a.status === "partial")
-    .map((a) => {
-      const emp = employees.find((e) => e.employeeCode === a.employeeCode);
-      return {
-        code: a.employeeCode,
-        name: emp?.fullName || a.employeeCode,
-        status: a.status,
-        availableFrom: a.availableFrom,
-        availableTo: a.availableTo,
-      };
-    });
+  // All active employees for this tenant; optionally show presence badge when attendance exists (do not hide).
+  const attendanceByCode = new Map(
+    attendance.map((a) => [a.employeeCode, a])
+  );
+  const selectableEmployees = employees.map((emp) => {
+    const code = emp.employeeNumber ?? emp.employeeCode;
+    const att = attendanceByCode.get(code) ?? attendanceByCode.get(emp.employeeCode);
+    return {
+      code,
+      name: emp.fullName || code,
+      status: att?.status as "present" | "partial" | "absent" | undefined,
+      availableFrom: att?.availableFrom,
+      availableTo: att?.availableTo,
+    };
+  });
+  // Sort: present/partial first, then absent, then no record
+  const statusOrder = (s: typeof selectableEmployees[0]["status"]) =>
+    s === "present" ? 0 : s === "partial" ? 1 : s === "absent" ? 2 : 3;
+  selectableEmployees.sort((a, b) => statusOrder(a.status) - statusOrder(b.status));
+
+  const q = employeeSearchQuery.trim().toLowerCase();
+  const filteredEmployees = !q
+    ? selectableEmployees
+    : selectableEmployees.filter((emp) => {
+        const name = (emp.name ?? "").toLowerCase();
+        const code = (emp.code ?? "").toLowerCase();
+        return name.includes(q) || code.includes(q);
+      });
 
   const handleCreate = async () => {
     if (!newEmployee) {
@@ -144,9 +162,9 @@ export function AssignmentDrawer({
               <Cog className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <SheetTitle>{machine.machine.machineName}</SheetTitle>
+              <SheetTitle>{machine.machine.stationName ?? machine.machine.machineName}</SheetTitle>
               <SheetDescription>
-                {machine.machine.machineCode} • {planDate} • {shiftType} Shift
+                {machine.machine.stationCode ?? machine.machine.machineCode} • {planDate} • {shiftType} Shift
               </SheetDescription>
             </div>
           </div>
@@ -215,7 +233,9 @@ export function AssignmentDrawer({
             ) : (
               <div className="space-y-2">
                 {machine.assignments.map((assignment) => {
-                  const emp = employees.find((e) => e.employeeCode === assignment.employeeCode);
+                  const emp = employees.find(
+                    (e) => e.employeeNumber === assignment.employeeCode || e.employeeCode === assignment.employeeCode
+                  );
                   return (
                     <div
                       key={assignment.id}
@@ -257,30 +277,49 @@ export function AssignmentDrawer({
 
                 <div className="space-y-2">
                   <Label>Employee</Label>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or employee number..."
+                      value={employeeSearchQuery}
+                      onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                      className="pl-8"
+                      data-testid="assignment-drawer-search"
+                    />
+                  </div>
                   <Select value={newEmployee} onValueChange={setNewEmployee}>
                     <SelectTrigger data-testid="select-employee">
                       <SelectValue placeholder="Select employee..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {presentEmployees.map((emp) => (
+                      {filteredEmployees.map((emp) => (
                         <SelectItem key={emp.code} value={emp.code}>
                           <div className="flex items-center gap-2">
                             <span>{emp.name}</span>
-                            <Badge
-                              variant="secondary"
-                              className={`text-xs ${
-                                emp.status === "partial"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-green-100 text-green-700"
-                              }`}
-                            >
-                              {emp.status}
-                            </Badge>
+                            {emp.status != null && (
+                              <Badge
+                                variant="secondary"
+                                className={`text-xs ${
+                                  emp.status === "partial"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : emp.status === "absent"
+                                      ? "bg-red-100 text-red-700"
+                                      : "bg-green-100 text-green-700"
+                                }`}
+                              >
+                                {emp.status}
+                              </Badge>
+                            )}
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {q && (
+                    <p className="text-xs text-muted-foreground">
+                      Showing {filteredEmployees.length} of {selectableEmployees.length} employees
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -323,14 +362,35 @@ export function AssignmentDrawer({
           </div>
 
           <div>
-            <h3 className="font-semibold mb-3">Available Employees</h3>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {presentEmployees.length === 0 ? (
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h3 className="font-semibold">Available Employees</h3>
+              {selectableEmployees.length > 0 && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {q ? `${filteredEmployees.length} of ${selectableEmployees.length}` : selectableEmployees.length}
+                </span>
+              )}
+            </div>
+            <div className="relative mb-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or employee number..."
+                value={employeeSearchQuery}
+                onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                className="pl-8"
+                data-testid="assignment-drawer-available-search"
+              />
+            </div>
+            <div className="space-y-1 max-h-[40vh] overflow-y-auto">
+              {selectableEmployees.length === 0 ? (
                 <div className="text-center py-4 text-muted-foreground text-sm">
                   No employees available for this shift
                 </div>
+              ) : filteredEmployees.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  No employees match &quot;{employeeSearchQuery}&quot;
+                </div>
               ) : (
-                presentEmployees.map((emp) => (
+                filteredEmployees.map((emp) => (
                   <div
                     key={emp.code}
                     className="flex items-center justify-between p-2 hover:bg-muted/50 rounded cursor-pointer"
@@ -342,19 +402,35 @@ export function AssignmentDrawer({
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">{emp.name}</span>
+                      {emp.status != null && (
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs ${
+                            emp.status === "partial"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : emp.status === "absent"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {emp.status}
+                        </Badge>
+                      )}
                     </div>
-                    <Badge
-                      variant="secondary"
-                      className={`text-xs ${
-                        emp.status === "partial"
-                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300"
-                          : "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300"
-                      }`}
-                    >
-                      {emp.status === "partial"
-                        ? `${emp.availableFrom?.slice(0, 5)}–${emp.availableTo?.slice(0, 5)}`
-                        : "Full"}
-                    </Badge>
+                    {emp.status != null && emp.status !== "absent" && (
+                      <Badge
+                        variant="secondary"
+                        className={`text-xs ${
+                          emp.status === "partial"
+                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300"
+                            : "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300"
+                        }`}
+                      >
+                        {emp.status === "partial"
+                          ? `${emp.availableFrom?.slice(0, 5)}–${emp.availableTo?.slice(0, 5)}`
+                          : "Full"}
+                      </Badge>
+                    )}
                   </div>
                 ))
               )}

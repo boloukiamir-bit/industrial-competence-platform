@@ -10,6 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { CalendarDays } from "lucide-react";
 import { PriorityFixesWidget } from "@/components/cockpit/PriorityFixesWidget";
 import { ActionsWidget } from "@/components/cockpit/ActionsWidget";
@@ -22,6 +24,7 @@ import { PlanActualWidget } from "@/components/cockpit/PlanActualWidget";
 import { HandoverWidget } from "@/components/cockpit/HandoverWidget";
 import { ActionDrawer } from "@/components/cockpit/ActionDrawer";
 import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal";
+import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
 import { isDemoMode } from "@/lib/demoRuntime";
 import {
   DEMO_ACTIONS,
@@ -53,6 +56,20 @@ import type {
   HandoverItem,
 } from "@/types/cockpit";
 import { useToast } from "@/hooks/use-toast";
+import { fetchJson } from "@/lib/coreFetch";
+import Link from "next/link";
+
+type GapsLineRow = {
+  lineCode: string;
+  lineName: string;
+  gapHours: number;
+  competenceStatus: "NO-GO" | "WARNING" | "OK";
+  eligibleOperatorsCount: number;
+  root_cause?: { primary: string; causes: string[] };
+  stations: Array<{ stationId: string; stationCode: string; stationName: string; requiredHours: number; assignedHours: number; gapHours: number }>;
+  missing_skill_codes: string[];
+  recommended_action: "assign" | "call_in" | "swap";
+};
 
 function CockpitSkeleton() {
   return (
@@ -103,6 +120,11 @@ export default function CockpitPage() {
   const [summary, setSummary] = useState<CockpitSummaryResponse | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  const [gapsLines, setGapsLines] = useState<GapsLineRow[]>([]);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [rootCauseDrawerLine, setRootCauseDrawerLine] = useState<GapsLineRow | null>(null);
 
   // Load cockpit summary from execution_decisions (respects date/shift/line filters)
   useEffect(() => {
@@ -115,12 +137,22 @@ export default function CockpitPage() {
     if (line && line !== "all") params.set("line", line);
     const qs = params.toString();
     const url = `/api/cockpit/summary${qs ? `?${qs}` : ""}`;
-    fetch(url, { credentials: "include" })
+    fetchJson<CockpitSummaryResponse>(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load summary");
-        return res.json();
+        if (!res.ok) {
+          const friendly = res.status === 401 ? "Invalid or expired session" : res.error;
+          const toastMessage =
+            res.status === 401
+              ? "Request failed (401) — Session expired. Please reload/login."
+              : `Request failed (${res.status}) — ${res.error}`;
+          toast({ title: toastMessage, variant: "destructive" });
+          setSummaryError(friendly);
+          setPageError(friendly);
+          throw new Error(friendly);
+        }
+        return res.data;
       })
-      .then((data: CockpitSummaryResponse) => {
+      .then((data) => {
         if (!cancelled) {
           setSummary(data);
           setSummaryError(null);
@@ -136,25 +168,70 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, line]);
+  }, [date, shiftType, line, toast]);
+
+  // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
+  useEffect(() => {
+    if (isDemoMode()) return;
+    let cancelled = false;
+    setGapsLoading(true);
+    const params = new URLSearchParams({ date, shift: shiftType.toLowerCase() });
+    fetchJson<{ lines?: GapsLineRow[] }>(`/api/tomorrows-gaps?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok) {
+          const friendly = res.status === 401 ? "Invalid or expired session" : res.error;
+          const toastMessage =
+            res.status === 401
+              ? "Request failed (401) — Session expired. Please reload/login."
+              : `Request failed (${res.status}) — ${res.error}`;
+          toast({ title: toastMessage, variant: "destructive" });
+          setPageError(friendly);
+          throw new Error(friendly);
+        }
+        return res.data;
+      })
+      .then((data) => {
+        if (!cancelled) setGapsLines(data.lines ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setGapsLines([]);
+      })
+      .finally(() => {
+        if (!cancelled) setGapsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [date, shiftType, toast]);
+
+  const topRisks = gapsLines
+    .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
+    .sort((a, b) => {
+      if (a.competenceStatus !== b.competenceStatus) return a.competenceStatus === "NO-GO" ? -1 : 1;
+      return b.gapHours - a.gapHours;
+    })
+    .slice(0, 5);
 
   // Load lines from DB
   useEffect(() => {
     async function loadLines() {
       try {
-        const response = await fetch("/api/cockpit/lines", {
-          credentials: "include",
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableLines(data.lines || []);
+        const response = await fetchJson<{ lines?: string[] }>("/api/cockpit/lines");
+        if (!response.ok) {
+          const friendly = response.status === 401 ? "Invalid or expired session" : response.error;
+          const toastMessage =
+            response.status === 401
+              ? "Request failed (401) — Session expired. Please reload/login."
+              : `Request failed (${response.status}) — ${response.error}`;
+          toast({ title: toastMessage, variant: "destructive" });
+          setPageError(friendly);
+          throw new Error(friendly);
         }
+        setAvailableLines(response.data.lines || []);
       } catch (error) {
         console.error("Failed to load lines:", error);
       }
     }
     loadLines();
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     const demo = isDemoMode();
@@ -289,6 +366,19 @@ export default function CockpitPage() {
     ? availableLines
     : [...new Set(staffingCards.map((c) => c.station.line).filter(Boolean))];
 
+  if (pageError) {
+    return (
+      <div className="p-6 max-w-[1600px] mx-auto">
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-muted-foreground mb-4">{pageError}</p>
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading) {
     return <CockpitSkeleton />;
   }
@@ -350,6 +440,8 @@ export default function CockpitPage() {
           summary={summary}
           summaryLoading={summaryLoading}
           summaryError={summaryError}
+          date={date}
+          shiftType={shiftType}
         />
       </div>
 
@@ -448,6 +540,14 @@ export default function CockpitPage() {
         onClose={() => setSuggestModalOpen(false)}
         suggestions={suggestions}
         onApply={handleApplySuggestion}
+      />
+
+      <LineRootCauseDrawer
+        open={rootCauseDrawerLine !== null}
+        onOpenChange={(open) => !open && setRootCauseDrawerLine(null)}
+        line={rootCauseDrawerLine}
+        date={date}
+        shift={shiftType}
       />
     </div>
   );

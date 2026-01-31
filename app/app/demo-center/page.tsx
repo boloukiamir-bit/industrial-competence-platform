@@ -259,7 +259,7 @@ export default function DemoCenterPage() {
                 </Link>
               </Button>
               <Button asChild variant="outline" className="justify-start">
-                <Link href="/app/gaps" data-testid="link-demo-gaps">
+                <Link href="/app/tomorrows-gaps" data-testid="link-demo-gaps">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Tomorrow&apos;s Gaps
                 </Link>

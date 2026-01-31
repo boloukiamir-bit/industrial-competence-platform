@@ -1,43 +1,71 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { Employee, EmployeeSkill, PersonEvent, Document, EmployeeEquipment } from "@/types/domain";
+import { employeesBaseQuery } from "@/lib/employeesBaseQuery";
+
+type EmployeeRow = {
+  id: string;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  employee_number: string;
+  email: string | null;
+  phone: string | null;
+  date_of_birth: string | null;
+  role: string | null;
+  line: string | null;
+  team: string | null;
+  employment_type: string | null;
+  start_date: string | null;
+  contract_end_date: string | null;
+  manager_id: string | null;
+  manager?: { name: string | null } | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string | null;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
 
 export async function getEmployees(orgId: string): Promise<Employee[]> {
   if (!orgId) return [];
-  const { data, error } = await supabase
-    .from("employees")
-    .select("*, manager:manager_id(name)")
-    .eq("org_id", orgId)
-    .eq("is_active", true)
-    .order("name");
+  const { data, error } = await employeesBaseQuery(
+    supabase,
+    orgId,
+    "*, manager:manager_id(name)"
+  ).order("name");
 
   if (error) throw new Error(error.message);
 
-  return (data || []).map((row) => ({
+  const rows = (data || []) as unknown as EmployeeRow[];
+  return rows.map((row) => ({
     id: row.id,
     name: row.name,
-    firstName: row.first_name,
-    lastName: row.last_name,
+    firstName: row.first_name ?? undefined,
+    lastName: row.last_name ?? undefined,
     employeeNumber: row.employee_number,
-    email: row.email,
-    phone: row.phone,
-    dateOfBirth: row.date_of_birth,
-    role: row.role,
-    line: row.line,
-    team: row.team,
-    employmentType: row.employment_type,
-    startDate: row.start_date,
-    contractEndDate: row.contract_end_date,
-    managerId: row.manager_id,
-    managerName: row.manager?.name,
-    address: row.address,
-    city: row.city,
-    postalCode: row.postal_code,
-    country: row.country,
+    email: row.email ?? undefined,
+    phone: row.phone ?? undefined,
+    dateOfBirth: row.date_of_birth ?? undefined,
+    role: row.role ?? "",
+    line: row.line ?? "",
+    team: row.team ?? "",
+    employmentType: (row.employment_type ?? "permanent") as "permanent" | "temporary" | "consultant",
+    startDate: row.start_date ?? undefined,
+    contractEndDate: row.contract_end_date ?? undefined,
+    managerId: row.manager_id ?? undefined,
+    managerName: row.manager?.name ?? undefined,
+    address: row.address ?? undefined,
+    city: row.city ?? undefined,
+    postalCode: row.postal_code ?? undefined,
+    country: row.country ?? undefined,
     isActive: row.is_active,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.created_at ?? undefined,
+    updatedAt: row.updated_at ?? undefined,
   }));
 }
+
 
 export async function getEmployeeById(id: string, orgId: string): Promise<Employee | null> {
   if (!orgId) return null;
@@ -77,11 +105,25 @@ export async function getEmployeeById(id: string, orgId: string): Promise<Employ
   };
 }
 
-export async function getEmployeeSkills(employeeId: string): Promise<EmployeeSkill[]> {
+export async function getEmployeeSkills(employeeId: string, orgId?: string): Promise<EmployeeSkill[]> {
+  let effectiveOrgId = orgId;
+  if (!effectiveOrgId) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return [];
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("active_org_id")
+      .eq("id", user.id)
+      .single();
+    if (profileError || !profile?.active_org_id) return [];
+    effectiveOrgId = profile.active_org_id;
+  }
+
   const { data, error } = await supabase
     .from("employee_skills")
     .select("*, skills(*)")
-    .eq("employee_id", employeeId);
+    .eq("employee_id", employeeId)
+    .eq("skills.org_id", effectiveOrgId);
 
   if (error) throw new Error(error.message);
 

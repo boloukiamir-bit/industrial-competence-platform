@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import type { RootCausePayload, RootCauseMissingItem, RootCauseType } from "@/types/cockpit";
+import { normalizeShiftTypeOrDefault } from "@/lib/shift";
+import type { RootCausePayload, RootCauseMissingItem, RootCauseType, CompetenceRootCause } from "@/types/cockpit";
 import { computeLineGaps, type LineOverviewData } from "@/services/gapEngine";
-import {
-  computeNetFactor,
-  segmentNetHours,
-  type ShiftRule,
-} from "@/lib/lineOverviewNet";
+import { getEligibilityByLine } from "@/services/eligibilityService";
+import { segmentGrossHours } from "@/lib/lineOverviewNet";
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -34,15 +32,6 @@ function recommendedActionsFor(type: RootCauseType): RootCausePayload["recommend
   return ["fix_data", "escalate"];
 }
 
-function shiftParamToDbValue(shift: string): string {
-  const map: Record<string, string> = {
-    day: "Day",
-    evening: "Evening",
-    night: "Night",
-  };
-  return map[shift.toLowerCase()] || "Day";
-}
-
 /**
  * Fetch line-overview data needed for gapEngine.
  * This replicates the core logic from /api/line-overview but only fetches what's needed.
@@ -54,7 +43,7 @@ async function fetchLineOverviewData(
   shiftType: string,
   line: string
 ): Promise<LineOverviewData | null> {
-  const shift = shiftParamToDbValue(shiftType);
+  const shift = normalizeShiftTypeOrDefault(shiftType);
 
   // Get machines for this line
   const { data: machines, error: machinesError } = await supabaseAdmin
@@ -75,8 +64,8 @@ async function fetchLineOverviewData(
 
   const machineCodes = machines.map((m: any) => m.machine_code);
 
-  // Fetch demand, assignments, and shift rules in parallel
-  const [demandRes, assignmentsRes, shiftRulesRes] = await Promise.all([
+  // Fetch demand and assignments (gross hours; shift_rules not used for Cockpit MVP)
+  const [demandRes, assignmentsRes] = await Promise.all([
     supabaseAdmin
       .from("pl_machine_demand")
       .select("*")
@@ -91,12 +80,6 @@ async function fetchLineOverviewData(
       .eq("plan_date", date)
       .eq("shift_type", shift)
       .in("machine_code", machineCodes),
-    supabaseAdmin
-      .from("shift_rules")
-      .select("shift_start,shift_end,break_minutes,paid_break_minutes")
-      .eq("org_id", orgId)
-      .eq("shift_type", shift)
-      .maybeSingle(),
   ]);
 
   if (demandRes.error || assignmentsRes.error) {
@@ -106,8 +89,6 @@ async function fetchLineOverviewData(
 
   const demands = demandRes.data || [];
   const assignments = assignmentsRes.data || [];
-  const shiftRule = (shiftRulesRes.error ? null : shiftRulesRes.data) as ShiftRule | null;
-  const netFactor = computeNetFactor(shiftRule);
 
   const demandMap = new Map(demands.map((d: any) => [d.machine_code, d]));
   const assignmentsByMachine = new Map<string, typeof assignments>();
@@ -135,7 +116,7 @@ async function fetchLineOverviewData(
     }> = [];
 
     machineAssignments.forEach((a: any) => {
-      const hours = segmentNetHours(a.start_time, a.end_time, netFactor);
+      const hours = segmentGrossHours(a.start_time, a.end_time);
       assignedHours += hours;
 
       assignedPeople.push({
@@ -583,11 +564,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const res = NextResponse.json({ 
+    let competence_root_cause: CompetenceRootCause | undefined;
+    if (line && (rootCause.type === "competence" || gaps?.competence_status === "NO-GO")) {
+      try {
+        const eligibility = await getEligibilityByLine(supabaseAdmin, activeOrgId, line);
+        competence_root_cause = {
+          requiredSkillCodes: eligibility.required_skill_codes,
+          requiredSkills: eligibility.required_skills,
+          stationsRequired: eligibility.stations_required,
+          eligibleOperators: eligibility.employees
+            .filter((e) => e.eligible)
+            .slice(0, 5)
+            .map((e) => ({ employee_number: e.employee_number ?? "", name: e.name })),
+        };
+      } catch (err) {
+        console.error("root-cause: failed to get eligibility", err);
+      }
+    }
+
+    const res = NextResponse.json({
       root_cause: {
         ...rootCause,
         gaps,
-      }
+        competence_root_cause,
+      },
     });
     applySupabaseCookies(res, pendingCookies);
     return res;

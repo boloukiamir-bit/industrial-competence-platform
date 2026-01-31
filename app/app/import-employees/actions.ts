@@ -4,19 +4,39 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveOrgIdForRSC } from "@/lib/server/activeOrgRsc";
 import Papa from "papaparse";
 
-interface CsvRow {
-  name?: string;
-  employee_number?: string;
-  role?: string;
-  line?: string;
-  team?: string;
-  is_active?: string;
-}
+/** Aliases for CSV headers (lowercased). First match wins. Spaljisten uses employee_id, employee_name, source_sheet. */
+const COLUMN_ALIASES: Record<string, string[]> = {
+  name: ["name", "employee_name", "namn", "full_name"],
+  employee_number: ["employee_number", "employee_id", "employee number", "id", "anställningsnummer"],
+  role: ["role", "roll", "title", "job title"],
+  line: ["line", "linje", "source_sheet", "area", "area_code", "department"],
+  team: ["team", "lag", "shift", "skift"],
+  is_active: ["is_active", "active", "aktiv"],
+};
 
 interface ImportResult {
   success: boolean;
   message: string;
   count?: number;
+}
+
+/** Resolve which CSV header (if any) maps to each key. Uses first alias that exists in headers (lowercased). */
+function resolveHeaderMap(headers: string[]): Record<string, string | null> {
+  const headerSet = new Set(headers.map((h) => h.trim().toLowerCase()));
+  const map: Record<string, string | null> = {};
+  for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
+    const alias = aliases.find((a) => headerSet.has(a));
+    map[key] = alias ?? null;
+  }
+  return map;
+}
+
+/** Get normalized value for a key from a raw row using the header map. */
+function getValue(row: Record<string, unknown>, headerMap: Record<string, string | null>, key: string): string {
+  const header = headerMap[key];
+  if (!header) return "";
+  const val = row[header];
+  return typeof val === "string" ? val.trim() : "";
 }
 
 export async function importEmployeesFromCsv(formData: FormData): Promise<ImportResult> {
@@ -28,7 +48,7 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
 
   const text = await file.text();
 
-  const parseResult = Papa.parse<CsvRow>(text, {
+  const parseResult = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: true,
     transformHeader: (header) => header.trim().toLowerCase(),
@@ -47,14 +67,19 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
     return { success: false, message: "CSV file is empty" };
   }
 
-  const requiredColumns = ["name", "employee_number", "role", "line", "team"];
   const headers = Object.keys(rows[0] || {});
-  const missingColumns = requiredColumns.filter((col) => !headers.includes(col));
+  const headerMap = resolveHeaderMap(headers);
 
-  if (missingColumns.length > 0) {
+  if (!headerMap.name || !headerMap.employee_number) {
+    const missing = [
+      !headerMap.name && "name (or employee_name, namn)",
+      !headerMap.employee_number && "employee_number (or employee_id)",
+    ]
+      .filter(Boolean)
+      .join(", ");
     return {
       success: false,
-      message: `Missing required columns: ${missingColumns.join(", ")}`,
+      message: `Missing required columns: ${missing}. Accepted headers: name/employee_name, employee_number/employee_id; optional: role, line/source_sheet, team, is_active.`,
     };
   }
 
@@ -74,23 +99,27 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
   }[] = [];
 
   for (const row of rows) {
-    if (!row.name || !row.employee_number || !row.role || !row.line || !row.team) {
-      continue;
-    }
+    const name = getValue(row, headerMap, "name");
+    const employee_number = getValue(row, headerMap, "employee_number");
+    if (!name || !employee_number) continue;
+
+    const role = getValue(row, headerMap, "role");
+    const line = getValue(row, headerMap, "line");
+    const team = getValue(row, headerMap, "team");
+    const isActiveRaw = getValue(row, headerMap, "is_active");
 
     const isActive =
-      row.is_active === undefined ||
-      row.is_active === "" ||
-      row.is_active.toLowerCase() === "true" ||
-      row.is_active === "1";
+      isActiveRaw === "" ||
+      isActiveRaw.toLowerCase() === "true" ||
+      isActiveRaw === "1";
 
     employeesToUpsert.push({
       org_id: orgId,
-      name: row.name.trim(),
-      employee_number: row.employee_number.trim(),
-      role: row.role.trim(),
-      line: row.line.trim(),
-      team: row.team.trim(),
+      name,
+      employee_number,
+      role: role || "—",
+      line: line || "—",
+      team: team || "—",
       is_active: isActive,
     });
   }
@@ -102,7 +131,7 @@ export async function importEmployeesFromCsv(formData: FormData): Promise<Import
   const { supabase } = await createSupabaseServerClient();
   const { error } = await supabase
     .from("employees")
-    .upsert(employeesToUpsert, { onConflict: "employee_number" });
+    .upsert(employeesToUpsert, { onConflict: "org_id,employee_number" });
 
   if (error) {
     return { success: false, message: `Database error: ${error.message}` };

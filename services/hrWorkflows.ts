@@ -115,6 +115,7 @@ export async function startWorkflow(
     .from("employees")
     .select("name")
     .eq("org_id", orgId)
+    .eq("is_active", true)
     .eq("id", employeeId)
     .single();
 

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useOrg } from '@/hooks/useOrg';
 import { OrgGuard } from '@/components/OrgGuard';
-import { supabase } from '@/lib/supabaseClient';
 import { DataState, useDataState } from '@/components/DataState';
 import { apiGet, apiPost } from '@/lib/apiClient';
 import { 
@@ -63,7 +62,7 @@ function AdminUsersContent() {
     setError(null);
 
     try {
-      const data = await apiGet<{ members: Member[]; invites: Invite[] }>(`/api/admin/members?orgId=${currentOrg.id}`);
+      const data = await apiGet<{ members: Member[]; invites: Invite[] }>('/api/admin/members');
       setMembers(data.members || []);
       setInvites(data.invites || []);
     } catch (err) {
@@ -91,7 +90,6 @@ function AdminUsersContent() {
 
     try {
       await apiPost('/api/admin/invite', {
-        orgId: currentOrg.id,
         email: inviteEmail,
         role: inviteRole,
       });
@@ -133,7 +131,6 @@ function AdminUsersContent() {
 
     try {
       await apiPost('/api/admin/membership/disable', {
-        orgId: currentOrg.id,
         userId,
       });
       await fetchData();

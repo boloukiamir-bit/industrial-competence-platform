@@ -21,11 +21,14 @@ import {
   Shield,
   MessageSquare,
   Building2,
+  Image,
 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type {
   Employee,
   EmployeeSkill,
@@ -38,10 +41,24 @@ import type {
   OneToOneMeeting,
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
-import { useOrg } from "@/hooks/useOrg";
-import { getMeetingsForEmployee } from "@/services/oneToOne";
 
-type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "one-to-ones" | "documents" | "events" | "equipment";
+type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
+
+export type EmployeeProfileRow = {
+  photoUrl: string | null;
+  bio: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  country: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelation: string | null;
+  notes: string | null;
+  siteId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 type EmployeeData = {
   employee: Employee | null;
@@ -53,6 +70,7 @@ type EmployeeData = {
   currentSalary: SalaryRecord | null;
   salaryRevisions: SalaryRevision[];
   meetings: OneToOneMeeting[];
+  employeeProfile: EmployeeProfileRow;
 };
 
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
@@ -67,11 +85,23 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
   );
 }
 
+const EMPTY_EMPLOYEE_PROFILE: EmployeeProfileRow = {
+  photoUrl: null,
+  bio: null,
+  address: null,
+  city: null,
+  postalCode: null,
+  country: null,
+  emergencyContactName: null,
+  emergencyContactPhone: null,
+  emergencyContactRelation: null,
+  notes: null,
+};
+
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const { currentOrg } = useOrg();
 
   const [data, setData] = useState<EmployeeData>({
     employee: null,
@@ -83,13 +113,49 @@ export default function EmployeeDetailPage() {
     currentSalary: null,
     salaryRevisions: [],
     meetings: [],
+    employeeProfile: EMPTY_EMPLOYEE_PROFILE,
   });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("personal");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState<EmployeeProfileRow>(EMPTY_EMPLOYEE_PROFILE);
 
   useEffect(() => {
     async function loadData() {
-      if (!currentOrg) {
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+      // Tenant-scoped employee from API (session active_org_id)
+      const employeeRes = await fetch(`/api/employees/${id}`, { credentials: "include" });
+      const employeeJson = employeeRes.ok ? await employeeRes.json().catch(() => null) : null;
+      const empFromApi = employeeJson && employeeRes.ok
+        ? {
+            id: employeeJson.id,
+            name: employeeJson.name ?? "",
+            firstName: employeeJson.firstName,
+            lastName: employeeJson.lastName,
+            employeeNumber: employeeJson.employeeNumber ?? "",
+            email: employeeJson.email,
+            phone: employeeJson.phone,
+            dateOfBirth: employeeJson.dateOfBirth,
+            role: employeeJson.role ?? "",
+            line: employeeJson.line ?? "",
+            team: employeeJson.team ?? "",
+            employmentType: (employeeJson.employmentType ?? "permanent") as "permanent" | "temporary" | "consultant",
+            startDate: employeeJson.startDate,
+            contractEndDate: employeeJson.contractEndDate,
+            managerId: employeeJson.managerId,
+            managerName: employeeJson.managerName,
+            address: employeeJson.address,
+            city: employeeJson.city,
+            postalCode: employeeJson.postalCode,
+            country: employeeJson.country ?? "Sweden",
+            isActive: employeeJson.isActive ?? true,
+          }
+        : null;
+
+      if (!empFromApi) {
         setData({
           employee: null,
           skills: [],
@@ -100,33 +166,13 @@ export default function EmployeeDetailPage() {
           currentSalary: null,
           salaryRevisions: [],
           meetings: [],
+          employeeProfile: EMPTY_EMPLOYEE_PROFILE,
         });
         setLoading(false);
         return;
       }
-      const [
-        employeeRes,
-        skillsRes,
-        eventsRes,
-        docsRes,
-        equipRes,
-        reviewsRes,
-        salaryRes,
-        revisionsRes,
-        meetingsData,
-      ] = await Promise.all([
-        supabase.from("employees").select("*, manager:manager_id(name)").eq("org_id", currentOrg.id).eq("id", id).single(),
-        supabase.from("employee_skills").select("*, skills(*)").eq("employee_id", id),
-        supabase.from("person_events").select("*").eq("employee_id", id).order("due_date"),
-        supabase.from("documents").select("*").eq("employee_id", id).order("created_at", { ascending: false }),
-        supabase.from("employee_equipment").select("*, equipment(*)").eq("employee_id", id).eq("status", "assigned"),
-        supabase.from("employee_reviews").select("*, manager:manager_id(name), template:template_id(name)").eq("employee_id", id).order("review_date", { ascending: false }),
-        supabase.from("salary_records").select("*").eq("employee_id", id).order("effective_from", { ascending: false }).limit(1),
-        supabase.from("salary_revisions").select("*, manager:decided_by_manager_id(name)").eq("employee_id", id).order("revision_date", { ascending: false }),
-        getMeetingsForEmployee(id),
-      ]);
 
-      if (employeeRes.data) {
+      if (employeeRes.ok) {
         try {
           await logEmployeeAccess(id, "view_profile");
         } catch (e) {
@@ -134,138 +180,60 @@ export default function EmployeeDetailPage() {
         }
       }
 
-      const empData = employeeRes.data;
-      const managerData = empData?.manager as { name: string } | null;
-      
+      const profileRes = await fetch(`/api/employees/${id}/profile`, { credentials: "include" });
+      const profileJson = profileRes.ok ? await profileRes.json().catch(() => null) : null;
+      const profile = profileJson ?? {
+        skills: [],
+        events: [],
+        documents: [],
+        equipment: [],
+        reviews: [],
+        currentSalary: null,
+        salaryRevisions: [],
+        meetings: [],
+        employeeProfile: {},
+      };
+      const ep = profile.employeeProfile && typeof profile.employeeProfile === "object"
+        ? {
+            photoUrl: profile.employeeProfile.photoUrl ?? null,
+            bio: profile.employeeProfile.bio ?? null,
+            address: profile.employeeProfile.address ?? null,
+            city: profile.employeeProfile.city ?? null,
+            postalCode: profile.employeeProfile.postalCode ?? null,
+            country: profile.employeeProfile.country ?? null,
+            emergencyContactName: profile.employeeProfile.emergencyContactName ?? null,
+            emergencyContactPhone: profile.employeeProfile.emergencyContactPhone ?? null,
+            emergencyContactRelation: profile.employeeProfile.emergencyContactRelation ?? null,
+            notes: profile.employeeProfile.notes ?? null,
+            siteId: profile.employeeProfile.siteId ?? null,
+            createdAt: profile.employeeProfile.createdAt,
+            updatedAt: profile.employeeProfile.updatedAt,
+          }
+        : EMPTY_EMPLOYEE_PROFILE;
+
       setData({
-        employee: empData
-          ? {
-              id: empData.id,
-              name: empData.name || "",
-              firstName: empData.first_name || undefined,
-              lastName: empData.last_name || undefined,
-              employeeNumber: empData.employee_number || "",
-              email: empData.email || undefined,
-              phone: empData.phone || undefined,
-              dateOfBirth: empData.date_of_birth || undefined,
-              role: empData.role || "",
-              line: empData.line || "",
-              team: empData.team || "",
-              employmentType: empData.employment_type || "permanent",
-              startDate: empData.start_date || undefined,
-              contractEndDate: empData.contract_end_date || undefined,
-              managerId: empData.manager_id || undefined,
-              managerName: managerData?.name || undefined,
-              address: empData.address || undefined,
-              city: empData.city || undefined,
-              postalCode: empData.postal_code || undefined,
-              country: empData.country || "Sweden",
-              isActive: empData.is_active ?? true,
-            }
-          : null,
-        skills: (skillsRes.data || []).map((row) => {
-          const skill = row.skills as { name: string; code: string; category: string } | null;
-          return {
-            employeeId: row.employee_id,
-            skillId: row.skill_id,
-            level: row.level,
-            skillName: skill?.name,
-            skillCode: skill?.code,
-            skillCategory: skill?.category,
-          };
-        }),
-        events: (eventsRes.data || []).map((row) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          category: row.category,
-          title: row.title,
-          description: row.description,
-          dueDate: row.due_date,
-          completedDate: row.completed_date,
-          recurrence: row.recurrence,
-          ownerManagerId: row.owner_manager_id,
-          status: row.status,
-          notes: row.notes,
-        })),
-        documents: (docsRes.data || []).map((row) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          title: row.title,
-          type: row.type,
-          url: row.url,
-          createdAt: row.created_at,
-          validTo: row.valid_to,
-        })),
-        equipment: (equipRes.data || []).map((row) => {
-          const equip = row.equipment as { name: string; serial_number: string } | null;
-          return {
-            id: row.id,
-            employeeId: row.employee_id,
-            equipmentId: row.equipment_id,
-            equipmentName: equip?.name,
-            serialNumber: equip?.serial_number,
-            assignedDate: row.assigned_date,
-            returnDate: row.return_date,
-            status: row.status,
-          };
-        }),
-        reviews: (reviewsRes.data || []).map((row) => {
-          const manager = row.manager as { name: string } | null;
-          const template = row.template as { name: string } | null;
-          return {
-            id: row.id,
-            employeeId: row.employee_id,
-            managerId: row.manager_id,
-            managerName: manager?.name,
-            templateId: row.template_id,
-            templateName: template?.name,
-            reviewDate: row.review_date,
-            periodStart: row.period_start,
-            periodEnd: row.period_end,
-            overallRating: row.overall_rating,
-            summary: row.summary,
-            goals: row.goals,
-            notes: row.notes,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-          };
-        }),
-        currentSalary:
-          salaryRes.data && salaryRes.data.length > 0
-            ? {
-                id: salaryRes.data[0].id,
-                employeeId: salaryRes.data[0].employee_id,
-                effectiveFrom: salaryRes.data[0].effective_from,
-                salaryAmountSek: parseFloat(salaryRes.data[0].salary_amount_sek) || 0,
-                salaryType: salaryRes.data[0].salary_type || "monthly",
-                positionTitle: salaryRes.data[0].position_title || undefined,
-                notes: salaryRes.data[0].notes || undefined,
-                createdAt: salaryRes.data[0].created_at,
-                createdBy: salaryRes.data[0].created_by || undefined,
-              }
-            : null,
-        salaryRevisions: (revisionsRes.data || []).map((row) => {
-          const manager = row.manager as { name: string } | null;
-          return {
-            id: row.id,
-            employeeId: row.employee_id,
-            revisionDate: row.revision_date,
-            previousSalarySek: parseFloat(row.previous_salary_sek) || 0,
-            newSalarySek: parseFloat(row.new_salary_sek) || 0,
-            salaryType: row.salary_type || "monthly",
-            reason: row.reason || undefined,
-            decidedByManagerId: row.decided_by_manager_id || undefined,
-            decidedByManagerName: manager?.name || undefined,
-            documentId: row.document_id,
-            createdAt: row.created_at,
-          };
-        }),
-        meetings: meetingsData,
+        employee: empFromApi,
+        skills: profile.skills ?? [],
+        events: profile.events ?? [],
+        documents: profile.documents ?? [],
+        equipment: profile.equipment ?? [],
+        reviews: profile.reviews ?? [],
+        currentSalary: profile.currentSalary ?? null,
+        salaryRevisions: profile.salaryRevisions ?? [],
+        meetings: profile.meetings ?? [],
+        employeeProfile: ep,
       });
+      setProfileForm(ep);
       setLoading(false);
     }
     if (id) loadData();
-  }, [id, currentOrg]);
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab === "profile" && data.employeeProfile) {
+      setProfileForm(data.employeeProfile);
+    }
+  }, [activeTab, data.employeeProfile]);
 
   async function handleExportData() {
     const response = await fetch(`/api/gdpr/export-employee-data?employee_id=${id}`);
@@ -301,11 +269,12 @@ export default function EmployeeDetailPage() {
     );
   }
 
-  const { employee, skills, events, documents, equipment, reviews, currentSalary, salaryRevisions, meetings } = data;
+  const { employee, skills, events, documents, equipment, reviews, currentSalary, salaryRevisions, meetings, employeeProfile } = data;
 
   const navItems: { id: TabId; label: string; icon: React.ElementType; count?: number }[] = [
     { id: "personal", label: "Personal Data", icon: User },
     { id: "contact", label: "Contact Information", icon: Mail },
+    { id: "profile", label: "Edit profile", icon: Image },
     { id: "organisation", label: "Organisation", icon: Building2 },
     { id: "employment", label: "Job & Employment", icon: Briefcase },
     { id: "compensation", label: "Compensation", icon: Banknote },
@@ -427,6 +396,144 @@ export default function EmployeeDetailPage() {
                 <InfoRow icon={MapPin} label="Postal Code" value={employee.postalCode || "-"} />
                 <InfoRow icon={MapPin} label="Country" value={employee.country || "Sweden"} />
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "profile" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Edit profile</CardTitle>
+              <p className="text-sm text-muted-foreground">Photo, address, emergency contact, notes (upload later).</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="profile-photo_url">Photo URL</Label>
+                  <Input
+                    id="profile-photo_url"
+                    value={profileForm.photoUrl ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, photoUrl: e.target.value || null }))}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="profile-bio">Bio</Label>
+                  <Textarea
+                    id="profile-bio"
+                    value={profileForm.bio ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, bio: e.target.value || null }))}
+                    placeholder="Short bio"
+                    rows={2}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="profile-address">Address</Label>
+                  <Input
+                    id="profile-address"
+                    value={profileForm.address ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, address: e.target.value || null }))}
+                    placeholder="Street address"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-city">City</Label>
+                  <Input
+                    id="profile-city"
+                    value={profileForm.city ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, city: e.target.value || null }))}
+                    placeholder="City"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-postal_code">Postal code</Label>
+                  <Input
+                    id="profile-postal_code"
+                    value={profileForm.postalCode ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, postalCode: e.target.value || null }))}
+                    placeholder="Postal code"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-country">Country</Label>
+                  <Input
+                    id="profile-country"
+                    value={profileForm.country ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, country: e.target.value || null }))}
+                    placeholder="Country"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-emergency_name">Emergency contact name</Label>
+                  <Input
+                    id="profile-emergency_name"
+                    value={profileForm.emergencyContactName ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, emergencyContactName: e.target.value || null }))}
+                    placeholder="Name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-emergency_phone">Emergency contact phone</Label>
+                  <Input
+                    id="profile-emergency_phone"
+                    value={profileForm.emergencyContactPhone ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, emergencyContactPhone: e.target.value || null }))}
+                    placeholder="Phone"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-emergency_relation">Relation</Label>
+                  <Input
+                    id="profile-emergency_relation"
+                    value={profileForm.emergencyContactRelation ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, emergencyContactRelation: e.target.value || null }))}
+                    placeholder="e.g. Spouse, Parent"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="profile-notes">Notes</Label>
+                  <Textarea
+                    id="profile-notes"
+                    value={profileForm.notes ?? ""}
+                    onChange={(e) => setProfileForm((p) => ({ ...p, notes: e.target.value || null }))}
+                    placeholder="Internal notes"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <Button
+                disabled={profileSaving}
+                onClick={async () => {
+                  setProfileSaving(true);
+                  try {
+                    const res = await fetch(`/api/employees/${id}/profile`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        photo_url: profileForm.photoUrl ?? null,
+                        bio: profileForm.bio ?? null,
+                        address: profileForm.address ?? null,
+                        city: profileForm.city ?? null,
+                        postal_code: profileForm.postalCode ?? null,
+                        country: profileForm.country ?? null,
+                        emergency_contact_name: profileForm.emergencyContactName ?? null,
+                        emergency_contact_phone: profileForm.emergencyContactPhone ?? null,
+                        emergency_contact_relation: profileForm.emergencyContactRelation ?? null,
+                        notes: profileForm.notes ?? null,
+                      }),
+                      credentials: "include",
+                    });
+                    if (res.ok) {
+                      setData((prev) => ({ ...prev, employeeProfile: { ...profileForm } }));
+                    }
+                  } finally {
+                    setProfileSaving(false);
+                  }
+                }}
+                data-testid="button-save-profile"
+              >
+                {profileSaving ? "Saving…" : "Save"}
+              </Button>
             </CardContent>
           </Card>
         )}

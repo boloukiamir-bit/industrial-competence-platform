@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { pool } from "@/lib/db/pool";
 import { registerDevErrorHooks } from "@/lib/server/devErrorHooks";
 import { getRequestId } from "@/lib/server/requestId";
+import { lineShiftTargetId } from "@/lib/tomorrowsGapsDecisions";
 
 export const runtime = "nodejs";
 
@@ -79,13 +80,15 @@ export async function POST(request: NextRequest) {
         return res;
       }
 
-      const targetId = native_ref.shift_assignment_id as string;
+      const shiftAssignmentId = native_ref.shift_assignment_id as string;
 
-      // Verify the shift_assignment belongs to this org (tenant-safe)
+      // Load assignment with shift and station to derive (date, shift, line) for unified line_shift identity
       const { data: assignment, error: assignmentErr } = await supabaseAdmin
         .from("shift_assignments")
-        .select("org_id, id")
-        .eq("id", targetId)
+        .select(
+          "org_id, id, station:station_id(line), shift:shift_id(shift_date, shift_type)"
+        )
+        .eq("id", shiftAssignmentId)
         .eq("org_id", orgId)
         .single();
 
@@ -99,7 +102,6 @@ export async function POST(request: NextRequest) {
         return res;
       }
 
-      // Get active site filter if available
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("active_site_id")
@@ -108,8 +110,69 @@ export async function POST(request: NextRequest) {
 
       const activeSiteId = profile?.active_site_id as string | null | undefined;
 
-      // Upsert resolution using ON CONFLICT with the unique index
-      // The unique index is: (decision_type, target_type, target_id) WHERE status='active'
+      const station = assignment.station as { line?: string | null } | null | undefined;
+      const shift = assignment.shift as { shift_date?: string | null; shift_type?: string | null } | null | undefined;
+      const date = shift?.shift_date ? String(shift.shift_date).slice(0, 10) : "";
+      const shiftType = shift?.shift_type ? String(shift.shift_type).trim().toLowerCase() : "";
+      const line = station?.line ? String(station.line).trim() : "";
+
+      const useLineShift = Boolean(date && shiftType && line);
+
+      if (useLineShift) {
+        const targetId = lineShiftTargetId(date, shiftType, line);
+        const root_cause = JSON.stringify({
+          type: "cockpit",
+          message: "Resolved from Cockpit",
+          details: { shift_assignment_id: shiftAssignmentId, date, shift: shiftType, line },
+        });
+        const actions = JSON.stringify({ chosen: "acknowledged" });
+
+        const upsertQuery = `
+          INSERT INTO execution_decisions (
+            org_id,
+            site_id,
+            decision_type,
+            target_type,
+            target_id,
+            reason,
+            root_cause,
+            actions,
+            status,
+            created_by,
+            created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, NOW())
+          ON CONFLICT (decision_type, target_type, target_id)
+          DO UPDATE SET
+            reason = EXCLUDED.reason,
+            root_cause = EXCLUDED.root_cause,
+            actions = EXCLUDED.actions
+          RETURNING id, org_id, decision_type, target_type, target_id, reason, created_at
+        `;
+
+        const result = await pool.query(upsertQuery, [
+          orgId,
+          activeSiteId || null,
+          "resolve_no_go",
+          "line_shift",
+          targetId,
+          note || null,
+          root_cause,
+          actions,
+          "active",
+          userId,
+        ]);
+
+        const res = NextResponse.json({
+          success: true,
+          resolution: result.rows[0],
+        });
+        res.headers.set("X-Request-Id", requestId);
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+
+      // Fallback: station has no line — write legacy shift_assignment decision for backwards compat
       const upsertQuery = `
         INSERT INTO execution_decisions (
           org_id,
@@ -124,11 +187,8 @@ export async function POST(request: NextRequest) {
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
         ON CONFLICT (decision_type, target_type, target_id)
-        WHERE status = 'active'
         DO UPDATE SET
-          reason = EXCLUDED.reason,
-          created_by = EXCLUDED.created_by,
-          created_at = NOW()
+          reason = EXCLUDED.reason
         RETURNING id, org_id, decision_type, target_type, target_id, reason, created_at
       `;
 
@@ -137,7 +197,7 @@ export async function POST(request: NextRequest) {
         activeSiteId || null,
         "resolve_no_go",
         "shift_assignment",
-        targetId,
+        shiftAssignmentId,
         note || null,
         "active",
         userId,

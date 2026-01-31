@@ -1,7 +1,7 @@
 // app/employees/[id]/competence/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getEmployeeCompetenceProfile,
@@ -13,8 +13,9 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 export default function EmployeeCompetencePage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const resolvedParams = use(params);
   const { loading: authLoading } = useAuthGuard();
 
   if (authLoading) {
@@ -25,7 +26,7 @@ export default function EmployeeCompetencePage({
     );
   }
 
-  return <EmployeeCompetenceContent params={params} />;
+  return <EmployeeCompetenceContent params={resolvedParams} />;
 }
 
 function EmployeeCompetenceContent({

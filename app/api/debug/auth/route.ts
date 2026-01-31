@@ -1,20 +1,24 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { resolveAuthFromRequest } from "@/lib/server/auth";
 
 /**
  * GET /api/debug/auth
- * DEV only. Returns { hasCookieSession, cookieKeys } for the current request.
- * Use to verify sb-* cookies exist after login.
+ * DEV only. Returns { ok, userId, email } for cookie or bearer auth.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (process.env.NODE_ENV !== "development") {
     return NextResponse.json({ error: "Not available outside development" }, { status: 404 });
   }
 
-  const cookieStore = await cookies();
-  const all = cookieStore.getAll();
-  const cookieKeys = all.map((c) => c.name).filter((n) => n.startsWith("sb-"));
-  const hasCookieSession = cookieKeys.length > 0;
+  const resolved = await resolveAuthFromRequest(request);
+  if (!resolved.ok) {
+    return NextResponse.json({ ok: false, error: resolved.error }, { status: 401 });
+  }
 
-  return NextResponse.json({ hasCookieSession, cookieKeys });
+  return NextResponse.json({
+    ok: true,
+    userId: resolved.user.id,
+    email: resolved.user.email ?? null,
+  });
 }
