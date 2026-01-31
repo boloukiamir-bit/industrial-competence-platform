@@ -96,7 +96,19 @@ export async function GET(request: NextRequest) {
               .eq("org_id", activeOrgId)
               .in("shift_id", shiftIds)
           : { data: [], error: null },
-        supabaseAdmin.from("pl_attendance").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shift),
+        supabaseAdmin
+          .from("attendance_records")
+          .select(`
+            id,
+            work_date,
+            shift_type,
+            status,
+            minutes_present,
+            employee:employees!inner(employee_number)
+          `)
+          .eq("org_id", activeOrgId)
+          .eq("work_date", date)
+          .eq("shift_type", shift),
         employeesQuery,
       ]);
 
@@ -107,7 +119,20 @@ export async function GET(request: NextRequest) {
 
     const demands = demandRes.data || [];
     const rawAssignments = assignmentsRes.data || [];
-    const attendance = attendanceRes.data || [];
+    const rawAttendance = attendanceRes.data || [];
+    const attendance = rawAttendance.map((a: { id: string; work_date?: string; shift_type?: string; status?: string; employee?: { employee_number?: string } | { employee_number?: string }[] }) => {
+      const emp = Array.isArray(a.employee) ? a.employee[0] : a.employee;
+      return {
+      id: a.id,
+      employee_code: emp?.employee_number ?? "",
+      plan_date: a.work_date ?? date,
+      shift_type: a.shift_type ?? shift,
+      status: a.status,
+      available_from: null,
+      available_to: null,
+      note: null,
+    };
+    });
     const employees = (employeesRes.data || []) as unknown as Array<{
       id: string;
       employee_number: string;
@@ -184,15 +209,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const presentCount = attendance.filter(
-      (a: { status?: string }) => a.status === "present"
-    ).length;
-    const partialCount = attendance.filter(
-      (a: { status?: string }) => a.status === "partial"
-    ).length;
-    const absentCount = attendance.filter(
-      (a: { status?: string }) => a.status === "absent"
-    ).length;
+    const presentCount = attendance.filter((a: { status?: string }) => a.status === "present").length;
+    const partialCount = attendance.filter((a: { status?: string }) => a.status === "partial").length;
+    const absentCount = attendance.filter((a: { status?: string }) => a.status === "absent").length;
 
     let totalRequired = 0;
     let totalAssigned = 0;
@@ -358,9 +377,9 @@ export async function GET(request: NextRequest) {
           plan_date?: string;
           shift_type?: string;
           status?: string;
-          available_from?: string;
-          available_to?: string;
-          note?: string;
+          available_from?: string | null;
+          available_to?: string | null;
+          note?: string | null;
         }) => ({
           id: a.id,
           employeeCode: a.employee_code,

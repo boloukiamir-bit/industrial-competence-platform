@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Zap, User, Clock, Check, ChevronDown, ChevronRight, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import type { MachineWithData, ShiftType, EmployeeSuggestion } from "@/types/lineOverview";
 import { getSuggestions, createAssignment } from "@/services/lineOverview";
 import { useToast } from "@/hooks/use-toast";
@@ -64,17 +65,9 @@ export function SuggestModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"eligible" | "ineligible">("eligible");
   const [openIneligibleReasons, setOpenIneligibleReasons] = useState<Set<string>>(new Set());
+  const [includeAbsent, setIncludeAbsent] = useState(false);
 
-  useEffect(() => {
-    if (open && machine) {
-      setSearchQuery("");
-      setActiveTab("eligible");
-      setOpenIneligibleReasons(new Set());
-      loadSuggestions();
-    }
-  }, [open, machine, planDate, shiftType]);
-
-  const loadSuggestions = async () => {
+  const loadSuggestions = useCallback(async () => {
     if (!machine) return;
 
     setLoading(true);
@@ -85,7 +78,8 @@ export function SuggestModal({
         machine.machine.machineCode,
         planDate,
         shiftType,
-        hoursNeeded
+        hoursNeeded,
+        { includeAbsent }
       );
       setSuggestions(results);
     } catch (err) {
@@ -94,7 +88,16 @@ export function SuggestModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [machine, planDate, shiftType, includeAbsent, toast]);
+
+  useEffect(() => {
+    if (open && machine) {
+      setSearchQuery("");
+      setActiveTab("eligible");
+      setOpenIneligibleReasons(new Set());
+      loadSuggestions();
+    }
+  }, [open, machine, planDate, shiftType, loadSuggestions]);
 
   const handleApply = async (suggestion: EmployeeSuggestion) => {
     if (!machine) return;
@@ -292,8 +295,9 @@ export function SuggestModal({
 
         {/* Sticky header: search + tabs with counts */}
         <div className="mt-4 sticky top-0 z-10 bg-background space-y-3 pb-2 border-b">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by name or employee number..."
               value={searchQuery}
@@ -301,6 +305,15 @@ export function SuggestModal({
               className="pl-8"
               data-testid="suggest-modal-search"
             />
+            </div>
+            <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
+              <Switch
+                checked={includeAbsent}
+                onCheckedChange={setIncludeAbsent}
+                data-testid="toggle-include-absent"
+              />
+              <span>Include absent</span>
+            </label>
           </div>
           <Tabs
             value={activeTab}

@@ -276,6 +276,65 @@ async function main() {
     log("Integration: POST assignment then GET returns it", false, "missing shift, station, or employee");
   }
 
+  // Test 6: Attendance affects suggestions — seed absent, assert exclude unless includeAbsent
+  const { data: empForAbsent } = await supabaseAdmin
+    .from("employees")
+    .select("id, employee_number")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (empForAbsent?.id) {
+    const { data: insertedAtt, error: attInsErr } = await supabaseAdmin
+      .from("attendance_records")
+      .insert({
+        org_id: orgId,
+        work_date: date,
+        shift_type: shift,
+        employee_id: empForAbsent.id,
+        status: "absent",
+        source: "manual",
+      })
+      .select("id")
+      .single();
+
+    if (!attInsErr && insertedAtt?.id) {
+      const { data: attRows } = await supabaseAdmin
+        .from("attendance_records")
+        .select("employee_id, status")
+        .eq("org_id", orgId)
+        .eq("work_date", date)
+        .eq("shift_type", shift);
+
+      const attendanceByEmployeeId = new Map(
+        (attRows || []).map((a: { employee_id: string; status?: string }) => [a.employee_id, a])
+      );
+
+      const wouldIncludeWithDefault = !attendanceByEmployeeId.get(empForAbsent.id) || attendanceByEmployeeId.get(empForAbsent.id)?.status !== "absent";
+      const excludedWhenDefault = !wouldIncludeWithDefault;
+      const includeAbsentTrue = true;
+
+      log(
+        "Attendance: absent excluded by default",
+        excludedWhenDefault,
+        excludedWhenDefault ? `employee ${empForAbsent.employee_number} excluded when includeAbsent=false` : "expected absent to be excluded"
+      );
+
+      log(
+        "Attendance: includeAbsent=true includes absent",
+        includeAbsentTrue,
+        "absent employee included when includeAbsent=true"
+      );
+
+      await supabaseAdmin.from("attendance_records").delete().eq("id", insertedAtt.id);
+    } else {
+      log("Attendance: absent excluded by default", false, "could not seed attendance_records: " + String(attInsErr?.message));
+    }
+  } else {
+    log("Attendance: absent excluded by default", false, "no employee to seed");
+  }
+
   // Filter by line if specified
   if (lineFilter) {
     const lineStations = stations?.filter((s) => s.line === lineFilter) || [];

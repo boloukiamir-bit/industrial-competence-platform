@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Cog, Plus, Trash2, User, Clock, Save, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import type { MachineWithData, PLEmployee, PLAttendance, ShiftType } from "@/types/lineOverview";
 import { createAssignment, deleteAssignment, updateAssignment } from "@/services/lineOverview";
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +60,7 @@ export function AssignmentDrawer({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
+  const [includeAbsent, setIncludeAbsent] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -92,10 +94,14 @@ export function AssignmentDrawer({
     s === "present" ? 0 : s === "partial" ? 1 : s === "absent" ? 2 : 3;
   selectableEmployees.sort((a, b) => statusOrder(a.status) - statusOrder(b.status));
 
+  const employeesToShow = includeAbsent
+    ? selectableEmployees
+    : selectableEmployees.filter((e) => e.status !== "absent");
+
   const q = employeeSearchQuery.trim().toLowerCase();
   const filteredEmployees = !q
-    ? selectableEmployees
-    : selectableEmployees.filter((emp) => {
+    ? employeesToShow
+    : employeesToShow.filter((emp) => {
         const name = (emp.name ?? "").toLowerCase();
         const code = (emp.code ?? "").toLowerCase();
         return name.includes(q) || code.includes(q);
@@ -276,7 +282,17 @@ export function AssignmentDrawer({
                 <h4 className="font-medium text-sm">New Assignment</h4>
 
                 <div className="space-y-2">
-                  <Label>Employee</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Employee</Label>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <Switch
+                        checked={includeAbsent}
+                        onCheckedChange={setIncludeAbsent}
+                        data-testid="assignment-drawer-include-absent"
+                      />
+                      <span>Include absent</span>
+                    </label>
+                  </div>
                   <div className="relative mb-2">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -317,7 +333,7 @@ export function AssignmentDrawer({
                   </Select>
                   {q && (
                     <p className="text-xs text-muted-foreground">
-                      Showing {filteredEmployees.length} of {selectableEmployees.length} employees
+                      Showing {filteredEmployees.length} of {employeesToShow.length} employees
                     </p>
                   )}
                 </div>
@@ -364,12 +380,20 @@ export function AssignmentDrawer({
           <div>
             <div className="flex items-center justify-between gap-2 mb-3">
               <h3 className="font-semibold">Available Employees</h3>
-              {selectableEmployees.length > 0 && (
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {q ? `${filteredEmployees.length} of ${selectableEmployees.length}` : selectableEmployees.length}
-                </span>
-              )}
+              <label className="flex items-center gap-2 text-xs cursor-pointer shrink-0">
+                <Switch
+                  checked={includeAbsent}
+                  onCheckedChange={setIncludeAbsent}
+                  data-testid="assignment-drawer-available-include-absent"
+                />
+                <span>Include absent</span>
+              </label>
             </div>
+            {employeesToShow.length > 0 && (
+              <span className="text-xs text-muted-foreground block mb-2">
+                {q ? `${filteredEmployees.length} of ${employeesToShow.length}` : employeesToShow.length}
+              </span>
+            )}
             <div className="relative mb-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -381,7 +405,7 @@ export function AssignmentDrawer({
               />
             </div>
             <div className="space-y-1 max-h-[40vh] overflow-y-auto">
-              {selectableEmployees.length === 0 ? (
+              {employeesToShow.length === 0 ? (
                 <div className="text-center py-4 text-muted-foreground text-sm">
                   No employees available for this shift
                 </div>

@@ -243,14 +243,21 @@ export async function getSuggestions(
   machineCode: string,
   date: string,
   shift: ShiftType,
-  hoursNeeded: number
+  hoursNeeded: number,
+  options?: { includeAbsent?: boolean }
 ): Promise<EmployeeSuggestion[]> {
   const shiftParam = shift.toLowerCase();
   const response = await fetch("/api/line-overview/suggestions", {
     method: "POST",
     headers: withDevBearer({ "Content-Type": "application/json" }),
     credentials: "include",
-    body: JSON.stringify({ machineCode, date, shift: shiftParam, hoursNeeded }),
+    body: JSON.stringify({
+      machineCode,
+      date,
+      shift: shiftParam,
+      hoursNeeded,
+      includeAbsent: options?.includeAbsent ?? false,
+    }),
   });
   
   if (!response.ok) {

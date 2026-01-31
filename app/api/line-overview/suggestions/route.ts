@@ -17,6 +17,7 @@ const suggestionsSchema = z.object({
   date: z.string(),
   shift: z.string(),
   hoursNeeded: z.number().positive(),
+  includeAbsent: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const { machineCode, date, shift } = parsed.data;
+    const { machineCode, date, shift, includeAbsent = false } = parsed.data;
     const shiftType = normalizeShiftTypeOrDefault(shift);
 
     let lineCode: string | null = null;
@@ -92,7 +93,12 @@ export async function POST(request: NextRequest) {
 
     const [employeesRes, attendanceRes, assignmentsRes, requirementRowsRes] = await Promise.all([
       employeesQuery,
-      supabaseAdmin.from("pl_attendance").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shiftType),
+      supabaseAdmin
+        .from("attendance_records")
+        .select("employee_id, status")
+        .eq("org_id", activeOrgId)
+        .eq("work_date", date)
+        .eq("shift_type", shiftType),
       supabaseAdmin.from("pl_assignment_segments").select("*").eq("org_id", activeOrgId).eq("plan_date", date).eq("shift_type", shiftType),
       lineCode
         ? supabaseAdmin
@@ -146,16 +152,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const attendanceMap = new Map(
-      attendance.map((a: { employee_code: string; status?: string }) => [a.employee_code, a])
+    const attendanceByEmployeeId = new Map(
+      (attendance || []).map((a: { employee_id: string; status?: string }) => [a.employee_id, a])
     );
 
     const suggestions = employees
-      .filter((emp: { employee_number: string }) => {
-        const att = attendanceMap.get(emp.employee_number) as
-          | { status?: string }
-          | undefined;
-        return !att || att.status === "present";
+      .filter((emp: { id: string; employee_number: string }) => {
+        const att = attendanceByEmployeeId.get(emp.id) as { status?: string } | undefined;
+        if (includeAbsent) return true;
+        return !att || att.status !== "absent";
       })
       .map((emp: { id: string; employee_number: string; name: string }) => {
         const empAssignments = assignments.filter((a: { employee_code: string }) => a.employee_code === emp.employee_number);
