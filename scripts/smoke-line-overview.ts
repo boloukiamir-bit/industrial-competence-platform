@@ -7,11 +7,14 @@
  * - Error handling (401 for invalid auth, 400 for invalid shift)
  * 
  * Usage:
- *   tsx scripts/smoke-line-overview.ts [date] [shift] [line]
- * 
+ *   tsx scripts/smoke-line-overview.ts [date] [shift] [line] [--org <uuid>]
+ *
+ * Org id (for headless/CI): env ORG_ID or --org <uuid>. If omitted, uses first active org.
+ *
  * Example:
  *   tsx scripts/smoke-line-overview.ts 2026-02-02 Day BEA
- *   tsx scripts/smoke-line-overview.ts 2026-02-02 day BEA  # lowercase works
+ *   ORG_ID=<uuid> tsx scripts/smoke-line-overview.ts 2026-02-02 Day BEA
+ *   tsx scripts/smoke-line-overview.ts 2026-02-02 Day BEA --org <uuid>
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -44,32 +47,70 @@ function log(test: string, passed: boolean, details?: string, data?: unknown) {
   }
 }
 
+function parseArgs(argv: string[]): { date: string; shift: string; lineFilter: string | null; orgArg: string | null } {
+  const filtered: string[] = [];
+  let orgArg: string | null = null;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--org" && argv[i + 1]) {
+      orgArg = argv[i + 1];
+      i++;
+      continue;
+    }
+    filtered.push(argv[i]);
+  }
+  return {
+    date: filtered[0] || "2026-02-02",
+    shift: filtered[1] || "Day",
+    lineFilter: filtered[2] ?? null,
+    orgArg,
+  };
+}
+
 async function main() {
-  const args = process.argv.slice(2);
-  const date = args[0] || "2026-02-02";
-  const shift = args[1] || "Day";
-  const lineFilter = args[2] || null;
+  const { date, shift, lineFilter, orgArg } = parseArgs(process.argv.slice(2));
+  const orgIdOverride = process.env.ORG_ID?.trim() || orgArg?.trim() || null;
 
   console.log("\n🔍 Line Overview Smoke Test");
   console.log(`   Date: ${date}`);
   console.log(`   Shift: ${shift}`);
   console.log(`   Line: ${lineFilter || "all"}\n`);
 
-  // Get first active org
-  const { data: orgs, error: orgsError } = await supabaseAdmin
-    .from("organizations")
-    .select("id, name")
-    .eq("is_active", true)
-    .limit(1);
+  let orgId: string;
+  let orgName: string;
+  let orgSource: "env" | "arg" | "active";
 
-  if (orgsError || !orgs || orgs.length === 0) {
-    log("Get active org", false, "No active organizations found");
-    return;
+  if (orgIdOverride) {
+    orgId = orgIdOverride;
+    orgSource = process.env.ORG_ID?.trim() ? "env" : "arg";
+    const { data: org, error: orgError } = await supabaseAdmin
+      .from("organizations")
+      .select("id, name")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (orgError || !org) {
+      log("Resolve org", false, orgError?.message || "Organization not found");
+      console.error("\n❌ Invalid ORG_ID/--org: organization not found. Check UUID and DB.");
+      process.exit(1);
+    }
+    orgName = org.name;
+    log("Resolve org", true, `${orgName} (${orgId}) [source: ${orgSource}]`);
+  } else {
+    const { data: orgs, error: orgsError } = await supabaseAdmin
+      .from("organizations")
+      .select("id, name")
+      .eq("is_active", true)
+      .limit(1);
+
+    if (orgsError || !orgs || orgs.length === 0) {
+      log("Get active org", false, "No active organizations found");
+      console.error("\n❌ No org id: set ORG_ID or --org <uuid>, or ensure an active organization exists.");
+      process.exit(1);
+    }
+    orgId = orgs[0].id;
+    orgName = orgs[0].name;
+    orgSource = "active";
+    log("Get active org", true, `${orgName} (${orgId}) [source: ${orgSource}]`);
   }
-
-  const orgId = orgs[0].id;
-  const orgName = orgs[0].name;
-  log("Get active org", true, `${orgName} (${orgId})`);
 
   // Test 1: Fetch stations
   const { data: stations, error: stationsError } = await supabaseAdmin
