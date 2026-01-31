@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
       const shiftRel = sa.shift as { shift_date?: string; shift_type?: string; line?: string } | null;
       const stationRel = sa.station as { code?: string } | null;
       const sDate = shiftRel?.shift_date ?? date;
-      const sType = shiftRel?.shift_type ?? shiftType;
+      const sType: string = shiftRel?.shift_type ?? shiftType;
       if (sType === shiftType) {
         conflicts.push({
           shift_date: sDate,
