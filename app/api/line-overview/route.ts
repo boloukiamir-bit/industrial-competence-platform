@@ -212,6 +212,10 @@ export async function GET(request: NextRequest) {
     const presentCount = attendance.filter((a: { status?: string }) => a.status === "present").length;
     const partialCount = attendance.filter((a: { status?: string }) => a.status === "partial").length;
     const absentCount = attendance.filter((a: { status?: string }) => a.status === "absent").length;
+    const attendanceEmployeeCodes = new Set(attendance.map((a: { employee_code?: string }) => a.employee_code));
+    const unknownCount = employees.filter(
+      (e: { employee_number: string }) => !attendanceEmployeeCodes.has(e.employee_number)
+    ).length;
 
     let totalRequired = 0;
     let totalAssigned = 0;
@@ -364,6 +368,7 @@ export async function GET(request: NextRequest) {
         presentCount,
         partialCount,
         absentCount,
+        unknownCount,
       },
       employees: employees.map((e: { id: string; employee_number: string; name: string }) => ({
         id: e.id,

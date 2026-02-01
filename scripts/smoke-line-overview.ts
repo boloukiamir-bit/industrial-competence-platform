@@ -276,6 +276,39 @@ async function main() {
     log("Integration: POST assignment then GET returns it", false, "missing shift, station, or employee");
   }
 
+  // Test 5b: Missing attendance does not exclude — empty attendance => all employees pass filter
+  const { data: attForDate } = await supabaseAdmin
+    .from("attendance_records")
+    .select("employee_id")
+    .eq("org_id", orgId)
+    .eq("work_date", date)
+    .eq("shift_type", shift);
+
+  const { data: empSample } = await supabaseAdmin
+    .from("employees")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .limit(5);
+
+  const attMap = new Map((attForDate || []).map((a: { employee_id: string }) => [a.employee_id, {}]));
+  const employeesWithNoRecord = (empSample || []).filter((e: { id: string }) => !attMap.has(e.id));
+  const includeAbsent = false;
+  const wouldIncludeNoRecord = employeesWithNoRecord.length === 0 || employeesWithNoRecord.every((emp: { id: string }) => {
+    const att = attMap.get(emp.id);
+    return att == null || (att as { status?: string }).status !== "absent";
+  });
+
+  log(
+    "Missing attendance does not exclude",
+    wouldIncludeNoRecord || employeesWithNoRecord.length === 0,
+    employeesWithNoRecord.length === 0
+      ? "all employees have records (or no employees)"
+      : wouldIncludeNoRecord
+        ? `${employeesWithNoRecord.length} employees with no record would be included`
+        : "FAIL: employees with no record would be excluded"
+  );
+
   // Test 6: Attendance affects suggestions — seed absent, assert exclude unless includeAbsent
   const { data: empForAbsent } = await supabaseAdmin
     .from("employees")

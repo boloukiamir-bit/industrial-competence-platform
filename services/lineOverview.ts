@@ -114,6 +114,7 @@ export function mapLineOverviewApiData(data: any): LineOverviewData {
     presentCount: data.kpis?.presentCount || 0,
     partialCount: data.kpis?.partialCount || 0,
     absentCount: data.kpis?.absentCount || 0,
+    unknownCount: data.kpis?.unknownCount ?? 0,
   };
 
   const attendance: PLAttendance[] = (data.attendance || []).map((a: any) => ({
@@ -213,6 +214,7 @@ export function mapWeekOverviewApiData(
     presentCount: data.kpis?.presentCount || 0,
     partialCount: data.kpis?.partialCount || 0,
     absentCount: data.kpis?.absentCount || 0,
+    unknownCount: data.kpis?.unknownCount ?? 0,
   };
 
   return {

@@ -156,11 +156,13 @@ export async function POST(request: NextRequest) {
       (attendance || []).map((a: { employee_id: string; status?: string }) => [a.employee_id, a])
     );
 
+    // LEFT JOIN semantics: exclude ONLY explicit status='absent'. No attendance row = included.
+    // Equivalent to SQL: status IS DISTINCT FROM 'absent' (NULL passes).
     const suggestions = employees
       .filter((emp: { id: string; employee_number: string }) => {
-        const att = attendanceByEmployeeId.get(emp.id) as { status?: string } | undefined;
         if (includeAbsent) return true;
-        return !att || att.status !== "absent";
+        const att = attendanceByEmployeeId.get(emp.id) as { status?: string } | undefined;
+        return att == null || att.status !== "absent";
       })
       .map((emp: { id: string; employee_number: string; name: string }) => {
         const empAssignments = assignments.filter((a: { employee_code: string }) => a.employee_code === emp.employee_number);

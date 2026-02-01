@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { useOrg } from "@/hooks/useOrg";
 import { OrgGuard } from "@/components/OrgGuard";
 import { Badge } from "@/components/ui/badge";
+import { withDevBearer } from "@/lib/devBearer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -88,6 +90,7 @@ export default function RequirementsPage() {
   const searchParams = useSearchParams();
   const initialLine = searchParams.get("line")?.trim() || "";
   const { toast, toasts } = useToast();
+  const { isAdminOrHr } = useOrg();
 
   const [line, setLine] = useState(initialLine || "BEA");
   const [search, setSearch] = useState("");
@@ -117,7 +120,11 @@ export default function RequirementsPage() {
       const params = new URLSearchParams();
       if (line) params.set("line", line);
       if (searchDebounced.trim()) params.set("search", searchDebounced.trim());
-      const res = await fetch(`/api/requirements?${params}`, { cache: "no-store" });
+      const res = await fetch(`/api/requirements?${params}`, {
+        cache: "no-store",
+        credentials: "include",
+        headers: withDevBearer(),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || "Failed to load");
@@ -150,10 +157,15 @@ export default function RequirementsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  const pendingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+
   const toggleRequirement = useCallback(
     async (stationId: string, skillId: string, prevChecked: boolean, newChecked: boolean) => {
       const key = `${stationId}:${skillId}`;
-      if (pending.has(key)) {
+      if (pendingRef.current.has(key)) {
         toast({ title: "Please wait for the previous change to save" });
         return;
       }
@@ -168,10 +180,15 @@ export default function RequirementsPage() {
         return next;
       });
 
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[DEV requirements] toggle", { stationId, skillId, newChecked });
+      }
+
       try {
         const res = await fetch("/api/requirements/upsert", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: withDevBearer({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify({
             station_id: stationId,
             skill_id: skillId,
@@ -218,6 +235,7 @@ export default function RequirementsPage() {
             toast({ title: "Updated requirements" });
           }
         }
+        await loadData();
       } catch (err) {
         setLocalReqs((prev) => {
           const next = { ...prev };
@@ -239,7 +257,7 @@ export default function RequirementsPage() {
         });
       }
     },
-    [pending, toast]
+    [toast, loadData]
   );
 
   const handleHardBlockRevert = useCallback(async () => {
@@ -261,7 +279,8 @@ export default function RequirementsPage() {
     try {
       const res = await fetch("/api/requirements/upsert", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: withDevBearer({ "Content-Type": "application/json" }),
+        credentials: "include",
         body: JSON.stringify({
           station_id: stationId,
           skill_id: skillId,
@@ -396,6 +415,11 @@ export default function RequirementsPage() {
                   <RequirementsBadge health={health} className="ml-auto" />
                 )}
               </div>
+              {!isAdminOrHr && selectedStation && (
+                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-200">
+                  Read-only (admin/hr only)
+                </div>
+              )}
               <div className="p-4 max-h-[500px] overflow-y-auto">
                 {!selectedStation ? (
                   <p className="text-sm text-gray-500">
@@ -432,7 +456,7 @@ export default function RequirementsPage() {
                                       c === true
                                     )
                                   }
-                                  disabled={isPending}
+                                  disabled={isPending || !isAdminOrHr}
                                 />
                                 <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
                                   {skill.name} ({skill.code})

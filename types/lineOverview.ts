@@ -123,6 +123,7 @@ export interface LineOverviewMetrics {
   presentCount: number;
   partialCount: number;
   absentCount: number;
+  unknownCount?: number;
 }
 
 export interface LineOverviewData {
