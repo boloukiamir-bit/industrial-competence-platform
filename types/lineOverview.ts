@@ -138,11 +138,15 @@ export interface EmployeeSuggestion {
   currentAssignedHours: number;
   availableHours: number;
   score: number;
+  /** Server-computed; never derived in UI. */
   eligible: boolean;
+  /** Server-provided reason codes when ineligible (e.g. MISSING_SKILLS, ABSENT, NO_STATION_COVERAGE). */
+  reasons: string[];
+  requiredSkillsCount: number;
+  skillsPassedCount: number;
+  stationCoverage: { covered: number; required: number };
+  /** Alias for stationCoverage.covered for backward compatibility. */
   stationsPassed: number;
+  /** Alias for stationCoverage.required for backward compatibility. */
   stationsRequired: number;
-  /** Unique skills passed (when present from eligibility). */
-  skillsPassedCount?: number;
-  /** Unique skills required for line (when present from eligibility). */
-  requiredSkillsCount?: number;
 }

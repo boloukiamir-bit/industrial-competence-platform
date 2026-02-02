@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { withDevBearer } from "@/lib/devBearer";
 import {
   User,
   Mail,
@@ -22,6 +23,7 @@ import {
   MessageSquare,
   Building2,
   Image,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +44,7 @@ import type {
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
 
-type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
+type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "compliance" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
 
 export type EmployeeProfileRow = {
   photoUrl: string | null;
@@ -119,6 +121,9 @@ export default function EmployeeDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>("personal");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState<EmployeeProfileRow>(EMPTY_EMPLOYEE_PROFILE);
+  type ComplianceItem = { category: string; name: string; status: string; valid_to: string | null; days_left: number | null };
+  const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>([]);
+  const [complianceLoading, setComplianceLoading] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -229,6 +234,41 @@ export default function EmployeeDetailPage() {
     if (id) loadData();
   }, [id]);
 
+  const loadCompliance = useCallback(async () => {
+    if (!id) return;
+    setComplianceLoading(true);
+    try {
+      const res = await fetch(`/api/compliance/employee?employeeId=${encodeURIComponent(id)}`, {
+        credentials: "include",
+        headers: withDevBearer(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok && Array.isArray(json.items)) {
+        setComplianceItems(
+          json.items.map((i: { category: string; name: string; status: string; valid_to: string | null; days_left: number | null }) => ({
+            category: i.category,
+            name: i.name,
+            status: i.status,
+            valid_to: i.valid_to ?? null,
+            days_left: i.days_left ?? null,
+          }))
+        );
+      } else {
+        setComplianceItems([]);
+      }
+    } catch {
+      setComplianceItems([]);
+    } finally {
+      setComplianceLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab === "compliance" && id) {
+      loadCompliance();
+    }
+  }, [activeTab, id, loadCompliance]);
+
   useEffect(() => {
     if (activeTab === "profile" && data.employeeProfile) {
       setProfileForm(data.employeeProfile);
@@ -279,6 +319,7 @@ export default function EmployeeDetailPage() {
     { id: "employment", label: "Job & Employment", icon: Briefcase },
     { id: "compensation", label: "Compensation", icon: Banknote },
     { id: "competence", label: "Competence", icon: Star, count: skills.length },
+    { id: "compliance", label: "Compliance", icon: ClipboardCheck },
     { id: "one-to-ones", label: "1:1 / Medarbetarsamtal", icon: MessageSquare, count: meetings.length },
     { id: "documents", label: "Documents", icon: FileText, count: documents.length },
     { id: "events", label: "People Risk & Tasks", icon: AlertTriangle, count: events.filter((e) => e.status !== "completed").length },
@@ -674,6 +715,57 @@ export default function EmployeeDetailPage() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {activeTab === "compliance" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Compliance</h2>
+              <Link href="/app/compliance">
+                <Button variant="outline" size="sm">View all Compliance</Button>
+              </Link>
+            </div>
+            {complianceLoading ? (
+              <p className="text-muted-foreground text-center py-8">Loading…</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(["license", "medical", "contract"] as const).map((cat) => {
+                  const items = complianceItems.filter((i) => i.category === cat);
+                  const valid = items.filter((i) => i.status === "valid").length;
+                  const expiring = items.filter((i) => i.status === "expiring").length;
+                  const expired = items.filter((i) => i.status === "expired").length;
+                  const missing = items.filter((i) => i.status === "missing").length;
+                  const nearest = items
+                    .filter((i) => i.valid_to && i.days_left != null && i.days_left >= 0)
+                    .sort((a, b) => (a.days_left ?? 999) - (b.days_left ?? 999))[0];
+                  const title = cat === "license" ? "Licenses" : cat === "medical" ? "Medical" : "Contracts";
+                  const complianceLink = `/app/compliance?category=${cat}`;
+                  return (
+                    <Card key={cat}>
+                      <CardHeader>
+                        <CardTitle className="text-base">{title}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground">
+                          Valid: {valid} · Expiring: {expiring} · Expired: {expired} · Missing: {missing}
+                        </p>
+                        {nearest ? (
+                          <p className="text-xs mt-2">
+                            Nearest expiry: {nearest.valid_to ? new Date(nearest.valid_to).toLocaleDateString("sv-SE") : "—"} ({nearest.days_left} days)
+                          </p>
+                        ) : (
+                          <p className="text-xs mt-2 text-muted-foreground">No expiry dates</p>
+                        )}
+                        <Link href={complianceLink} className="text-xs text-primary hover:underline mt-2 inline-block">
+                          View in Compliance →
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === "one-to-ones" && (

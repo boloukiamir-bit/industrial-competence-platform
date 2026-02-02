@@ -4,7 +4,7 @@ import { getOrgIdFromSession, isAdminOrHr } from "@/lib/orgSession";
 
 export const runtime = "nodejs";
 
-const VALID_CATEGORIES = ["Production", "Safety", "HR", "Quality", "Maintenance", "Competence"];
+const VALID_CATEGORIES = ["Production", "Safety", "HR", "Quality", "Maintenance", "Competence", "Onboarding", "Offboarding", "Medical", "Contract"];
 const VALID_OWNER_ROLES = ["HR", "Supervisor", "IT", "Quality", "Maintenance", "Employee"];
 
 export async function GET(request: NextRequest) {

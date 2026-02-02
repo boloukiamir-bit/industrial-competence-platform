@@ -167,32 +167,41 @@ export async function GET(request: NextRequest) {
     const DEFAULT_START = "06:00";
     const DEFAULT_END = "14:00";
 
-    const assignments: AssignmentShape[] = rawAssignments.map((a: {
+    // Only include assigned rows (employee_id set); exclude soft-unassigned (status=inactive, employee_id=null)
+    type RawA = {
       id: string;
       assignment_date?: string;
       status?: string;
-      shift?: { shift_date?: string; shift_type?: string; line?: string } | null;
-      station?: { id?: string; code?: string; name?: string } | null;
-      employee?: { id?: string; employee_number?: string; name?: string } | null;
-    }) => {
-      const station = a.station;
-      const employee = a.employee;
-      const stationId = station?.id ?? "";
-      const machineCode = (station?.code ?? stationId) || "";
-      return {
-        id: a.id,
-        station_id: stationId,
-        machine_code: machineCode,
-        employee_code: employee?.employee_number ?? "",
-        employee_id: employee?.id,
-        employee_name: employee?.name ?? "",
-        start_time: DEFAULT_START,
-        end_time: DEFAULT_END,
-        plan_date: a.assignment_date ?? a.shift?.shift_date,
-        shift_type: a.shift?.shift_type ?? shift,
-        role_note: a.status ?? null,
-      } as AssignmentShape;
-    });
+      shift?: { shift_date?: string; shift_type?: string; line?: string } | { shift_date?: string; shift_type?: string; line?: string }[] | null;
+      station?: { id?: string; code?: string; name?: string } | { id?: string; code?: string; name?: string }[] | null;
+      employee?: { id?: string; employee_number?: string; name?: string } | { id?: string; employee_number?: string; name?: string }[] | null;
+    };
+    const assignments: AssignmentShape[] = (rawAssignments as RawA[])
+      .filter((a) => {
+        const emp = a?.employee;
+        const e = Array.isArray(emp) ? emp[0] : emp;
+        return e?.id != null;
+      })
+      .map((a) => {
+        const station = Array.isArray(a.station) ? a.station[0] : a.station;
+        const employee = Array.isArray(a.employee) ? a.employee[0] : a.employee;
+        const shiftRel = Array.isArray(a.shift) ? a.shift[0] : a.shift;
+        const stationId = station?.id ?? "";
+        const machineCode = (station?.code ?? stationId) || "";
+        return {
+          id: a.id,
+          station_id: stationId,
+          machine_code: machineCode,
+          employee_code: employee?.employee_number ?? "",
+          employee_id: employee?.id,
+          employee_name: employee?.name ?? "",
+          start_time: DEFAULT_START,
+          end_time: DEFAULT_END,
+          plan_date: a.assignment_date ?? shiftRel?.shift_date,
+          shift_type: shiftRel?.shift_type ?? shift,
+          role_note: a.status ?? null,
+        } as AssignmentShape;
+      });
 
     const assignmentsByStationId = new Map<string, AssignmentShape[]>();
     const assignmentsByMachineCode = new Map<string, AssignmentShape[]>();

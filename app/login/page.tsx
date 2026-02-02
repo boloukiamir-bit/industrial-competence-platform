@@ -303,11 +303,13 @@ export default function LoginPage() {
         </a>
       </p>
 
-      <p style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
-        <a href="/health" style={{ textDecoration: 'underline' }} data-testid="link-health">
-          System Health Check
-        </a>
-      </p>
+      {process.env.NODE_ENV !== "production" && (
+        <p style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
+          <a href="/health" style={{ textDecoration: 'underline' }} data-testid="link-health">
+            System Health Check
+          </a>
+        </p>
+      )}
     </main>
   );
 }

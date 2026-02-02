@@ -23,6 +23,7 @@ import {
 import { Settings, Save } from "lucide-react";
 import type { MachineWithData, ShiftType } from "@/types/lineOverview";
 import { useToast } from "@/hooks/use-toast";
+import { withDevBearer } from "@/lib/devBearer";
 
 interface DemandModalProps {
   open: boolean;
@@ -68,7 +69,8 @@ export function DemandModal({
     try {
       const response = await fetch("/api/line-overview/demand", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: withDevBearer({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           stationId: machine.machine.stationId ?? machine.machine.id,
           machineCode: machine.machine.machineCode,
@@ -80,15 +82,52 @@ export function DemandModal({
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create demand");
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        created?: number;
+        updated?: number;
+        message?: string;
+        error?: string;
+        step?: string;
+        details?: unknown;
+      };
+
+      if (!response.ok || data?.ok === false) {
+        const detailsStr = data?.details != null ? JSON.stringify(data.details) : "";
+        const parts = [
+          response.status != null && `Status: ${response.status}`,
+          data?.step && `Step: ${data.step}`,
+          data?.error ?? "Failed to save demand",
+          detailsStr && `Details: ${detailsStr}`,
+        ].filter(Boolean);
+        toast({
+          title: "Save demand failed",
+          description: parts.join(". "),
+          variant: "destructive",
+        });
+        return;
       }
 
-      toast({ title: "Demand created successfully" });
+      const created = data?.created ?? 0;
+      const updated = data?.updated ?? 0;
+      const message = data?.message;
+      if (message === "already_exists") {
+        toast({ title: "Demand already exists", description: "No changes made." });
+      } else if (created > 0 || updated > 0) {
+        toast({
+          title: "Demand saved",
+          description: `Created: ${created}, updated: ${updated}.`,
+        });
+      } else {
+        toast({ title: "Demand created successfully" });
+      }
       onDemandChange();
       onOpenChange(false);
     } catch (err) {
-      toast({ title: "Error creating demand", variant: "destructive" });
+      toast({
+        title: err instanceof Error ? err.message : "Error creating demand",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }

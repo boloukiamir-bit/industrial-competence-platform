@@ -5,16 +5,19 @@ import { useOrg } from '@/hooks/useOrg';
 import { OrgGuard } from '@/components/OrgGuard';
 import { DataState, useDataState } from '@/components/DataState';
 import { apiGet, apiPost } from '@/lib/apiClient';
-import { 
-  Users, 
-  UserPlus, 
-  Shield, 
+import { useToast } from '@/hooks/use-toast';
+import {
+  Users,
+  UserPlus,
   UserX,
   Loader2,
   Mail,
   Clock,
   Check,
-  X
+  X,
+  Copy,
+  KeyRound,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Member {
@@ -40,20 +43,33 @@ interface ApiError {
   hint?: string;
 }
 
+interface InviteResponse {
+  ok: boolean;
+  userId?: string;
+  email: string;
+  role: string;
+  action: 'invited' | 'recovery';
+  link?: string;
+}
+
 function AdminUsersContent() {
-  const { currentOrg, isAdmin } = useOrg();
+  const { currentOrg, isAdmin, isAdminOrHr } = useOrg();
+  const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
-  
+
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'hr' | 'manager' | 'user'>('user');
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
 
   const [changingRole, setChangingRole] = useState<string | null>(null);
+  const [resettingEmail, setResettingEmail] = useState<string | null>(null);
+  const [lastResetLink, setLastResetLink] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!currentOrg) return;
@@ -81,15 +97,23 @@ function AdminUsersContent() {
     fetchData();
   }, [fetchData]);
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => toast({ title: 'Copied to clipboard' }),
+      () => toast({ title: 'Copy failed', variant: 'destructive' }),
+    );
+  };
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentOrg) return;
 
     setInviting(true);
     setInviteError(null);
+    setLastInviteLink(null);
 
     try {
-      await apiPost('/api/admin/invite', {
+      const data = await apiPost<InviteResponse>('/api/admin/users/invite', {
         email: inviteEmail,
         role: inviteRole,
       });
@@ -98,11 +122,36 @@ function AdminUsersContent() {
       setInviteRole('user');
       setShowInvite(false);
       await fetchData();
+      if (data.link) {
+        setLastInviteLink(data.link);
+        toast({ title: 'Invite sent', description: 'Link is shown below (dev only). Copy and share securely.' });
+      } else {
+        toast({ title: 'Invite sent', description: data.action === 'invited' ? 'User will receive an email.' : 'Recovery link sent via email.' });
+      }
     } catch (err) {
       console.error('Invite error:', err);
       setInviteError(err instanceof Error ? err.message : 'Failed to send invite');
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    if (!email) return;
+    setResettingEmail(email);
+    setLastResetLink(null);
+    try {
+      const data = await apiPost<{ ok: boolean; email: string; link?: string }>('/api/admin/users/reset-password', { email });
+      if (data.link) {
+        setLastResetLink(data.link);
+        toast({ title: 'Reset link generated', description: 'Copy link below (dev only).' });
+      } else {
+        toast({ title: 'Reset link sent', description: 'User will receive an email.' });
+      }
+    } catch (err) {
+      toast({ title: 'Failed to send reset link', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setResettingEmail(null);
     }
   };
 
@@ -139,6 +188,25 @@ function AdminUsersContent() {
     }
   };
 
+  const [repairingEmail, setRepairingEmail] = useState<string | null>(null);
+  const handleRepairAccess = async (email: string, role: Member['role']) => {
+    if (!currentOrg || !email) return;
+    setRepairingEmail(email);
+    try {
+      await apiPost('/api/admin/users/repair-access', {
+        email,
+        orgId: currentOrg.id,
+        role,
+      });
+      await fetchData();
+      toast({ title: 'Access repaired', description: `Profile and membership updated for ${email}.` });
+    } catch (err) {
+      toast({ title: 'Repair failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setRepairingEmail(null);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -160,7 +228,7 @@ function AdminUsersContent() {
             Manage members and invites for {currentOrg?.name}
           </p>
         </div>
-        {isAdmin && dataStatus !== 'error' && (
+        {isAdminOrHr && dataStatus !== 'error' && (
           <button
             onClick={() => setShowInvite(!showInvite)}
             className="px-4 py-2 rounded-md bg-primary text-primary-foreground flex items-center gap-2"
@@ -232,6 +300,48 @@ function AdminUsersContent() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {lastInviteLink && (
+        <div className="p-4 rounded-lg border border-border bg-card flex items-center gap-2">
+          <span className="text-sm text-muted-foreground shrink-0">Invite link (dev):</span>
+          <input
+            readOnly
+            value={lastInviteLink}
+            className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-background border border-input rounded"
+            data-testid="input-invite-link"
+          />
+          <button
+            type="button"
+            onClick={() => copyToClipboard(lastInviteLink)}
+            className="px-2 py-1.5 rounded border border-border text-foreground flex items-center gap-1 text-sm shrink-0"
+            data-testid="button-copy-invite-link"
+          >
+            <Copy className="w-4 h-4" />
+            Copy
+          </button>
+        </div>
+      )}
+
+      {lastResetLink && (
+        <div className="p-4 rounded-lg border border-border bg-card flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Reset link (dev):</span>
+          <input
+            readOnly
+            value={lastResetLink}
+            className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-background border border-input rounded"
+            data-testid="input-reset-link"
+          />
+          <button
+            type="button"
+            onClick={() => copyToClipboard(lastResetLink)}
+            className="px-2 py-1.5 rounded border border-border text-foreground flex items-center gap-1 text-sm"
+            data-testid="button-copy-reset-link"
+          >
+            <Copy className="w-4 h-4" />
+            Copy
+          </button>
         </div>
       )}
 
@@ -334,15 +444,32 @@ function AdminUsersContent() {
                         {formatDate(member.created_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {isAdmin && member.status === 'active' && (
-                          <button
-                            onClick={() => handleDisable(member.user_id)}
-                            className="p-2 rounded text-muted-foreground hover:text-destructive"
-                            title="Disable user"
-                            data-testid={`button-disable-${member.user_id}`}
-                          >
-                            <UserX className="w-4 h-4" />
-                          </button>
+                        {isAdminOrHr && member.status === 'active' && (
+                          <span className="inline-flex items-center gap-1">
+                            <button
+                              onClick={() => handleRepairAccess(member.email ?? '', member.role)}
+                              disabled={repairingEmail === (member.email ?? '')}
+                              className="p-2 rounded text-muted-foreground hover:text-foreground"
+                              title="Repair access (membership + profile active org/site)"
+                              data-testid={`button-repair-access-${member.user_id}`}
+                            >
+                              {repairingEmail === (member.email ?? '') ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4" />
+                              )}
+                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDisable(member.user_id)}
+                                className="p-2 rounded text-muted-foreground hover:text-destructive"
+                                title="Disable user"
+                                data-testid={`button-disable-${member.user_id}`}
+                              >
+                                <UserX className="w-4 h-4" />
+                              </button>
+                            )}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -359,7 +486,7 @@ function AdminUsersContent() {
 
 export default function AdminUsersPage() {
   return (
-    <OrgGuard requireAdmin>
+    <OrgGuard requireAdminOrHr>
       <AdminUsersContent />
     </OrgGuard>
   );

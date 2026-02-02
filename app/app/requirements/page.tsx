@@ -127,7 +127,7 @@ export default function RequirementsPage() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || "Failed to load");
+        throw new Error((body?.error ?? body?.message) || "Failed to load");
       }
       const json = (await res.json()) as ApiResponse;
       setData(json);
@@ -197,7 +197,7 @@ export default function RequirementsPage() {
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(body?.error || "Failed to update");
+          throw new Error((body?.error ?? body?.message) || "Failed to update");
         }
         const serverTime = body.server_time as string | undefined;
         const sid = (body.after as HealthRow | null)?.station_id ?? stationId;
@@ -288,7 +288,7 @@ export default function RequirementsPage() {
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || "Failed to revert");
+      if (!res.ok) throw new Error((body?.error ?? body?.message) || "Failed to revert");
       const serverTime = body.server_time as string | undefined;
       const sid = (body.after as HealthRow | null)?.station_id ?? before?.station_id ?? stationId;
       const lastAt = lastAppliedAtRef.current[sid];

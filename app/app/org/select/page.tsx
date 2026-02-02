@@ -93,12 +93,12 @@ export default function OrgSelectPage() {
 
         {memberships.length > 0 && (
           <div className="space-y-2">
-            {memberships.map((membership) => (
+            {memberships.map((membership, index) => (
               <button
                 key={membership.org_id}
                 onClick={() => handleSelectOrg(membership.org_id)}
                 className="w-full p-4 rounded-lg border border-border bg-card hover-elevate flex items-center justify-between group"
-                data-testid={`button-select-org-${membership.org_id}`}
+                data-testid={process.env.NODE_ENV === "production" ? `button-select-org-${index}` : `button-select-org-${membership.org_id}`}
               >
                 <div className="text-left">
                   <div className="font-medium text-foreground">

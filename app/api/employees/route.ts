@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import {
+  buildEmployeeScope,
+  getEmployeeScopeSqlParams,
+  EMPLOYEE_SCOPE_SITE_FRAGMENT,
+} from "@/lib/server/employeeScope";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -9,7 +14,7 @@ const SPALJISTEN_ORG_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
 /**
  * GET /api/employees — tenant-scoped by session (active_org_id),
- * optionally filtered by active_site_id when present.
+ * optionally filtered by active_site_id when present. Uses shared employee scope so count matches Org Overview.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +26,12 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const activeSiteId = org.activeSiteId ?? null;
+    const scope = buildEmployeeScope({
+      orgId: org.activeOrgId,
+      activeSiteId: org.activeSiteId ?? null,
+    });
+    const [orgId, activeSiteId] = getEmployeeScopeSqlParams(scope);
+
     const result = await pool.query(
       `SELECT id, name, first_name, last_name, employee_number, email, phone, date_of_birth,
               role, line, team, employment_type, start_date, contract_end_date, manager_id,
@@ -29,10 +39,10 @@ export async function GET(request: NextRequest) {
        FROM employees 
        WHERE org_id = $1
          AND is_active = true
-         AND ($2::uuid IS NULL OR site_id = $2)
+         AND ${EMPLOYEE_SCOPE_SITE_FRAGMENT}
        ORDER BY name 
        LIMIT 500`,
-      [org.activeOrgId, activeSiteId]
+      [orgId, activeSiteId]
     );
 
     if (result.rows.length === 0 && org.activeOrgId === SPALJISTEN_ORG_ID) {

@@ -131,8 +131,8 @@ export async function GET(request: NextRequest) {
 
     const [skillsRes, requirementsRes, healthRes] = await Promise.all([
       supabaseAdmin
-        .from("v_requirement_skill_catalog")
-        .select("skill_id, code, name, category")
+        .from("skills")
+        .select("id, code, name, category")
         .eq("org_id", activeOrgId)
         .order("category")
         .order("code"),
@@ -165,10 +165,10 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const skills = (skillsRes.data || []).map((s: { skill_id: string; code: string | null; name: string | null; category: string | null }) => ({
-      skill_id: s.skill_id,
-      code: s.code ?? s.skill_id,
-      name: s.name ?? s.code ?? s.skill_id,
+    const skills = (skillsRes.data || []).map((s: { id: string; code: string | null; name: string | null; category: string | null }) => ({
+      skill_id: s.id,
+      code: s.code ?? s.id,
+      name: s.name ?? s.code ?? s.id,
       category: s.category ?? "OTHER",
     }));
 

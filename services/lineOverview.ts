@@ -240,8 +240,21 @@ export async function fetchLineOverviewData(
   return mapLineOverviewApiData(result.data);
 }
 
+/** Response shape from GET/POST /api/line-overview/suggestions (camelCase contract). */
+interface SuggestionsApiCandidate {
+  employee: { id: string; employeeNumber: string; fullName: string };
+  currentAssignedHours: number;
+  availableHours: number;
+  score: number;
+  eligible: boolean;
+  reasons: string[];
+  requiredSkillsCount: number;
+  skillsPassedCount: number;
+  stationCoverage: { covered: number; required: number };
+}
+
 export async function getSuggestions(
-  lineCode: string,
+  _lineCode: string,
   machineCode: string,
   date: string,
   shift: ShiftType,
@@ -261,68 +274,40 @@ export async function getSuggestions(
       includeAbsent: options?.includeAbsent ?? false,
     }),
   });
-  
+
   if (!response.ok) {
     throw new Error("Failed to get suggestions");
   }
-  
-  const data = await response.json();
-  const suggestions = (data.suggestions || []).map((s: any) => {
-    const num = s.employee?.employee_number ?? s.employee?.employeeCode ?? "";
+
+  const data = (await response.json()) as { suggestions?: SuggestionsApiCandidate[] };
+  const list = data.suggestions ?? [];
+  return list.map((s: SuggestionsApiCandidate) => {
+    const cov = s.stationCoverage ?? { covered: 0, required: 0 };
     return {
       employee: {
         id: s.employee.id,
         orgId: "",
-        employeeNumber: num,
-        employeeCode: num,
-        fullName: s.employee.full_name ?? s.employee.fullName ?? "",
+        employeeNumber: s.employee.employeeNumber,
+        employeeCode: s.employee.employeeNumber,
+        fullName: s.employee.fullName,
       } as PLEmployee,
-      currentAssignedHours: s.currentHours,
+      currentAssignedHours: s.currentAssignedHours,
       availableHours: s.availableHours,
       score: s.score,
+      eligible: s.eligible,
+      reasons: s.reasons ?? [],
+      requiredSkillsCount: s.requiredSkillsCount,
+      skillsPassedCount: s.skillsPassedCount,
+      stationCoverage: cov,
+      stationsPassed: cov.covered,
+      stationsRequired: cov.required,
     } as EmployeeSuggestion;
   });
-
-  const eligibilityRes = await fetch(`/api/eligibility/line?line=${encodeURIComponent(lineCode)}`, {
-    credentials: "include",
-    headers: withDevBearer(),
-  });
-  if (!eligibilityRes.ok) {
-    const body = await eligibilityRes.json().catch(() => ({}));
-    const message = (body as { error?: string })?.error;
-    throw new Error(message ? `Failed to fetch eligibility: ${message}` : "Failed to fetch eligibility");
-  }
-
-  const eligibilityData = await eligibilityRes.json();
-  const stationsRequired = eligibilityData?.stations_required ?? 0;
-  const requiredSkillsCount = eligibilityData?.required_skills_count ?? 0;
-  const eligibilityByNumber = new Map<
-    string,
-    { eligible: boolean; stationsPassed: number; skillsPassedCount: number; requiredSkillsCount: number }
-  >(
-    (eligibilityData?.employees || []).map((emp: any) => [
-      emp.employee_number,
-      {
-        eligible: !!emp.eligible,
-        stationsPassed: emp.stations_passed ?? 0,
-        skillsPassedCount: emp.skills_passed_count ?? 0,
-        requiredSkillsCount: emp.required_skills_count ?? requiredSkillsCount,
-      },
-    ])
-  );
-
-  return suggestions.map((suggestion: EmployeeSuggestion) => {
-    const eligibility = eligibilityByNumber.get(suggestion.employee.employeeNumber);
-    return {
-      ...suggestion,
-      eligible: eligibility?.eligible ?? false,
-      stationsPassed: eligibility?.stationsPassed ?? 0,
-      stationsRequired,
-      skillsPassedCount: eligibility?.skillsPassedCount,
-      requiredSkillsCount: eligibility?.requiredSkillsCount ?? requiredSkillsCount,
-    };
-  });
 }
+
+export type CreateAssignmentResult =
+  | { ok: true; assignment_id?: string }
+  | { ok: false; status: number; step: string; error: string; details?: unknown };
 
 export async function createAssignment(params: {
   stationId?: string;
@@ -332,7 +317,7 @@ export async function createAssignment(params: {
   shift: ShiftType;
   startTime: string;
   endTime: string;
-}): Promise<{ success: boolean; assignment?: any }> {
+}): Promise<CreateAssignmentResult> {
   const body: Record<string, unknown> = {
     employeeCode: params.employeeCode,
     date: params.date,
@@ -345,44 +330,88 @@ export async function createAssignment(params: {
 
   const response = await fetch("/api/line-overview/assignments", {
     method: "POST",
-    headers: withDevBearer({ "Content-Type": "application/json" }),
     credentials: "include",
+    headers: withDevBearer({ "Content-Type": "application/json" }) as HeadersInit,
     body: JSON.stringify(body),
   });
-  
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error((body as { error?: string })?.error || "Failed to create assignment");
-  }
 
-  return response.json();
+  const data = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    assignment_id?: string;
+    step?: string;
+    error?: string;
+    details?: unknown;
+  };
+  if (response.ok && data?.ok !== false && ("assignment_id" in data || data?.ok === true)) {
+    return { ok: true, assignment_id: data?.assignment_id };
+  }
+  return {
+    ok: false,
+    status: response.status,
+    step: data?.step ?? "create",
+    error: data?.error ?? response.statusText ?? "Failed to create assignment",
+    details: data?.details,
+  };
 }
 
-export async function deleteAssignment(assignmentId: string): Promise<boolean> {
+export type DeleteAssignmentResult =
+  | { ok: true; assignment: unknown }
+  | { ok: false; status: number; step: string; error: string; details?: unknown };
+
+export type UpdateAssignmentResult =
+  | { ok: true; assignment: unknown }
+  | { ok: false; status: number; step: string; error: string; details?: unknown };
+
+export async function deleteAssignment(assignmentId: string): Promise<DeleteAssignmentResult> {
   const response = await fetch(`/api/line-overview/assignments/${assignmentId}`, {
     method: "DELETE",
-    headers: withDevBearer(),
     credentials: "include",
+    headers: withDevBearer() as HeadersInit,
   });
-  
-  return response.ok;
+  const body = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    assignment?: unknown;
+    step?: string;
+    error?: string;
+    details?: unknown;
+  };
+  if (response.ok && body?.ok === true && "assignment" in body) {
+    return { ok: true, assignment: body.assignment };
+  }
+  return {
+    ok: false,
+    status: response.status,
+    step: body?.step ?? "delete",
+    error: body?.error ?? response.statusText ?? "Failed to delete assignment",
+    details: body?.details,
+  };
 }
 
 export async function updateAssignment(
   assignmentId: string,
   updates: { startTime?: string; endTime?: string; employeeCode?: string }
-): Promise<{ success: boolean; assignment?: any }> {
+): Promise<UpdateAssignmentResult> {
   const response = await fetch(`/api/line-overview/assignments/${assignmentId}`, {
     method: "PATCH",
-    headers: withDevBearer({ "Content-Type": "application/json" }),
     credentials: "include",
+    headers: withDevBearer({ "Content-Type": "application/json" }) as HeadersInit,
     body: JSON.stringify(updates),
   });
-  
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error((body as { error?: string })?.error || "Failed to update assignment");
+  const body = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    assignment?: unknown;
+    step?: string;
+    error?: string;
+    details?: unknown;
+  };
+  if (response.ok && body?.ok === true && "assignment" in body) {
+    return { ok: true, assignment: body.assignment };
   }
-
-  return response.json();
+  return {
+    ok: false,
+    status: response.status,
+    step: body?.step ?? "update",
+    error: body?.error ?? response.statusText ?? "Failed to update assignment",
+    details: body?.details,
+  };
 }

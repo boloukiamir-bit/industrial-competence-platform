@@ -13,9 +13,9 @@ async function run() {
 
     const beforeRes = await client.query(
       `SELECT s.code, COUNT(*)::int AS count
-       FROM employee_skills es
-       JOIN employees e ON e.id = es.employee_id
-       JOIN skills s ON s.id = es.skill_id
+       FROM public.employee_skills es
+       JOIN public.employees e ON e.id = es.employee_id
+       JOIN public.skills s ON s.id = es.skill_id AND s.org_id = e.org_id
        WHERE e.org_id = $1
          AND s.code = ANY($2::text[])
        GROUP BY s.code
@@ -33,10 +33,11 @@ async function run() {
     }
 
     const deleteRes = await client.query(
-      `DELETE FROM employee_skills es
-       USING employees e, skills s
+      `DELETE FROM public.employee_skills es
+       USING public.employees e, public.skills s
        WHERE es.employee_id = e.id
          AND es.skill_id = s.id
+         AND s.org_id = e.org_id
          AND e.org_id = $1
          AND s.code = ANY($2::text[])
        RETURNING es.id`,

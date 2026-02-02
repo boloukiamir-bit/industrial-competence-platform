@@ -284,28 +284,48 @@ export default function LineOverviewPage() {
             hoursPerStation: 8,
           }),
         });
-        const data = await res.json().catch(() => ({})) as { error?: string; stations_per_line?: Record<string, number> };
-        if (!res.ok) {
-          const msg = data?.error ?? "Unknown error";
-          const detail = data?.stations_per_line
-            ? ` Stations per line: ${JSON.stringify(data.stations_per_line)}`
-            : "";
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          created?: number;
+          updated?: number;
+          message?: string;
+          step?: string;
+          error?: string;
+          details?: unknown;
+        };
+        if (!res.ok || data?.ok === false) {
+          const parts = [
+            res.status != null && `Status: ${res.status}`,
+            data?.step && `Step: ${data.step}`,
+            data?.error ?? "Unknown error",
+            data?.details != null && `Details: ${JSON.stringify(data.details)}`,
+          ].filter(Boolean);
           toast({
             title: "Generate demand failed",
-            description: msg + detail,
+            description: parts.join(". "),
             variant: "destructive",
           });
           return;
         }
-        const created = (data as { created?: number }).created ?? 0;
-        const updated = (data as { updated?: number }).updated ?? 0;
-        toast({
-          title: "Demand generated",
-          description:
-            created > 0 || updated > 0
-              ? `Created: ${created}, updated: ${updated} station(s).`
-              : "No stations in this line (or already up to date).",
-        });
+        const created = data?.created ?? 0;
+        const updated = data?.updated ?? 0;
+        const message = data?.message;
+        if (message === "already_exists") {
+          toast({
+            title: "Demand already exists",
+            description: "Demand already exists for this line/date/shift.",
+          });
+        } else if (created > 0 || updated > 0) {
+          toast({
+            title: "Demand generated",
+            description: `Created: ${created}, updated: ${updated} station(s).`,
+          });
+        } else {
+          toast({
+            title: "Demand generated",
+            description: "No stations in this line (or no changes).",
+          });
+        }
         loadData();
       } finally {
         setGenerateLoading(null);

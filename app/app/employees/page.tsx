@@ -188,7 +188,7 @@ export default function EmployeesPage() {
             Employees
           </h1>
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            ({filteredEmployees.length})
+            Active employees ({filteredEmployees.length})
           </span>
         </div>
         <div className="flex items-center gap-2">

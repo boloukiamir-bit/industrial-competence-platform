@@ -235,7 +235,7 @@ export default function OrgOverviewPage() {
               Organization Overview
             </h1>
             <p className="text-muted-foreground">
-              {totalUnitsRaw} units ({rootUnitsCount} roots), {totalEmployees} employees
+              {totalUnitsRaw} units ({rootUnitsCount} roots), {totalEmployees} active employees
             </p>
             {unitsWarning && (
               <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 inline-block" data-testid="org-units-warning">
@@ -275,6 +275,26 @@ export default function OrgOverviewPage() {
             </Button>
           </CardContent>
         </Card>
+
+        {unassignedCount > 0 && (
+          <Card className="border-orange-200 dark:border-orange-800">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <span className="font-medium">Unassigned</span>
+                  <Badge variant="destructive" className="text-xs ml-2">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {unassignedCount} employees
+                  </Badge>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  Employees without an assigned organization unit
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {showCreateUnitModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUnitModal(false)}>
@@ -343,7 +363,7 @@ export default function OrgOverviewPage() {
           </h1>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-muted-foreground">
-              {totalUnitsRaw} units ({rootUnitsCount} roots), {totalEmployees} employees
+              {totalUnitsRaw} units ({rootUnitsCount} roots), {totalEmployees} active employees
             </p>
             {unassignedCount > 0 && (
               <Badge variant="destructive" className="text-xs">

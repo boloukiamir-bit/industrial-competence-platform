@@ -51,6 +51,4 @@ where id = '<unit_id>'
 ## 5) API verification (Bearer)```bash
 BASE="http://localhost:5001"
 curl -s -4 -H "Authorization: Bearer $TOKEN" "$BASE/api/org/units" | jq '.meta'
-```
-
-Expected: `meta.totalEmployeesAfterSiteFilter` matches Employees page count.
+```Expected: `meta.totalEmployeesAfterSiteFilter` matches Employees page count.

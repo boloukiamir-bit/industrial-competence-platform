@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { SetupProgressCard } from "@/components/SetupProgressCard";
+import { TeamCompetencyScoreCard } from "@/components/dashboard/TeamCompetencyScoreCard";
 import { useOrg } from "@/hooks/useOrg";
 
 type DashboardData = {
@@ -166,7 +167,11 @@ export function HrDashboard() {
   return (
     <div className="space-y-6">
       <SetupProgressCard className="mb-2" />
-      
+
+      <div className="max-w-md">
+        <TeamCompetencyScoreCard />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card data-testid="card-headcount">
           <CardContent className="pt-6">

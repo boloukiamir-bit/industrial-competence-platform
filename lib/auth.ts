@@ -31,7 +31,7 @@ function isDevFallbackAllowed(): boolean {
  */
 export function isHrAdmin(role: string | null | undefined): boolean {
   const r = (role ?? "").toLowerCase();
-  return r === "admin" || r === "hr_admin" || r === "hr-admin";
+  return r === "admin" || r === "hr" || r === "hr_admin" || r === "hr-admin";
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {

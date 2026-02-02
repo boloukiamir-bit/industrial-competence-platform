@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Users, Clock, ArrowRight, Loader2, Plus } from "lucide-react";
+import { FileText, Clock, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
-import { apiGet } from "@/lib/apiClient";
+import { apiGet, apiPost } from "@/lib/apiClient";
+import { useToast } from "@/hooks/use-toast";
 
 type WorkflowTemplate = {
   id: string;
@@ -21,26 +22,48 @@ type WorkflowTemplate = {
 export default function WorkflowTemplatesPage() {
   const router = useRouter();
   const { currentOrg } = useOrg();
+  const { toast } = useToast();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchTemplates = useCallback(async () => {
+    if (!currentOrg?.id) return;
+    try {
+      const data = await apiGet<{ templates: WorkflowTemplate[] }>("/api/workflows/templates");
+      setTemplates(data.templates || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load templates");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentOrg?.id]);
 
   useEffect(() => {
     if (!currentOrg?.id) return;
-    
-    async function fetchTemplates() {
-      try {
-        const data = await apiGet<{ templates: WorkflowTemplate[] }>("/api/workflows/templates");
-        setTemplates(data.templates || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load templates");
-      } finally {
-        setLoading(false);
-      }
-    }
-
+    setLoading(true);
     fetchTemplates();
-  }, [currentOrg?.id]);
+  }, [currentOrg?.id, fetchTemplates]);
+
+  const handleSeedDefaults = async () => {
+    setSeeding(true);
+    try {
+      const data = await apiPost<{ created?: number; error?: string }>("/api/workflows/templates/seed-defaults", {});
+      if ((data as { error?: string }).error) {
+        toast({ title: (data as { error: string }).error, variant: "destructive" });
+        return;
+      }
+      const created = (data as { created?: number }).created ?? 0;
+      toast({ title: created ? `${created} templates created` : "Templates ready" });
+      await fetchTemplates();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create templates", variant: "destructive" });
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const getCategoryColor = (category: string) => {
     const cat = category.toLowerCase();
@@ -117,11 +140,21 @@ export default function WorkflowTemplatesPage() {
 
       {templates.length === 0 ? (
         <Card>
-          <CardContent className="pt-6 text-center">
-            <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <CardContent className="pt-6 pb-6 text-center space-y-4">
+            <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
             <p className="text-muted-foreground">
-              No workflow templates found. Run the SQL seed script to create templates.
+              No workflow templates yet. Create 4 recommended templates (Onboarding, Offboarding, Medical, Contract) or add your own.
             </p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <Button onClick={handleSeedDefaults} disabled={seeding} data-testid="button-seed-templates">
+                {seeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                Create 4 templates
+              </Button>
+              <Button variant="outline" onClick={() => router.push("/app/workflows/templates/new")}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create manually
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (

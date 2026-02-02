@@ -114,6 +114,7 @@ export async function getEligibilityByLine(
 
   const employees = (employeesData || []) as unknown as EmployeeRow[];
 
+  // Single source of truth: public.employee_skills. Scope by employees.org_id (employee_ids from org-scoped employees above); do not use employee_skills.org_id.
   const skillsByEmployee = new Map<string, Map<string, number>>();
   if (requiredSkillIds.length > 0 && employees.length > 0) {
     const employeeIds = employees.map((e) => e.id);
@@ -141,9 +142,11 @@ export async function getEligibilityByLine(
     let stationsPassed = 0;
     let skillsPassedCount = 0;
     const skillLevels = skillsByEmployee.get(employee.id);
+    // Eligibility: employee_skills.level >= required_level (join employee_skills by employee_id + skill_id)
     for (const requirement of requirements) {
       const level = skillLevels?.get(requirement.skill_id);
-      if (typeof level === "number" && level >= requirement.required_level) {
+      const requiredLevel = typeof requirement.required_level === "number" ? requirement.required_level : 1;
+      if (typeof level === "number" && level >= requiredLevel) {
         stationsPassed += 1;
       }
     }
@@ -158,7 +161,8 @@ export async function getEligibilityByLine(
         skillsPassedCount += 1;
       }
     }
-    const eligible = stations_required > 0 && stationsPassed === stations_required;
+    // When stations_required === 0: treat all employees as eligible (no_requirements_configured)
+    const eligible = stations_required === 0 || stationsPassed === stations_required;
     return {
       employee_id: employee.id,
       employee_number: employee.employee_number,

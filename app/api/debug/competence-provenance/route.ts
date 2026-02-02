@@ -61,14 +61,15 @@ export async function GET(request: NextRequest) {
       const smokeRes = await pool.query(
         `WITH requirements AS (
            SELECT r.skill_id, r.required_level
-           FROM station_skill_requirements r
-           JOIN stations s ON s.id = r.station_id
-           WHERE s.org_id = $1
+           FROM public.station_skill_requirements r
+           JOIN public.stations s ON s.id = r.station_id AND s.org_id = r.org_id
+           WHERE r.org_id = $1
+             AND s.org_id = $1
              AND s.line = $2
          ),
          target_employee AS (
            SELECT id
-           FROM employees
+           FROM public.employees
            WHERE org_id = $1
              AND employee_number = $3
            LIMIT 1
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
          matched AS (
            SELECT 1
            FROM requirements req
-           JOIN employee_skills es ON es.skill_id = req.skill_id
+           JOIN public.employee_skills es ON es.skill_id = req.skill_id
            JOIN target_employee te ON te.id = es.employee_id
            WHERE es.level >= req.required_level
          )
@@ -101,17 +102,16 @@ export async function GET(request: NextRequest) {
     }
 
     const employeeCountRes = await pool.query(
-      "SELECT COUNT(*)::int AS count FROM employees WHERE org_id = $1 AND is_active = true",
+      "SELECT COUNT(*)::int AS count FROM public.employees WHERE org_id = $1 AND is_active = true",
       [activeOrgId]
     );
 
     const topSkillsRes = await pool.query(
       `SELECT s.code, COUNT(*)::int AS count
-       FROM employee_skills es
-       JOIN employees e ON e.id = es.employee_id AND e.is_active = true
-       JOIN skills s ON s.id = es.skill_id
+       FROM public.employee_skills es
+       JOIN public.employees e ON e.id = es.employee_id AND e.is_active = true
+       JOIN public.skills s ON s.id = es.skill_id AND s.org_id = e.org_id
        WHERE e.org_id = $1
-         AND s.org_id = $1
        GROUP BY s.code
        ORDER BY count DESC, s.code ASC
        LIMIT 50`,
@@ -120,11 +120,10 @@ export async function GET(request: NextRequest) {
 
     const demoCountsRes = await pool.query(
       `SELECT s.code, COUNT(*)::int AS count
-       FROM employee_skills es
-       JOIN employees e ON e.id = es.employee_id
-       JOIN skills s ON s.id = es.skill_id
+       FROM public.employee_skills es
+       JOIN public.employees e ON e.id = es.employee_id
+       JOIN public.skills s ON s.id = es.skill_id AND s.org_id = e.org_id
        WHERE e.org_id = $1
-         AND s.org_id = $1
          AND s.code = ANY($2::text[])
        GROUP BY s.code`,
       [activeOrgId, DEMO_CODES]

@@ -268,6 +268,24 @@ async function main() {
       const found = !fetchErr && fetched?.id === inserted.id;
       log("Integration: POST assignment then GET returns it", found, found ? `assignment ${inserted.id} visible` : String(fetchErr?.message || "not found"));
 
+      // Test 5a: Clear assignment (simulate DELETE API: set employee_id=null, status='open'), then verify gone
+      const { error: clearErr } = await supabaseAdmin
+        .from("shift_assignments")
+        .update({ employee_id: null, status: "open", updated_at: new Date().toISOString() })
+        .eq("id", inserted.id)
+        .eq("org_id", orgId);
+      const clearOk = !clearErr;
+      log("Clear assignment (employee_id=null, status=open)", clearOk, clearOk ? "updated" : String(clearErr?.message));
+
+      const { data: afterClear, error: afterErr } = await supabaseAdmin
+        .from("shift_assignments")
+        .select("id, employee_id, status")
+        .eq("id", inserted.id)
+        .eq("org_id", orgId)
+        .single();
+      const goneOk = !afterErr && afterClear?.employee_id == null && afterClear?.status === "open";
+      log("Verify cleared: assignment has no employee (gone from assigned list)", goneOk, goneOk ? "employee_id null" : String(afterErr?.message ?? "still assigned"));
+
       await supabaseAdmin.from("shift_assignments").delete().eq("id", inserted.id);
     } else {
       log("Integration: POST assignment then GET returns it", false, "insert failed: " + String(insertErr?.message));

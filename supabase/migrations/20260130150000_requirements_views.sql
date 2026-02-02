@@ -15,7 +15,8 @@ BEGIN
   END IF;
 END $$;
 
--- 1) v_requirement_skill_catalog: skills usable as station requirements (org-scoped)
+-- 1) v_requirement_skill_catalog: skills usable as station requirements (org-scoped).
+-- Backed by public.skills only; no skills_catalog table. Joins: station_skill_requirements.skill_id = skills.id, filter by skills.org_id for tenant safety.
 CREATE OR REPLACE VIEW public.v_requirement_skill_catalog AS
 SELECT
   s.id AS skill_id,

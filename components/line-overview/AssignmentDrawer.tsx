@@ -124,13 +124,24 @@ export function AssignmentDrawer({
         endTime: newEndTime,
       });
 
-      if (result) {
+      if (result.ok) {
         toast({ title: "Assignment created" });
         onAssignmentChange();
         setShowNewForm(false);
         setNewEmployee("");
       } else {
-        toast({ title: "Failed to create assignment", variant: "destructive" });
+        const desc = [
+          result.status != null && `Status: ${result.status}`,
+          result.step && `Step: ${result.step}`,
+          result.details != null && `Details: ${JSON.stringify(result.details)}`,
+        ]
+          .filter(Boolean)
+          .join(". ");
+        toast({
+          title: result.error ?? "Failed to create assignment",
+          description: desc || undefined,
+          variant: "destructive",
+        });
       }
     } catch (err) {
       toast({
@@ -145,15 +156,29 @@ export function AssignmentDrawer({
   const handleDelete = async (assignmentId: string) => {
     setDeleting(assignmentId);
     try {
-      const success = await deleteAssignment(assignmentId);
-      if (success) {
-        toast({ title: "Assignment deleted" });
+      const result = await deleteAssignment(assignmentId);
+      if (result.ok) {
+        toast({ title: "Assignment removed" });
         onAssignmentChange();
       } else {
-        toast({ title: "Failed to delete", variant: "destructive" });
+        const desc = [
+          "status" in result && result.status != null && `Status: ${result.status}`,
+          result.step && `Step: ${result.step}`,
+          result.details != null && `Details: ${JSON.stringify(result.details)}`,
+        ]
+          .filter(Boolean)
+          .join(". ");
+        toast({
+          title: result.error ?? "Failed to remove",
+          description: desc || undefined,
+          variant: "destructive",
+        });
       }
     } catch (err) {
-      toast({ title: "Error deleting", variant: "destructive" });
+      toast({
+        title: err instanceof Error ? err.message : "Error removing assignment",
+        variant: "destructive",
+      });
     } finally {
       setDeleting(null);
     }

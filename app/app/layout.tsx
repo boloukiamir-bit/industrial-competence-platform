@@ -26,7 +26,8 @@ import {
   Bug,
   Gauge,
   Factory,
-  Target
+  Target,
+  ClipboardCheck
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser, isHrAdmin } from "@/lib/auth";
 import { useOrg } from "@/hooks/useOrg";
@@ -34,6 +35,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
+import { SessionDebugStrip } from "@/components/SessionDebugStrip";
+import { VersionStrip } from "@/components/VersionStrip";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import { COPY } from "@/lib/copy";
 import { getSpaliDevMode } from "@/lib/spaliDevMode";
@@ -52,6 +55,7 @@ const coreNavItems: NavItem[] = [
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
   { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
+  { name: "Compliance", href: "/app/compliance", icon: ClipboardCheck },
   { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: TrendingUp },
   { name: "Setup", href: "/app/setup", icon: Clipboard },
   { name: "Admin", href: "/app/admin", icon: Wrench, hrAdminOnly: true },
@@ -62,6 +66,7 @@ const hrNavItems: NavItem[] = [
   { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
   { name: "HR Workflows", href: "/app/workflows/templates", icon: Workflow, hrAdminOnly: true },
+  { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
 ];
 
@@ -83,6 +88,16 @@ const settingsNavItems: NavItem[] = [
   { name: "Debug", href: "/app/debug", icon: Bug },
 ];
 
+const pilotModeCoreNavItems: NavItem[] = [
+  { name: "Employees", href: "/app/employees", icon: Users },
+  { name: "Compliance", href: "/app/compliance", icon: ClipboardCheck },
+];
+
+const pilotModeHrNavItems: NavItem[] = [
+  { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
+  { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
+];
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -91,6 +106,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   
   const isDevMode = getSpaliDevMode();
   const isSpaljistenPage = pathname?.startsWith("/app/spaljisten");
+  const isPilotMode = process.env.NEXT_PUBLIC_PILOT_MODE === "true";
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -154,6 +170,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         handleSignOut={handleSignOut}
         isDevMode={isDevMode}
         showSpaljistenNav={showSpaljistenNav}
+        isPilotMode={isPilotMode}
         renderNavItem={renderNavItem}
       >
         {children}
@@ -169,6 +186,7 @@ function AppLayoutContent({
   handleSignOut,
   isDevMode,
   showSpaljistenNav,
+  isPilotMode,
   renderNavItem,
   children,
 }: {
@@ -178,13 +196,15 @@ function AppLayoutContent({
   handleSignOut: () => void;
   isDevMode: boolean;
   showSpaljistenNav: boolean;
+  isPilotMode: boolean;
   renderNavItem: (item: NavItem) => JSX.Element;
   children: React.ReactNode;
 }) {
   const { currentRole } = useOrg();
+  const isProduction = process.env.NODE_ENV === "production";
+  const showVersionStrip = !isProduction || process.env.NEXT_PUBLIC_SHOW_VERSION_STRIP === "true";
 
   const filterItems = (items: NavItem[]) => {
-    // Normalize role safely for casing and undefined handling
     const roleNormalized = (currentRole ?? "").toLowerCase();
     return items.filter((item) => {
       if (item.hrAdminOnly && !isHrAdmin(roleNormalized)) return false;
@@ -192,17 +212,18 @@ function AppLayoutContent({
     });
   };
 
-  const visibleCoreItems = filterItems(coreNavItems);
-  const visibleHrItems = filterItems(hrNavItems);
-  const visibleMoreItems = moreNavItems;
-  const visibleSettingsItems = filterItems(settingsNavItems);
-  const visibleSpaljistenItems = showSpaljistenNav ? spaljistenNavItems : [];
+  const visibleCoreItems = isPilotMode ? filterItems(pilotModeCoreNavItems) : filterItems(coreNavItems);
+  const visibleHrItems = isPilotMode ? filterItems(pilotModeHrNavItems) : filterItems(hrNavItems);
+  const visibleMoreItems = isPilotMode ? [] : moreNavItems;
+  const visibleSpaljistenItems = isPilotMode ? [] : showSpaljistenNav ? spaljistenNavItems : [];
+  const visibleSettingsItems = isPilotMode ? [] : filterItems(settingsNavItems).filter((item) => (isProduction && item.name === "Debug") ? false : true);
 
   return (
     <>
       <GlobalErrorHandler />
       <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
         <DemoModeBanner />
+        {process.env.NODE_ENV !== "production" && <SessionDebugStrip />}
           <div className="flex flex-1 overflow-hidden">
           <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -294,6 +315,7 @@ function AppLayoutContent({
             <main className="flex-1 overflow-auto">
               {children}
             </main>
+            {showVersionStrip && <VersionStrip />}
             </div>
           </div>
         </div>

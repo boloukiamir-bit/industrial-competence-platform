@@ -1,11 +1,12 @@
 /**
  * GET /api/org/units — tenant-scoped by session (active_org_id).
  * Returns org tree + unassignedCount + totalEmployees for Overview page.
- * When active_site_id is set, employee counts are site-filtered to match Employees page.
+ * Uses shared employee scope so totalEmployees count matches GET /api/employees.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { buildEmployeeScope } from "@/lib/server/employeeScope";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 const supabaseAdmin = createClient(
@@ -107,8 +108,11 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const activeOrgId = org.activeOrgId;
-    const activeSiteId = org.activeSiteId ?? null;
+    const scope = buildEmployeeScope({
+      orgId: org.activeOrgId,
+      activeSiteId: org.activeSiteId ?? null,
+    });
+    const { orgId: activeOrgId, activeSiteId } = scope;
 
     // Org units: org_id only
     const unitsQuery = supabaseAdmin
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
       .eq("org_id", activeOrgId)
       .order("name");
 
-    // Employees: org_id + is_active, optionally site_id when active_site_id is set.
+    // Employees: same scope as GET /api/employees (org_id, is_active, site when activeSiteId set)
     let employeesQuery = supabaseAdmin
       .from("employees")
       .select("id, name, role, org_unit_id")
@@ -135,8 +139,8 @@ export async function GET(request: NextRequest) {
       .eq("is_active", true);
 
     if (activeSiteId) {
-      employeesQuery = employeesQuery.eq("site_id", activeSiteId);
-      countFilteredQuery = countFilteredQuery.eq("site_id", activeSiteId);
+      employeesQuery = employeesQuery.or(`site_id.eq.${activeSiteId},site_id.is.null`);
+      countFilteredQuery = countFilteredQuery.or(`site_id.eq.${activeSiteId},site_id.is.null`);
     }
 
     const [unitsRes, employeesRes, countRawRes, countFilteredRes] = await Promise.all([

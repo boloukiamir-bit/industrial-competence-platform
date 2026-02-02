@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useOrg } from '@/hooks/useOrg';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
@@ -44,8 +45,16 @@ interface SchemaCheckResult {
 }
 
 export default function DebugPage() {
+  const router = useRouter();
   const { currentOrg, currentRole, memberships, isLoading: orgLoading, error: orgError } = useOrg();
   const { user: authUser, isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      router.replace("/app");
+    }
+  }, [router]);
+
   const [counts, setCounts] = useState<Counts>({ employees: null, units: null, skills: null, positions: null });
   const [loadingCounts, setLoadingCounts] = useState(false);
   const [copied, setCopied] = useState(false);

@@ -25,14 +25,17 @@ import { getSuggestions, createAssignment } from "@/services/lineOverview";
 import { useToast } from "@/hooks/use-toast";
 import { addHoursToTime } from "@/lib/lineOverviewNet";
 
-/** Derive a short reason key for ineligible grouping (stations/skills). */
+/** Human-readable label for a reason code. */
+const REASON_LABELS: Record<string, string> = {
+  MISSING_SKILLS: "Missing skills",
+  ABSENT: "Absent",
+  NO_STATION_COVERAGE: "Station not covered",
+};
+
+/** Derive a stable key for ineligible grouping from server reasons. */
 function ineligibleReasonKey(s: EmployeeSuggestion): string {
-  const stations = `Stations ${s.stationsPassed}/${s.stationsRequired}`;
-  const skills =
-    typeof s.requiredSkillsCount === "number" && s.requiredSkillsCount > 0
-      ? `, Skills ${s.skillsPassedCount ?? 0}/${s.requiredSkillsCount}`
-      : "";
-  return stations + skills;
+  const reasons = (s.reasons ?? []).length ? s.reasons.slice().sort().join(",") : "Other";
+  return reasons;
 }
 
 interface SuggestModalProps {
@@ -120,7 +123,7 @@ export function SuggestModal({
         endTime,
       });
 
-      if (result) {
+      if (result.ok) {
         toast({
           title: "Assignment created",
           description: `${suggestion.employee.fullName} assigned ${shiftStart}–${endTime}`,
@@ -128,7 +131,18 @@ export function SuggestModal({
         onApply();
         onOpenChange(false);
       } else {
-        toast({ title: "Failed to create assignment", variant: "destructive" });
+        const desc = [
+          result.status != null && `Status: ${result.status}`,
+          result.step && `Step: ${result.step}`,
+          result.details != null && `Details: ${JSON.stringify(result.details)}`,
+        ]
+          .filter(Boolean)
+          .join(". ");
+        toast({
+          title: result.error ?? "Failed to create assignment",
+          description: desc || undefined,
+          variant: "destructive",
+        });
       }
     } catch (err) {
       toast({
@@ -148,7 +162,7 @@ export function SuggestModal({
     return name.includes(q) || num.includes(q);
   };
 
-  const { eligibleList, ineligibleList, ineligibleByReason } = useMemo(() => {
+  const { eligibleList, ineligibleList, ineligibleByReason, topReasons } = useMemo(() => {
     const eligible = suggestions
       .filter((s) => s.eligible && matchesSearch(s))
       .sort((a, b) => {
@@ -172,7 +186,17 @@ export function SuggestModal({
       if (!byReason.has(key)) byReason.set(key, []);
       byReason.get(key)!.push(s);
     }
-    return { eligibleList: eligible, ineligibleList: ineligible, ineligibleByReason: byReason };
+    const reasonCounts = new Map<string, number>();
+    for (const s of ineligible) {
+      for (const r of s.reasons ?? []) {
+        reasonCounts.set(r, (reasonCounts.get(r) ?? 0) + 1);
+      }
+    }
+    const topReasons = Array.from(reasonCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([code]) => code);
+    return { eligibleList: eligible, ineligibleList: ineligible, ineligibleByReason: byReason, topReasons };
   }, [suggestions, searchQuery]);
 
   const eligibleCount = suggestions.filter((s) => s.eligible).length;
@@ -228,14 +252,22 @@ export function SuggestModal({
                 ? "Eligible (meets line requirements)"
                 : "Ineligible (missing line requirements)"}
             </Badge>
+            {!suggestion.eligible && (suggestion.reasons ?? []).length > 0 && (
+              <>
+                {(suggestion.reasons ?? []).map((code) => (
+                  <Badge key={code} variant="outline" className="text-xs">
+                    {REASON_LABELS[code] ?? code}
+                  </Badge>
+                ))}
+              </>
+            )}
             <Badge variant="outline" className="text-xs">
-              Station coverage: {suggestion.stationsPassed}/{suggestion.stationsRequired}
+              Station coverage: {suggestion.stationCoverage?.covered ?? suggestion.stationsPassed}/
+              {suggestion.stationCoverage?.required ?? suggestion.stationsRequired}
             </Badge>
-            {typeof suggestion.skillsPassedCount === "number" &&
-              typeof suggestion.requiredSkillsCount === "number" &&
-              suggestion.requiredSkillsCount > 0 && (
+            {typeof suggestion.requiredSkillsCount === "number" && suggestion.requiredSkillsCount > 0 && (
               <Badge variant="outline" className="text-xs">
-                Skills: {suggestion.skillsPassedCount}/{suggestion.requiredSkillsCount}
+                Skills: {suggestion.skillsPassedCount ?? 0}/{suggestion.requiredSkillsCount}
               </Badge>
             )}
           </div>
@@ -344,13 +376,23 @@ export function SuggestModal({
                     ))}
                   </>
                 ) : eligibleList.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
+                  <div className="text-center py-8 text-muted-foreground" data-testid="eligible-empty-state">
                     <User className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">
-                      {q ? "No matching eligible employees" : "No eligible employees found"}
+                    <p className="text-sm font-medium">
+                      {q ? "No matching eligible employees" : "No eligible employees"}
                     </p>
+                    {!q && eligibleCount === 0 && topReasons.length > 0 && (
+                      <p className="text-xs mt-2">Most common reasons:</p>
+                    )}
+                    {!q && eligibleCount === 0 && topReasons.length > 0 && (
+                      <ul className="text-xs mt-1 list-disc list-inside text-left max-w-xs mx-auto">
+                        {topReasons.map((code) => (
+                          <li key={code}>{REASON_LABELS[code] ?? code}</li>
+                        ))}
+                      </ul>
+                    )}
                     {!q && (
-                      <p className="text-xs mt-1">Check the Ineligible tab for other staff</p>
+                      <p className="text-xs mt-2">Check the Ineligible tab for other staff</p>
                     )}
                   </div>
                 ) : (
@@ -402,7 +444,7 @@ export function SuggestModal({
                         ) : (
                           <ChevronRight className="h-4 w-4" />
                         )}
-                        {reason} ({list.length})
+                        {list[0]?.reasons?.map((r) => REASON_LABELS[r] ?? r).join(", ") ?? reason} ({list.length})
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="mt-1 ml-2 space-y-2 pl-2 border-l">
