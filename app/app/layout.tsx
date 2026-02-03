@@ -27,7 +27,8 @@ import {
   Gauge,
   Factory,
   Target,
-  ClipboardCheck
+  ClipboardCheck,
+  Inbox
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser, isHrAdmin } from "@/lib/auth";
 import { useOrg } from "@/hooks/useOrg";
@@ -56,6 +57,7 @@ const coreNavItems: NavItem[] = [
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
   { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
   { name: "Compliance", href: "/app/compliance", icon: ClipboardCheck },
+  { name: "Compliance Matrix", href: "/app/compliance/matrix", icon: Grid3X3 },
   { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: TrendingUp },
   { name: "Setup", href: "/app/setup", icon: Clipboard },
   { name: "Admin", href: "/app/admin", icon: Wrench, hrAdminOnly: true },
@@ -63,6 +65,8 @@ const coreNavItems: NavItem[] = [
 
 const hrNavItems: NavItem[] = [
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
+  { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
+  { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
   { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
   { name: "HR Workflows", href: "/app/workflows/templates", icon: Workflow, hrAdminOnly: true },
@@ -94,8 +98,10 @@ const pilotModeCoreNavItems: NavItem[] = [
 ];
 
 const pilotModeHrNavItems: NavItem[] = [
-  { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
-  { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
+  { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
+  { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
+  { name: "HR Inbox", href: "/app/hr", icon: Clipboard, hrAdminOnly: true },
+  { name: "HR Workflows", href: "/app/hr/templates", icon: Workflow, hrAdminOnly: true },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -202,7 +208,7 @@ function AppLayoutContent({
 }) {
   const { currentRole } = useOrg();
   const isProduction = process.env.NODE_ENV === "production";
-  const showVersionStrip = !isProduction || process.env.NEXT_PUBLIC_SHOW_VERSION_STRIP === "true";
+  const showVersionStrip = process.env.NEXT_PUBLIC_SHOW_VERSION_STRIP === "true";
 
   const filterItems = (items: NavItem[]) => {
     const roleNormalized = (currentRole ?? "").toLowerCase();

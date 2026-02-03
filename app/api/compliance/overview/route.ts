@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { getActiveSiteName } from "@/lib/server/siteName";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,6 +58,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const orgId = org.activeOrgId;
+    const activeSiteName =
+      org.activeSiteId != null
+        ? await getActiveSiteName(supabaseAdmin, org.activeSiteId, orgId)
+        : null;
 
     const employeesQuery = supabaseAdmin
       .from("employees")
@@ -174,7 +179,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const res = NextResponse.json({ ok: true, kpis, rows, catalog: catalogList });
+    const res = NextResponse.json({
+      ok: true,
+      kpis,
+      rows,
+      catalog: catalogList,
+      activeSiteId: org.activeSiteId ?? null,
+      activeSiteName,
+    });
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {

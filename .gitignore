@@ -13,3 +13,6 @@ cookie.txt
 req.sh
 req.txt
 test_*.sh
+
+# build artifacts
+*.tsbuildinfo

@@ -1,25 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 import { OrgGuard } from "@/components/OrgGuard";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Search, Loader2, Shield, Plus, Users, Package, ChevronRight, ChevronDown } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -29,10 +17,35 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import Link from "next/link";
+import { BarChart3, ChevronDown, ChevronRight, Grid3X3, Inbox, Loader2, Plus, Users } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
 import { ComplianceDrawer } from "@/components/compliance/ComplianceDrawer";
+import {
+  ComplianceKpiCards,
+  type KpiBucket,
+  type KpiCardState,
+} from "@/components/compliance/ComplianceKpiCards";
+import { Badge } from "@/components/ui/badge";
+import {
+  ComplianceFilters,
+  type CategoryTab,
+} from "@/components/compliance/ComplianceFilters";
+import {
+  ComplianceTable,
+  type ComplianceTableRow,
+  type RowStatus,
+} from "@/components/compliance/ComplianceTable";
 
 type OverviewRow = {
   employee_id: string;
@@ -49,6 +62,16 @@ type OverviewRow = {
   days_left: number | null;
 };
 
+type KpiCategory = { valid: number; expiring: number; expired: number; missing: number; waived: number };
+type OverviewResponse = {
+  ok: boolean;
+  kpis?: Record<string, KpiCategory>;
+  rows?: OverviewRow[];
+  catalog?: Array<{ id: string; category: string; code: string; name: string }>;
+  activeSiteId?: string | null;
+  activeSiteName?: string | null;
+};
+
 type Pack = { id: string; label: string; description: string; codes: string[] };
 const COMPLIANCE_PACKS: Pack[] = [
   { id: "safety-basics", label: "Bas – Säkerhet & etik (alla)", description: "Brand, Första hjälpen, HLR, Business Ethics", codes: ["TRN_FIRE_SAFETY", "TRN_FIRST_AID", "TRN_CPR_HLR", "POL_BUSINESS_ETHICS"] },
@@ -56,79 +79,132 @@ const COMPLIANCE_PACKS: Pack[] = [
   { id: "hardplast", label: "Härdplast – Exponering (målgrupp)", description: "Utbildning + undersökning", codes: ["TRN_EPOXY_TRAINING", "MED_EPOXY_ISOCYANATE"] },
 ];
 
-type KpiCategory = { valid: number; expiring: number; expired: number; missing: number; waived: number };
-type OverviewResponse = {
-  ok: boolean;
-  kpis?: Record<string, KpiCategory>;
-  rows?: OverviewRow[];
-  catalog?: Array<{ id: string; category: string; code: string; name: string }>;
-};
+function computeKpiStats(rows: OverviewRow[]): Record<KpiBucket, KpiCardState> & { totalEmployees: number } {
+  const empIds = new Set(rows.map((r) => r.employee_id));
+  const totalEmployees = empIds.size;
+  const actionEmp = new Set<string>();
+  const expiringEmp = new Set<string>();
+  const validEmp = new Set<string>();
+  const waivedEmp = new Set<string>();
+  let actionCount = 0,
+    expiringCount = 0,
+    validCount = 0,
+    waivedCount = 0;
 
-function sumKpis(kpis: Record<string, KpiCategory> | undefined): KpiCategory {
-  const out = { valid: 0, expiring: 0, expired: 0, missing: 0, waived: 0 };
-  if (!kpis) return out;
-  for (const cat of Object.values(kpis)) {
-    out.valid += cat.valid;
-    out.expiring += cat.expiring;
-    out.expired += cat.expired;
-    out.missing += cat.missing;
-    out.waived += cat.waived;
+  for (const r of rows) {
+    if (r.status === "missing" || r.status === "expired") {
+      actionCount++;
+      actionEmp.add(r.employee_id);
+    } else if (r.status === "expiring") {
+      expiringCount++;
+      expiringEmp.add(r.employee_id);
+    } else if (r.status === "valid") {
+      validCount++;
+      validEmp.add(r.employee_id);
+    } else if (r.status === "waived") {
+      waivedCount++;
+      waivedEmp.add(r.employee_id);
+    }
   }
-  return out;
+
+  const pct = (n: number) => (totalEmployees > 0 ? (n / totalEmployees) * 100 : 0);
+  return {
+    totalEmployees,
+    action_required: { count: actionCount, employeeCount: actionEmp.size, employeePct: pct(actionEmp.size), totalEmployees },
+    expiring_soon: { count: expiringCount, employeeCount: expiringEmp.size, employeePct: pct(expiringEmp.size), totalEmployees },
+    valid: { count: validCount, employeeCount: validEmp.size, employeePct: pct(validEmp.size), totalEmployees },
+    waived: { count: waivedCount, employeeCount: waivedEmp.size, employeePct: pct(waivedEmp.size), totalEmployees },
+  };
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  missing: "Saknas",
-  expired: "Utgånget",
-  expiring: "På väg att gå ut",
-  valid: "Giltigt",
-  waived: "Undantaget",
-};
-
-type AggregatedEmployee = {
-  employee_id: string;
-  employee_name: string;
-  employee_number: string;
-  line: string | null;
-  department: string | null;
-  missing: number;
-  expired: number;
-  expiring: number;
-  valid: number;
-  waived: number;
-  riskScore: number;
-  nextAction: string;
-};
-
-type AggregatedPost = {
-  code: string;
-  name: string;
-  missing: number;
-  expired: number;
-  expiring: number;
-  employees: Array<{ id: string; name: string; employee_number: string }>;
-};
+function aggregateRows(
+  rows: OverviewRow[],
+  category: CategoryTab
+): ComplianceTableRow[] {
+  const filtered =
+    category === "all" ? rows : rows.filter((r) => r.category === category);
+  const byEmp = new Map<
+    string,
+    { row: OverviewRow; missing: number; expiring: number; overdue: number; valid: number; waived: number }
+  >();
+  for (const r of filtered) {
+    const cur = byEmp.get(r.employee_id);
+    const missing = r.status === "missing" ? 1 : 0;
+    const expiring = r.status === "expiring" ? 1 : 0;
+    const overdue = r.status === "expired" ? 1 : 0;
+    const valid = r.status === "valid" ? 1 : 0;
+    const waived = r.status === "waived" ? 1 : 0;
+    if (!cur) {
+      byEmp.set(r.employee_id, {
+        row: r,
+        missing,
+        expiring,
+        overdue,
+        valid,
+        waived,
+      });
+    } else {
+      cur.missing += missing;
+      cur.expiring += expiring;
+      cur.overdue += overdue;
+      cur.valid += valid;
+      cur.waived += waived;
+    }
+  }
+  const result: ComplianceTableRow[] = [];
+  for (const [, v] of byEmp) {
+    const rowStatus: RowStatus =
+      v.missing > 0 || v.overdue > 0
+        ? "action_required"
+        : v.expiring > 0
+          ? "expiring"
+          : "ok";
+    result.push({
+      employee_id: v.row.employee_id,
+      employee_name: v.row.employee_name,
+      employee_number: v.row.employee_number ?? "",
+      line: v.row.line,
+      department: v.row.department,
+      missing: v.missing,
+      expiring: v.expiring,
+      overdue: v.overdue,
+      waived: v.waived,
+      rowStatus,
+    });
+  }
+  return result.sort((a, b) => {
+    const score = (r: ComplianceTableRow) =>
+      (r.missing + r.overdue) * 100 + r.expiring;
+    return score(b) - score(a);
+  });
+}
 
 export default function CompliancePage() {
-  const searchParams = useSearchParams();
   const { isAdminOrHr } = useOrg();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<OverviewResponse | null>(null);
-  const [viewMode, setViewMode] = useState<"medarbetare" | "poster">("medarbetare");
-  const [category, setCategory] = useState<string>(() => searchParams.get("category") || "all");
-  const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get("status") || "all");
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
-  const [sheetState, setSheetState] = useState<
-    | { type: "employee"; id: string; name: string; number: string }
-    | { type: "poster"; code: string; name: string; employees: Array<{ id: string; name: string; employee_number: string }> }
-    | null
-  >(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [category, setCategory] = useState<CategoryTab>("all");
+  const [lineFilter, setLineFilter] = useState("");
+  const [actionRequiredOnly, setActionRequiredOnly] = useState(true);
+  const [activeBucket, setActiveBucket] = useState<KpiBucket | null>("action_required");
+  const [drawerEmployee, setDrawerEmployee] = useState<{
+    id: string;
+    name: string;
+    number: string;
+  } | null>(null);
+  const [avanceratOpen, setAvanceratOpen] = useState(false);
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
-  const [catalogForm, setCatalogForm] = useState({ code: "", name: "", category: "license" as string, description: "", default_validity_days: "" });
+  const [catalogForm, setCatalogForm] = useState({
+    code: "",
+    name: "",
+    category: "license",
+    description: "",
+    default_validity_days: "",
+  });
   const [catalogSaving, setCatalogSaving] = useState(false);
   const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false);
   const [bulkAssignForm, setBulkAssignForm] = useState({
@@ -152,15 +228,12 @@ export default function CompliancePage() {
     waived: false,
   });
   const [packSubmitting, setPackSubmitting] = useState(false);
-  const [avanceratOpen, setAvanceratOpen] = useState(false);
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (category !== "all") params.set("category", category);
-      if (statusFilter !== "all") params.set("status", statusFilter);
       if (searchDebounced.trim()) params.set("search", searchDebounced.trim());
       const res = await fetch(`/api/compliance/overview?${params}`, {
         credentials: "include",
@@ -168,22 +241,19 @@ export default function CompliancePage() {
       });
       const json = (await res.json()) as OverviewResponse;
       if (!res.ok || !json.ok) {
-        const err = (json as { error?: string }).error ?? "Kunde inte ladda";
+        const err = (json as { error?: string }).error ?? "Failed to load";
         setError(err);
-        toast({ title: err, variant: "destructive" });
         setData(null);
         return;
       }
       setData(json);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Kunde inte ladda";
-      setError(msg);
-      toast({ title: msg, variant: "destructive" });
+      setError(err instanceof Error ? err.message : "Failed to load");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [category, statusFilter, searchDebounced, toast]);
+  }, [searchDebounced]);
 
   useEffect(() => {
     loadOverview();
@@ -195,410 +265,195 @@ export default function CompliancePage() {
   }, [search]);
 
   const rows = data?.rows ?? [];
-  const kpiTotals: KpiCategory =
-    category === "all"
-      ? sumKpis(data?.kpis)
-      : (data?.kpis?.[category] ?? { valid: 0, expiring: 0, expired: 0, missing: 0, waived: 0 });
-
-  const aggregatedEmployees = useMemo((): AggregatedEmployee[] => {
-    const byEmp = new Map<string, { row: OverviewRow; status: string }[]>();
-    for (const row of rows) {
-      const list = byEmp.get(row.employee_id) ?? [];
-      list.push({ row, status: row.status });
-      byEmp.set(row.employee_id, list);
+  const kpiStats = useMemo(() => computeKpiStats(rows), [rows]);
+  const aggregated = useMemo(
+    () => aggregateRows(rows, category),
+    [rows, category]
+  );
+  const lines = useMemo(
+    () => [...new Set(aggregated.map((r) => r.line).filter(Boolean))].sort() as string[],
+    [aggregated]
+  );
+  const filteredTableRows = useMemo(() => {
+    let list = aggregated;
+    if (lineFilter) list = list.filter((r) => r.line === lineFilter);
+    if (actionRequiredOnly) {
+      list = list.filter((r) => r.rowStatus === "action_required");
+    } else if (activeBucket === "action_required") {
+      list = list.filter((r) => r.rowStatus === "action_required");
+    } else if (activeBucket === "expiring_soon") {
+      list = list.filter((r) => r.rowStatus === "expiring");
+    } else if (activeBucket === "valid") {
+      list = list.filter((r) => r.rowStatus === "ok");
+    } else if (activeBucket === "waived") {
+      list = list.filter((r) => r.waived > 0);
     }
-    const result: AggregatedEmployee[] = [];
-    for (const [empId, list] of byEmp) {
-      const first = list[0].row;
-      const counts = { missing: 0, expired: 0, expiring: 0, valid: 0, waived: 0 };
-      for (const { status } of list) {
-        if (status in counts) (counts as Record<string, number>)[status]++;
-      }
-      const riskScore =
-        counts.expired * 1000 +
-        counts.missing * 100 +
-        counts.expiring * 10 +
-        counts.valid +
-        counts.waived * 0.01;
-      let nextAction = "";
-      if (counts.expired > 0) nextAction = `${counts.expired} utgångna`;
-      else if (counts.missing > 0) nextAction = `${counts.missing} saknas`;
-      else if (counts.expiring > 0) nextAction = `${counts.expiring} på väg att gå ut`;
-      result.push({
-        employee_id: empId,
-        employee_name: first.employee_name,
-        employee_number: first.employee_number,
-        line: first.line,
-        department: first.department,
-        ...counts,
-        riskScore,
-        nextAction,
-      });
-    }
-    return result.sort((a, b) => b.riskScore - a.riskScore);
-  }, [rows]);
+    return list;
+  }, [aggregated, lineFilter, actionRequiredOnly, activeBucket]);
 
-  const aggregatedPosts = useMemo((): AggregatedPost[] => {
-    const byCode = new Map<string, { name: string; missing: number; expired: number; expiring: number; employees: Map<string, { name: string; employee_number: string }> }>();
-    for (const row of rows) {
-      const status = row.status;
-      if (status !== "missing" && status !== "expired" && status !== "expiring") continue;
-      const cur = byCode.get(row.compliance_code);
-      if (!cur) {
-        const empMap = new Map<string, { name: string; employee_number: string }>();
-        empMap.set(row.employee_id, { name: row.employee_name, employee_number: row.employee_number ?? "" });
-        byCode.set(row.compliance_code, {
-          name: row.compliance_name,
-          missing: status === "missing" ? 1 : 0,
-          expired: status === "expired" ? 1 : 0,
-          expiring: status === "expiring" ? 1 : 0,
-          employees: empMap,
-        });
-      } else {
-        if (!cur.employees.has(row.employee_id)) {
-          cur.employees.set(row.employee_id, { name: row.employee_name, employee_number: row.employee_number ?? "" });
-        }
-        if (status === "missing") cur.missing++;
-        else if (status === "expired") cur.expired++;
-        else cur.expiring++;
-      }
-    }
-    return Array.from(byCode.entries()).map(([code, v]) => ({
-      code,
-      name: v.name,
-      missing: v.missing,
-      expired: v.expired,
-      expiring: v.expiring,
-      employees: Array.from(v.employees.entries()).map(([id, e]) => ({
-        id,
-        name: e.name,
-        employee_number: e.employee_number,
-      })),
-    }));
-  }, [rows]);
+  const handleBucketClick = useCallback((bucket: KpiBucket) => {
+    setActiveBucket((prev) => (prev === bucket ? null : bucket));
+    if (bucket === "action_required") setActionRequiredOnly(true);
+  }, []);
 
-  const filteredEmployees = useMemo(() => {
-    if (statusFilter === "all") return aggregatedEmployees;
-    return aggregatedEmployees.filter((e) => {
-      if (statusFilter === "missing" && e.missing > 0) return true;
-      if (statusFilter === "expired" && e.expired > 0) return true;
-      if (statusFilter === "expiring" && e.expiring > 0) return true;
-      if (statusFilter === "valid" && e.valid > 0) return true;
-      if (statusFilter === "waived" && e.waived > 0) return true;
-      return false;
-    });
-  }, [aggregatedEmployees, statusFilter]);
+  const handleReview = useCallback((employeeId: string, name: string, number: string) => {
+    setDrawerEmployee({ id: employeeId, name, number });
+  }, []);
 
-  const hasZeroAssignments = rows.length === 0;
+  const handleDrawerClose = useCallback(() => {
+    setDrawerEmployee(null);
+  }, []);
 
-  const openEmployeeSheet = (id: string, name: string, number: string) => {
-    setSheetState({ type: "employee", id, name, number });
-    setSheetOpen(true);
-  };
-
-  const openPosterSheet = (code: string, name: string, employees: Array<{ id: string; name: string; employee_number: string }>) => {
-    setSheetState({ type: "poster", code, name, employees });
-    setSheetOpen(true);
-  };
-
-  const handleSheetClose = () => {
-    setSheetOpen(false);
-    setSheetState(null);
-  };
-
-  const handleSelectEmployeeFromPoster = (id: string, name: string, employeeNumber?: string) => {
-    setSheetState({ type: "employee", id, name, number: employeeNumber ?? "" });
-  };
-
-  const handleKpiClick = (key: string) => {
-    setStatusFilter((prev) => (prev === key ? "all" : key));
-  };
-
-  const statusChips = [
-    { key: "missing", label: "Saknas", value: kpiTotals.missing },
-    { key: "expired", label: "Utgånget", value: kpiTotals.expired },
-    { key: "expiring", label: "På väg att gå ut", value: kpiTotals.expiring },
-    { key: "valid", label: "Giltigt", value: kpiTotals.valid },
-    { key: "waived", label: "Undantaget", value: kpiTotals.waived },
-  ];
+  const hasCatalog = (data?.catalog?.length ?? 0) > 0;
 
   return (
     <OrgGuard>
-      <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {!isAdminOrHr && (
-          <p className="text-sm text-muted-foreground">Endast läsning.</p>
+          <p className="text-sm text-muted-foreground">Read-only.</p>
         )}
 
-        <header className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Compliance</h1>
-            <p className="text-muted-foreground mt-1">Licenser, medicinska kontroller, avtal — giltighet och utgång</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {isAdminOrHr && (
-              <>
-                <div className="flex flex-wrap gap-2">
-                  {COMPLIANCE_PACKS.map((pack) => (
-                    <Button
-                      key={pack.id}
-                      variant="outline"
-                      size="sm"
-                      className="h-auto py-2 px-4"
-                      onClick={() => {
-                        setSelectedPack(pack);
-                        setPackForm({ scope: "all", scopeValue: "", validFrom: "", validTo: "", notes: "", waived: false });
-                        setPackDialogOpen(true);
-                      }}
-                    >
-                      {pack.label}
-                    </Button>
-                  ))}
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setCatalogDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Lägg till katalogpost
-                </Button>
-              </>
-            )}
-            <Collapsible open={avanceratOpen} onOpenChange={setAvanceratOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1">
-                  {avanceratOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                  Avancerat
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[160px] h-9">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Alla status</SelectItem>
-                      <SelectItem value="missing">Saknas</SelectItem>
-                      <SelectItem value="expired">Utgånget</SelectItem>
-                      <SelectItem value="expiring">På väg att gå ut</SelectItem>
-                      <SelectItem value="valid">Giltigt</SelectItem>
-                      <SelectItem value="waived">Undantaget</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {isAdminOrHr && (
-                    <Button variant="outline" size="sm" onClick={() => setBulkAssignDialogOpen(true)}>
-                      <Users className="h-4 w-4 mr-1.5" />
-                      Mass tilldela
-                    </Button>
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
+        <header className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Compliance</h1>
+          <p className="text-sm text-muted-foreground">
+            Licenses, medical checks, contracts — validity and triage
+          </p>
         </header>
-
-        {/* Status chips */}
-        <div className="flex flex-wrap gap-2">
-          {loading ? (
-            <div className="h-9 w-48 bg-muted animate-pulse rounded-full" />
-          ) : (
-            statusChips.map(({ key, label, value }) => {
-              const isActive = statusFilter === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleKpiClick(key)}
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                    isActive ? "bg-primary text-primary-foreground" : "bg-muted/60 hover:bg-muted"
-                  }`}
-                >
-                  {label}
-                  <span className="tabular-nums">{value}</span>
-                </button>
-              );
-            })
+        <div className="flex justify-end gap-2">
+          {isAdminOrHr && (
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/app/compliance/summary">
+                  <BarChart3 className="h-4 w-4 mr-1.5" />
+                  Compliance Summary
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/app/compliance/actions">
+                  <Inbox className="h-4 w-4 mr-1.5" />
+                  Action Inbox
+                </Link>
+              </Button>
+            </>
           )}
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/app/compliance/matrix">
+              <Grid3X3 className="h-4 w-4 mr-1.5" />
+              Compliance Matrix
+            </Link>
+          </Button>
         </div>
 
-        {/* View toggle + filters */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div
-            role="tablist"
-            className="inline-flex rounded-lg border bg-muted/30 p-0.5"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === "medarbetare"}
-              onClick={() => setViewMode("medarbetare")}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                viewMode === "medarbetare" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Medarbetare
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === "poster"}
-              onClick={() => setViewMode("poster")}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                viewMode === "poster" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Poster
-            </button>
-          </div>
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Sök medarbetare..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="flex gap-2">
-            {["all", "license", "medical", "contract"].map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCategory(c)}
-                className={`rounded-md px-3 py-1.5 text-sm ${
-                  category === c ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {c === "all" ? "Alla" : c === "license" ? "Licens" : c === "medical" ? "Medicinsk" : "Avtal"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {hasZeroAssignments && !loading && (
-          <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-4 text-center text-sm text-muted-foreground">
-            Starta här: välj ett paket och tilldela till rätt målgrupp.
-          </div>
-        )}
-
-        {/* Content */}
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <p className="text-destructive text-center py-8">{error}</p>
-        ) : !data?.catalog?.length ? (
-          <p className="text-muted-foreground text-center py-8">Inga katalogposter. Lägg till i katalogen.</p>
-        ) : viewMode === "medarbetare" ? (
-          <div className="space-y-1">
-            {filteredEmployees.length === 0 ? (
-              <p className="text-muted-foreground py-8 text-center">Inga medarbetare matchar filtren.</p>
-            ) : (
-              filteredEmployees.map((emp) => (
-                <button
-                  key={emp.employee_id}
-                  type="button"
-                  onClick={() => openEmployeeSheet(emp.employee_id, emp.employee_name, emp.employee_number)}
-                  className="w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left group"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{emp.employee_name}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {[emp.department, emp.line].filter(Boolean).join(" · ") || "—"}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-0.5 shrink-0">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        emp.expired > 0
-                          ? "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300"
-                          : emp.missing > 0 || emp.expiring > 0
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
-                            : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
-                      }`}
-                    >
-                      {emp.expired > 0 ? "Kritisk" : emp.missing > 0 || emp.expiring > 0 ? "Åtgärd krävs" : "OK"}
-                    </span>
-                    {(emp.expired > 0 || emp.missing > 0 || emp.expiring > 0) && (
-                      <span className="text-xs text-muted-foreground">
-                        {[
-                          emp.expired > 0 && `${STATUS_LABELS.expired} ${emp.expired}`,
-                          emp.missing > 0 && `${STATUS_LABELS.missing} ${emp.missing}`,
-                          emp.expiring > 0 && `${STATUS_LABELS.expiring} ${emp.expiring}`,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ")}
-                      </span>
-                    )}
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground shrink-0" />
-                </button>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {aggregatedPosts.length === 0 ? (
-              <p className="text-muted-foreground py-8 text-center">Inga poster med problem.</p>
-            ) : (
-              aggregatedPosts.map((post) => (
-                  <button
-                    key={post.code}
-                    type="button"
-                    onClick={() => openPosterSheet(post.code, post.name, post.employees)}
-                    className="w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left group"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{post.name}</p>
-                      <p className="text-sm text-muted-foreground truncate">{post.code}</p>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      {post.expired > 0 && (
-                        <span className="text-xs text-destructive font-medium">{post.expired} utgångna</span>
-                      )}
-                      {post.missing > 0 && (
-                        <span className="text-xs text-muted-foreground">{post.missing} saknas</span>
-                      )}
-                      {post.expiring > 0 && (
-                        <span className="text-xs text-amber-600">{post.expiring} på väg att gå ut</span>
-                      )}
-                    </div>
-                    <span className="text-sm text-muted-foreground shrink-0">{post.employees.length} medarbetare</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground shrink-0" />
-                  </button>
-                ))
-            )}
-          </div>
-        )}
-
-        <ComplianceDrawer
-          open={sheetOpen}
-          onOpenChange={(open) => !open && handleSheetClose()}
-          employeeId={sheetState?.type === "employee" ? sheetState.id : null}
-          employeeName={sheetState?.type === "employee" ? sheetState.name : ""}
-          employeeNumber={sheetState?.type === "employee" ? sheetState.number : ""}
-          isAdminOrHr={isAdminOrHr}
-          onSaved={() => {
-            toast({ title: "Sparat" });
-            loadOverview();
-          }}
-          posterContext={
-            sheetState?.type === "poster"
-              ? {
-                  code: sheetState.code,
-                  name: sheetState.name,
-                  employees: sheetState.employees,
-                }
-              : null
-          }
-          onSelectEmployee={handleSelectEmployeeFromPoster}
+        {/* Triage KPI bar */}
+        <ComplianceKpiCards
+          stats={kpiStats}
+          activeBucket={activeBucket}
+          onBucketClick={handleBucketClick}
+          loading={loading}
         />
 
+        {/* Site context + Filters */}
+        <div className="space-y-2">
+          <Badge variant="secondary" className="font-normal text-muted-foreground">
+            Site: {data?.activeSiteId ? (data?.activeSiteName ?? "Unknown site") : "All"}
+          </Badge>
+          <ComplianceFilters
+            search={search}
+            onSearchChange={setSearch}
+            category={category}
+            onCategoryChange={setCategory}
+            lineFilter={lineFilter}
+            onLineFilterChange={setLineFilter}
+            lines={lines}
+            actionRequiredOnly={actionRequiredOnly}
+            onActionRequiredOnlyChange={setActionRequiredOnly}
+          />
+        </div>
+
+        {/* Error state */}
+        {error && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {/* Empty catalog */}
+        {!loading && !error && !hasCatalog && (
+          <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-4 text-center text-sm text-muted-foreground">
+            No compliance catalog. Add items in Admin.
+          </div>
+        )}
+
+        {/* Table */}
+        {hasCatalog && (
+          <ComplianceTable
+            rows={filteredTableRows}
+            onReview={handleReview}
+            loading={loading}
+          />
+        )}
+
+        {/* Admin: Avancerat */}
+        {isAdminOrHr && (
+          <Collapsible open={avanceratOpen} onOpenChange={setAvanceratOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1">
+                {avanceratOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                Admin: packs, catalog, bulk assign
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                {COMPLIANCE_PACKS.map((pack) => (
+                  <Button
+                    key={pack.id}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedPack(pack);
+                      setPackForm({ scope: "all", scopeValue: "", validFrom: "", validTo: "", notes: "", waived: false });
+                      setPackDialogOpen(true);
+                    }}
+                  >
+                    {pack.label}
+                  </Button>
+                ))}
+                <Button size="sm" variant="ghost" onClick={() => setCatalogDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Add catalog item
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setBulkAssignDialogOpen(true)}>
+                  <Users className="h-4 w-4 mr-1.5" />
+                  Bulk assign
+                </Button>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {/* Review drawer */}
+        <ComplianceDrawer
+          open={!!drawerEmployee}
+          onOpenChange={(open) => !open && handleDrawerClose()}
+          employeeId={drawerEmployee?.id ?? null}
+          employeeName={drawerEmployee?.name ?? ""}
+          employeeNumber={drawerEmployee?.number ?? ""}
+          isAdminOrHr={!!isAdminOrHr}
+          onSaved={() => {
+            toast({ title: "Saved" });
+            loadOverview();
+          }}
+          posterContext={null}
+          activeSiteId={data?.activeSiteId ?? null}
+          activeSiteName={data?.activeSiteName ?? null}
+        />
+
+        {/* Bulk assign dialog */}
         <Dialog open={bulkAssignDialogOpen} onOpenChange={setBulkAssignDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Mass tilldela compliance</DialogTitle>
-              <DialogDescription>
-                Tilldela en compliancetyp till flera medarbetare via omfattning.
-              </DialogDescription>
+              <DialogTitle>Bulk assign compliance</DialogTitle>
+              <DialogDescription>Assign one compliance type to many employees by scope.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
@@ -608,7 +463,7 @@ export default function CompliancePage() {
                   onValueChange={(v) => setBulkAssignForm((f) => ({ ...f, complianceCode: v }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Välj compliance" />
+                    <SelectValue placeholder="Select compliance" />
                   </SelectTrigger>
                   <SelectContent>
                     {(data?.catalog ?? []).map((c) => (
@@ -620,40 +475,36 @@ export default function CompliancePage() {
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Omfattning</Label>
+                <Label>Scope</Label>
                 <Select
                   value={bulkAssignForm.scope}
-                  onValueChange={(v) =>
-                    setBulkAssignForm((f) => ({ ...f, scope: v as typeof bulkAssignForm.scope }))
-                  }
+                  onValueChange={(v) => setBulkAssignForm((f) => ({ ...f, scope: v as typeof bulkAssignForm.scope }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Alla aktiva medarbetare</SelectItem>
-                    <SelectItem value="line">Linje</SelectItem>
-                    <SelectItem value="department">Avdelning</SelectItem>
-                    <SelectItem value="shift" disabled>Skift — Ej tillgängligt</SelectItem>
-                    <SelectItem value="area">Område</SelectItem>
+                    <SelectItem value="all">All active employees</SelectItem>
+                    <SelectItem value="line">Line</SelectItem>
+                    <SelectItem value="department">Department</SelectItem>
+                    <SelectItem value="shift" disabled>Shift — N/A</SelectItem>
+                    <SelectItem value="area">Area</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {bulkAssignForm.scope !== "all" && (
                 <div className="grid gap-2">
-                  <Label>
-                    {bulkAssignForm.scope === "line" ? "Linje" : bulkAssignForm.scope === "department" ? "Avdelning" : "Område"}
-                  </Label>
+                  <Label>{bulkAssignForm.scope === "line" ? "Line" : bulkAssignForm.scope === "department" ? "Department" : "Area"}</Label>
                   <Input
                     value={bulkAssignForm.scopeValue}
                     onChange={(e) => setBulkAssignForm((f) => ({ ...f, scopeValue: e.target.value }))}
-                    placeholder="t.ex. Linje A"
+                    placeholder="e.g. Line A"
                   />
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Giltig från (valfritt)</Label>
+                  <Label>Valid from (optional)</Label>
                   <Input
                     type="date"
                     value={bulkAssignForm.validFrom}
@@ -661,7 +512,7 @@ export default function CompliancePage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label>Giltig till (valfritt)</Label>
+                  <Label>Valid to (optional)</Label>
                   <Input
                     type="date"
                     value={bulkAssignForm.validTo}
@@ -670,11 +521,11 @@ export default function CompliancePage() {
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Anteckningar (valfritt)</Label>
+                <Label>Notes (optional)</Label>
                 <Input
                   value={bulkAssignForm.notes}
                   onChange={(e) => setBulkAssignForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Anteckningar"
+                  placeholder="Notes"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -685,11 +536,11 @@ export default function CompliancePage() {
                   onChange={(e) => setBulkAssignForm((f) => ({ ...f, waived: e.target.checked }))}
                   className="h-4 w-4 rounded border-input"
                 />
-                <Label htmlFor="bulk-waived">Undantaget</Label>
+                <Label htmlFor="bulk-waived">Waived</Label>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setBulkAssignDialogOpen(false)}>Avbryt</Button>
+              <Button variant="outline" onClick={() => setBulkAssignDialogOpen(false)}>Cancel</Button>
               <Button
                 disabled={
                   !bulkAssignForm.complianceCode ||
@@ -715,10 +566,10 @@ export default function CompliancePage() {
                     });
                     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; inserted?: number; updated?: number };
                     if (!res.ok || !json.ok) {
-                      toast({ title: json.error ?? "Misslyckades", variant: "destructive" });
+                      toast({ title: json.error ?? "Failed", variant: "destructive" });
                       return;
                     }
-                    toast({ title: `Klar: ${json.inserted ?? 0} tillagda, ${json.updated ?? 0} uppdaterade` });
+                    toast({ title: `Done: ${json.inserted ?? 0} inserted, ${json.updated ?? 0} updated` });
                     setBulkAssignDialogOpen(false);
                     setBulkAssignForm({ complianceCode: "", scope: "all", scopeValue: "", validFrom: "", validTo: "", notes: "", waived: false });
                     loadOverview();
@@ -727,55 +578,39 @@ export default function CompliancePage() {
                   }
                 }}
               >
-                {bulkAssignSaving ? "Tilldelar…" : "Tilldela"}
+                {bulkAssignSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Assign
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
+        {/* Pack dialog */}
         <Dialog open={packDialogOpen} onOpenChange={(o) => (!o && setSelectedPack(null), setPackDialogOpen(o))}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>{selectedPack?.label ?? "Paket"}</DialogTitle>
-              <DialogDescription>Tilldela alla poster i paketet till medarbetare.</DialogDescription>
+              <DialogTitle>{selectedPack?.label ?? "Pack"}</DialogTitle>
+              <DialogDescription>Assign all items in the pack to employees.</DialogDescription>
             </DialogHeader>
             {selectedPack && (
               <>
                 <div className="grid gap-2">
-                  <Label>Inkluderade poster</Label>
+                  <Label>Included items</Label>
                   <ul className="text-sm rounded-lg border bg-muted/20 divide-y divide-border/50">
                     {selectedPack.codes.map((code) => {
                       const catalogItem = data?.catalog?.find((c) => c.code === code);
                       return (
                         <li key={code} className="flex items-center justify-between gap-2 px-3 py-2">
                           {catalogItem ? (
-                            <>
-                              <div>
-                                <span className="font-medium">{catalogItem.name}</span>
-                                <span className="block text-xs text-muted-foreground">{catalogItem.code}</span>
-                              </div>
-                            </>
+                            <div>
+                              <span className="font-medium">{catalogItem.name}</span>
+                              <span className="block text-xs text-muted-foreground">{catalogItem.code}</span>
+                            </div>
                           ) : (
-                            <>
-                              <div>
-                                <span className="font-medium text-muted-foreground">{code}</span>
-                                <span className="block text-xs text-muted-foreground">Saknas i katalog (kan läggas till)</span>
-                              </div>
-                              {isAdminOrHr && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-auto p-0 text-primary hover:underline"
-                                  onClick={() => {
-                                    setCatalogForm((f) => ({ ...f, code }));
-                                    setPackDialogOpen(false);
-                                    setCatalogDialogOpen(true);
-                                  }}
-                                >
-                                  Lägg till i katalog
-                                </Button>
-                              )}
-                            </>
+                            <div>
+                              <span className="font-medium text-muted-foreground">{code}</span>
+                              <span className="block text-xs text-muted-foreground">Not in catalog</span>
+                            </div>
                           )}
                         </li>
                       );
@@ -783,49 +618,50 @@ export default function CompliancePage() {
                   </ul>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Omfattning</Label>
+                  <Label>Scope</Label>
                   <Select value={packForm.scope} onValueChange={(v) => setPackForm((f) => ({ ...f, scope: v as typeof packForm.scope }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Alla aktiva medarbetare</SelectItem>
-                      <SelectItem value="line">Linje</SelectItem>
-                      <SelectItem value="department">Avdelning</SelectItem>
-                      <SelectItem value="area">Område</SelectItem>
+                      <SelectItem value="all">All active employees</SelectItem>
+                      <SelectItem value="line">Line</SelectItem>
+                      <SelectItem value="department">Department</SelectItem>
+                      <SelectItem value="area">Area</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 {packForm.scope !== "all" && (
                   <div className="grid gap-2">
-                    <Label>{packForm.scope === "line" ? "Linje" : packForm.scope === "department" ? "Avdelning" : "Område"}</Label>
-                    <Input value={packForm.scopeValue} onChange={(e) => setPackForm((f) => ({ ...f, scopeValue: e.target.value }))} placeholder="t.ex. Linje A" />
+                    <Label>{packForm.scope === "line" ? "Line" : packForm.scope === "department" ? "Department" : "Area"}</Label>
+                    <Input value={packForm.scopeValue} onChange={(e) => setPackForm((f) => ({ ...f, scopeValue: e.target.value }))} placeholder="e.g. Line A" />
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label>Giltig från (valfritt)</Label>
+                    <Label>Valid from (optional)</Label>
                     <Input type="date" value={packForm.validFrom} onChange={(e) => setPackForm((f) => ({ ...f, validFrom: e.target.value }))} />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Giltig till (valfritt)</Label>
+                    <Label>Valid to (optional)</Label>
                     <Input type="date" value={packForm.validTo} onChange={(e) => setPackForm((f) => ({ ...f, validTo: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Anteckningar (valfritt)</Label>
-                  <Input value={packForm.notes} onChange={(e) => setPackForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Anteckningar" />
+                  <Label>Notes (optional)</Label>
+                  <Input value={packForm.notes} onChange={(e) => setPackForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notes" />
                 </div>
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="pack-waived" checked={packForm.waived} onChange={(e) => setPackForm((f) => ({ ...f, waived: e.target.checked }))} className="h-4 w-4 rounded border-input" />
-                  <Label htmlFor="pack-waived">Undantaget</Label>
+                  <Label htmlFor="pack-waived">Waived</Label>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setPackDialogOpen(false)}>Avbryt</Button>
+                  <Button variant="outline" onClick={() => setPackDialogOpen(false)}>Cancel</Button>
                   <Button
                     disabled={(packForm.scope !== "all" && !packForm.scopeValue.trim()) || packSubmitting}
                     onClick={async () => {
                       if (!selectedPack) return;
                       setPackSubmitting(true);
-                      let ti = 0, tu = 0;
+                      let ti = 0,
+                        tu = 0;
                       try {
                         for (const code of selectedPack.codes) {
                           const res = await fetch("/api/compliance/bulk-assign", {
@@ -848,14 +684,15 @@ export default function CompliancePage() {
                         }
                         setPackDialogOpen(false);
                         setSelectedPack(null);
-                        toast({ title: `Paket tilldelat: ${ti} tillagda, ${tu} uppdaterade` });
+                        toast({ title: `Pack assigned: ${ti} inserted, ${tu} updated` });
                         loadOverview();
                       } finally {
                         setPackSubmitting(false);
                       }
                     }}
                   >
-                    {packSubmitting ? "Tilldelar…" : "Tilldela paket"}
+                    {packSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Assign pack
                   </Button>
                 </DialogFooter>
               </>
@@ -863,43 +700,44 @@ export default function CompliancePage() {
           </DialogContent>
         </Dialog>
 
+        {/* Catalog dialog */}
         <Dialog open={catalogDialogOpen} onOpenChange={setCatalogDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Lägg till katalogpost</DialogTitle>
-              <DialogDescription>Skapa en compliancetyp. Koden måste vara unik.</DialogDescription>
+              <DialogTitle>Add catalog item</DialogTitle>
+              <DialogDescription>Create a compliance type. Code must be unique.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label>Kod</Label>
-                <Input value={catalogForm.code} onChange={(e) => setCatalogForm((f) => ({ ...f, code: e.target.value }))} placeholder="t.ex. FORKLIFT_A" />
+                <Label>Code</Label>
+                <Input value={catalogForm.code} onChange={(e) => setCatalogForm((f) => ({ ...f, code: e.target.value }))} placeholder="e.g. FORKLIFT_A" />
               </div>
               <div className="grid gap-2">
-                <Label>Namn</Label>
-                <Input value={catalogForm.name} onChange={(e) => setCatalogForm((f) => ({ ...f, name: e.target.value }))} placeholder="t.ex. Truckkort A" />
+                <Label>Name</Label>
+                <Input value={catalogForm.name} onChange={(e) => setCatalogForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Forklift A" />
               </div>
               <div className="grid gap-2">
-                <Label>Kategori</Label>
+                <Label>Category</Label>
                 <Select value={catalogForm.category} onValueChange={(v) => setCatalogForm((f) => ({ ...f, category: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="license">Licens</SelectItem>
-                    <SelectItem value="medical">Medicinsk</SelectItem>
-                    <SelectItem value="contract">Avtal</SelectItem>
+                    <SelectItem value="license">License</SelectItem>
+                    <SelectItem value="medical">Medical</SelectItem>
+                    <SelectItem value="contract">Contract</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Beskrivning (valfritt)</Label>
-                <Input value={catalogForm.description} onChange={(e) => setCatalogForm((f) => ({ ...f, description: e.target.value }))} placeholder="Kort beskrivning" />
+                <Label>Description (optional)</Label>
+                <Input value={catalogForm.description} onChange={(e) => setCatalogForm((f) => ({ ...f, description: e.target.value }))} placeholder="Short description" />
               </div>
               <div className="grid gap-2">
-                <Label>Standard giltighet (dagar, valfritt)</Label>
+                <Label>Default validity (days, optional)</Label>
                 <Input type="number" value={catalogForm.default_validity_days} onChange={(e) => setCatalogForm((f) => ({ ...f, default_validity_days: e.target.value }))} placeholder="365" />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCatalogDialogOpen(false)}>Avbryt</Button>
+              <Button variant="outline" onClick={() => setCatalogDialogOpen(false)}>Cancel</Button>
               <Button
                 disabled={!catalogForm.code.trim() || !catalogForm.name.trim() || catalogSaving}
                 onClick={async () => {
@@ -919,10 +757,10 @@ export default function CompliancePage() {
                     });
                     const json = await res.json().catch(() => ({}));
                     if (!res.ok) {
-                      toast({ title: (json as { error?: string }).error ?? "Kunde inte spara", variant: "destructive" });
+                      toast({ title: (json as { error?: string }).error ?? "Could not save", variant: "destructive" });
                       return;
                     }
-                    toast({ title: "Katalogpost sparad" });
+                    toast({ title: "Catalog item saved" });
                     setCatalogDialogOpen(false);
                     setCatalogForm({ code: "", name: "", category: "license", description: "", default_validity_days: "" });
                     loadOverview();
@@ -931,7 +769,8 @@ export default function CompliancePage() {
                   }
                 }}
               >
-                {catalogSaving ? "Sparar…" : "Spara"}
+                {catalogSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Save
               </Button>
             </DialogFooter>
           </DialogContent>

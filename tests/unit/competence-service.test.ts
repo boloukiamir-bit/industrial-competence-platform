@@ -41,13 +41,40 @@ test("competenceService.getEmployeesWithSkills returns only referenced skills", 
     },
   ];
 
+  const skillsCatalog = [
+    { id: "s1", code: "PRESS_A", name: "Press A", category: "Production" },
+  ];
   const eqCalls: Array<[string, string]> = [];
+  const skillsQuery = createQuery({ data: skillsCatalog, error: null });
   const employeesQuery = createQuery({ data: employees, error: null }, eqCalls);
   const employeeSkillsQuery = createQuery({ data: employeeSkills, error: null });
 
+  const skillsChain = {
+    select: () => ({ eq: () => ({ order: () => ({ order: () => skillsQuery }) }) }),
+  };
+  // employeesBaseQuery does from("employees").select("*").eq("org_id",...).eq("is_active",...); service then .select("*")
+  const employeesAfterEq = {
+    select: () => ({ ...employeesQuery, eq: () => ({ eq: () => employeesQuery }) }),
+    ...employeesQuery,
+  };
+  const employeesChain = {
+    select: () => ({
+      eq: (col: string, val: string) => {
+        eqCalls.push([col, val]);
+        return {
+          eq: (c2: string, v2: string) => {
+            eqCalls.push([c2, v2]);
+            return employeesAfterEq;
+          },
+        };
+      },
+    }),
+  };
+
   const originalFrom = (supabase as { from: unknown }).from;
   (supabase as { from: unknown }).from = (table: string) => {
-    if (table === "employees") return { select: () => employeesQuery };
+    if (table === "skills") return skillsChain;
+    if (table === "employees") return employeesChain;
     if (table === "employee_skills") return { select: () => employeeSkillsQuery };
     throw new Error(`Unexpected table: ${table}`);
   };
@@ -77,12 +104,25 @@ test("competenceService.getEmployeesWithSkills returns empty skills when no empl
   ];
   const employeeSkills: Array<{ employee_id: string; skill_id: string; level: number }> = [];
 
+  const skillsQuery = createQuery({ data: [], error: null });
   const employeesQuery = createQuery({ data: employees, error: null });
   const employeeSkillsQuery = createQuery({ data: employeeSkills, error: null });
 
+  const skillsChain = {
+    select: () => ({ eq: () => ({ order: () => ({ order: () => skillsQuery }) }) }),
+  };
+  const employeesAfterEq = {
+    select: () => ({ ...employeesQuery, eq: () => ({ eq: () => employeesQuery }) }),
+    ...employeesQuery,
+  };
+  const employeesChain = {
+    select: () => ({ eq: () => ({ eq: () => employeesAfterEq }) }),
+  };
+
   const originalFrom = (supabase as { from: unknown }).from;
   (supabase as { from: unknown }).from = (table: string) => {
-    if (table === "employees") return { select: () => employeesQuery };
+    if (table === "skills") return skillsChain;
+    if (table === "employees") return employeesChain;
     if (table === "employee_skills") return { select: () => employeeSkillsQuery };
     throw new Error(`Unexpected table: ${table}`);
   };

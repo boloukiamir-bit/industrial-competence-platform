@@ -35,9 +35,44 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { User, Loader2, ExternalLink, ClipboardList, Sparkles, ChevronDown } from "lucide-react";
+import { User, Loader2, ExternalLink, ClipboardList, Sparkles, ChevronDown, Workflow, CheckCircle2, Zap } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useToast } from "@/hooks/use-toast";
+
+type ComplianceActionType = "request_renewal" | "request_evidence" | "notify_employee" | "mark_waived_review";
+type ComplianceAction = {
+  id: string;
+  action_type: string;
+  status: string;
+  due_date: string | null;
+  notes: string | null;
+  created_at: string;
+  compliance_code: string | null;
+  compliance_name: string | null;
+};
+const ACTION_TYPE_LABELS: Record<ComplianceActionType, string> = {
+  request_renewal: "Request renewal",
+  request_evidence: "Request evidence",
+  notify_employee: "Notify employee",
+  mark_waived_review: "Waived review",
+};
+
+function recommendedActionTypes(status: string): ComplianceActionType[] {
+  if (status === "missing" || status === "expired" || status === "overdue")
+    return ["request_renewal", "request_evidence"];
+  if (status === "expiring") return ["request_renewal", "notify_employee"];
+  if (status === "waived") return ["mark_waived_review"];
+  return [];
+}
+
+const PILOT_MODE = process.env.NEXT_PUBLIC_PILOT_MODE === "true";
+
+type HrWorkflowOption = {
+  code: string;
+  name: string;
+  description: string | null;
+  steps: Array<{ code: string; name: string; order: number; defaultDueDays: number | null; required: boolean }>;
+};
 
 type ComplianceItem = {
   compliance_id: string;
@@ -101,6 +136,8 @@ function ItemRow({
   item,
   isAdminOrHr,
   onCreateTask,
+  onRequestAction,
+  actionCreating,
   onEdit,
   editing,
   form,
@@ -111,6 +148,8 @@ function ItemRow({
   item: ComplianceItem;
   isAdminOrHr: boolean;
   onCreateTask: (item: ComplianceItem) => void;
+  onRequestAction?: (complianceCode: string, actionType: ComplianceActionType) => void;
+  actionCreating?: boolean;
   onEdit: (code: string | null) => void;
   editing: boolean;
   form: { valid_from: string; valid_to: string; evidence_url: string; notes: string; waived: boolean };
@@ -120,6 +159,7 @@ function ItemRow({
 }) {
   const isProblematic = ["missing", "expired", "expiring"].includes(item.status);
   const validToStr = item.valid_to ? new Date(item.valid_to).toLocaleDateString("sv-SE") : "—";
+  const actionTypes = recommendedActionTypes(item.status);
 
   return (
     <div className="space-y-2">
@@ -131,6 +171,23 @@ function ItemRow({
             <StatusBadge status={item.status} />
             <span className="text-xs text-muted-foreground">{validToStr}</span>
           </div>
+          {isAdminOrHr && onRequestAction && actionTypes.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+                {actionTypes.map((actionType: ComplianceActionType) => (
+                <Button
+                  key={actionType}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={actionCreating}
+                  onClick={() => onRequestAction(item.code, actionType)}
+                >
+                  <Zap className="h-3 w-3 mr-1" />
+                  {ACTION_TYPE_LABELS[actionType]}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
         {isAdminOrHr && (
           <div className="flex flex-col gap-2 shrink-0">
@@ -221,6 +278,9 @@ interface ComplianceDrawerProps {
     employees: Array<{ id: string; name: string; employee_number?: string }>;
   } | null;
   onSelectEmployee?: (id: string, name: string, employeeNumber?: string) => void;
+  /** P0.8.2 site context chip above actions list */
+  activeSiteId?: string | null;
+  activeSiteName?: string | null;
 }
 
 export function ComplianceDrawer({
@@ -233,6 +293,8 @@ export function ComplianceDrawer({
   onSaved,
   posterContext,
   onSelectEmployee,
+  activeSiteId,
+  activeSiteName,
 }: ComplianceDrawerProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -256,6 +318,18 @@ export function ComplianceDrawer({
   });
   const [saving, setSaving] = useState(false);
   const [showValidItems, setShowValidItems] = useState<Record<string, boolean>>({});
+
+  const [hrWorkflows, setHrWorkflows] = useState<HrWorkflowOption[]>([]);
+  const [hrWorkflowsLoading, setHrWorkflowsLoading] = useState(false);
+  const [hrWorkflowCode, setHrWorkflowCode] = useState("");
+  const [hrStepCode, setHrStepCode] = useState("");
+  const [hrStepStatus, setHrStepStatus] = useState<"pending" | "done" | "waived">("pending");
+  const [hrStepNotes, setHrStepNotes] = useState("");
+  const [hrStepSaving, setHrStepSaving] = useState(false);
+
+  const [actions, setActions] = useState<ComplianceAction[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [actionCreating, setActionCreating] = useState(false);
 
   const loadEmployeeCompliance = useCallback(async () => {
     if (!employeeId || !open) return;
@@ -284,6 +358,107 @@ export function ComplianceDrawer({
   useEffect(() => {
     loadEmployeeCompliance();
   }, [loadEmployeeCompliance]);
+
+  const loadActions = useCallback(async () => {
+    if (!employeeId || !open) return;
+    setActionsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/compliance/actions?employeeId=${encodeURIComponent(employeeId)}`,
+        { credentials: "include", headers: withDevBearer() }
+      );
+      const json = (await res.json()) as { ok?: boolean; actions?: ComplianceAction[] };
+      if (res.ok && json.ok && Array.isArray(json.actions)) setActions(json.actions);
+      else setActions([]);
+    } catch {
+      setActions([]);
+    } finally {
+      setActionsLoading(false);
+    }
+  }, [employeeId, open]);
+
+  useEffect(() => {
+    loadActions();
+  }, [loadActions]);
+
+  const createAction = useCallback(
+    async (complianceCode: string, actionType: ComplianceActionType) => {
+      if (!employeeId) return;
+      setActionCreating(true);
+      try {
+        const res = await fetch("/api/compliance/actions/create", {
+          method: "POST",
+          credentials: "include",
+          headers: withDevBearer({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            employee_id: employeeId,
+            compliance_code: complianceCode,
+            action_type: actionType,
+          }),
+        });
+        const json = (await res.json()) as { ok?: boolean; error?: string; step?: string; message?: string };
+        if (!res.ok || !json.ok) {
+          const message =
+            res.status === 409 && json.step === "site_mismatch"
+              ? "Wrong site selected for this employee"
+              : (json.message ?? json.error ?? "Action failed");
+          toast({ title: message, variant: "destructive" });
+          return;
+        }
+        toast({ title: ACTION_TYPE_LABELS[actionType] + " created" });
+        await loadActions();
+      } catch (err) {
+        toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+      } finally {
+        setActionCreating(false);
+      }
+    },
+    [employeeId, loadActions, toast]
+  );
+
+  const markActionDone = useCallback(
+    async (actionId: string) => {
+      try {
+        const res = await fetch(`/api/compliance/actions/${actionId}/done`, {
+          method: "POST",
+          credentials: "include",
+          headers: withDevBearer(),
+        });
+        const json = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !json.ok) {
+          toast({ title: json.error ?? "Failed", variant: "destructive" });
+          return;
+        }
+        toast({ title: "Marked done" });
+        await loadActions();
+      } catch (err) {
+        toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+      }
+    },
+    [loadActions, toast]
+  );
+
+  const fetchHrWorkflows = useCallback(async () => {
+    if (!PILOT_MODE || !open) return;
+    setHrWorkflowsLoading(true);
+    try {
+      const res = await fetch("/api/hr/workflows", { credentials: "include", headers: withDevBearer() });
+      const data = await res.json().catch(() => []);
+      setHrWorkflows(Array.isArray(data) ? data : []);
+    } catch {
+      setHrWorkflows([]);
+    } finally {
+      setHrWorkflowsLoading(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (PILOT_MODE && employeeId && open) fetchHrWorkflows();
+  }, [PILOT_MODE, employeeId, open, fetchHrWorkflows]);
+
+  useEffect(() => {
+    setHrStepCode("");
+  }, [hrWorkflowCode]);
 
   useEffect(() => {
     if (!editingCode) {
@@ -432,6 +607,36 @@ export function ComplianceDrawer({
     }
   };
 
+  const handleHrWorkflowSave = async () => {
+    if (!employeeId || !hrWorkflowCode || !hrStepCode) return;
+    setHrStepSaving(true);
+    try {
+      const res = await fetch("/api/hr/workflows/employee/upsert", {
+        method: "POST",
+        credentials: "include",
+        headers: withDevBearer({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          employee_id: employeeId,
+          workflow_code: hrWorkflowCode,
+          step_code: hrStepCode,
+          status: hrStepStatus,
+          notes: hrStepNotes.trim() || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: (json as { error?: string }).error ?? "Failed to save", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Saved to HR workflow" });
+      onSaved();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to save", variant: "destructive" });
+    } finally {
+      setHrStepSaving(false);
+    }
+  };
+
   const toggleShowValid = (cat: string) =>
     setShowValidItems((prev) => ({ ...prev, [cat]: !prev[cat] }));
 
@@ -470,7 +675,10 @@ export function ComplianceDrawer({
       </div>
     );
 
-  const renderEmployeeView = () => {
+  const renderEmployeeView = (
+    actionCreate: (complianceCode: string, actionType: ComplianceActionType) => Promise<void>,
+    actionCreatingFlag: boolean
+  ) => {
     if (loading) {
       return (
         <div className="flex justify-center py-12">
@@ -510,6 +718,8 @@ export function ComplianceDrawer({
                     item={item}
                     isAdminOrHr={isAdminOrHr}
                     onCreateTask={setCreateTaskItem}
+                    onRequestAction={isAdminOrHr ? actionCreate : undefined}
+                    actionCreating={actionCreatingFlag}
                     onEdit={setEditingCode}
                     editing={editingCode === item.code}
                     form={form}
@@ -533,6 +743,8 @@ export function ComplianceDrawer({
                           item={item}
                           isAdminOrHr={isAdminOrHr}
                           onCreateTask={setCreateTaskItem}
+                          onRequestAction={isAdminOrHr ? actionCreate : undefined}
+                          actionCreating={actionCreatingFlag}
                           onEdit={setEditingCode}
                           editing={editingCode === item.code}
                           form={form}
@@ -556,6 +768,55 @@ export function ComplianceDrawer({
   const title = isPosterMode
     ? posterContext.name
     : employeeName || "Medarbetare";
+
+  const actionsSection =
+    !isPosterMode &&
+    employeeId && (
+      <section className="mt-6 pt-4 border-t border-border">
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          Actions
+        </h3>
+        {actionsLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading…
+          </div>
+        ) : actions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No actions yet. Use the buttons above to create one.</p>
+        ) : (
+          <ul className="space-y-2">
+            {actions.map((a: ComplianceAction) => (
+              <li
+                key={a.id}
+                className="flex items-center justify-between gap-2 py-2 px-3 rounded-md bg-muted/30 border border-border/50"
+              >
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">
+                    {ACTION_TYPE_LABELS[a.action_type as ComplianceActionType] ?? a.action_type}
+                  </span>
+                  {(a.compliance_code || a.compliance_name) && (
+                    <span className="block text-xs text-muted-foreground">
+                      {a.compliance_name ?? a.compliance_code ?? ""}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant={a.status === "done" ? "secondary" : "default"} className={a.status === "done" ? "bg-emerald-600/20 text-emerald-700" : ""}>
+                    {a.status === "open" ? "Open" : "Done"}
+                  </Badge>
+                  {a.status === "open" && isAdminOrHr && (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => markActionDone(a.id)}>
+                      Mark done
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -591,7 +852,142 @@ export function ComplianceDrawer({
         )}
 
         <div className="mt-6">
-          {isPosterMode ? renderPosterView() : renderEmployeeView()}
+          {isPosterMode ? renderPosterView() : renderEmployeeView(createAction, actionCreating)}
+
+          {!isPosterMode && employeeId && (
+            <section className="mt-6 pt-4 border-t border-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="secondary" className="font-normal text-muted-foreground text-xs">
+                  Site: {activeSiteId ? (activeSiteName ?? "Unknown site") : "All"}
+                </Badge>
+              </div>
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Actions
+              </h3>
+              {actionsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading…
+                </div>
+              ) : actions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No actions yet. Use the buttons above to create one.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {actions.map((a: ComplianceAction) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between gap-2 py-2 px-3 rounded-md bg-muted/30 border border-border/50"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium">
+                          {ACTION_TYPE_LABELS[a.action_type as ComplianceActionType] ?? a.action_type}
+                        </span>
+                        {(a.compliance_code || a.compliance_name) && (
+                          <span className="block text-xs text-muted-foreground">
+                            {a.compliance_name ?? a.compliance_code ?? ""}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant={a.status === "done" ? "secondary" : "default"} className={a.status === "done" ? "bg-emerald-600/20 text-emerald-700" : ""}>
+                          {a.status === "open" ? "Open" : "Done"}
+                        </Badge>
+                        {a.status === "open" && isAdminOrHr && (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => markActionDone(a.id)}>
+                            Mark done
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {PILOT_MODE && employeeId && isAdminOrHr && (
+            <section className="mt-6 pt-4 border-t border-border">
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <Workflow className="h-4 w-4" />
+                HR workflow action
+              </h3>
+              {hrWorkflowsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading workflows…
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Workflow</Label>
+                    <Select value={hrWorkflowCode} onValueChange={setHrWorkflowCode}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select workflow" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hrWorkflows.map((w) => (
+                          <SelectItem key={w.code} value={w.code}>
+                            {w.name} ({w.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Step</Label>
+                    <Select value={hrStepCode} onValueChange={setHrStepCode}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select step" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(hrWorkflows.find((w) => w.code === hrWorkflowCode)?.steps ?? [])
+                          .sort((a, b) => a.order - b.order)
+                          .map((s) => (
+                            <SelectItem key={s.code} value={s.code}>
+                              {s.name} ({s.code})
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Status</Label>
+                    <Select
+                      value={hrStepStatus}
+                      onValueChange={(v: "pending" | "done" | "waived") => setHrStepStatus(v)}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="done">Done</SelectItem>
+                        <SelectItem value="waived">Waived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Notes</Label>
+                    <Input
+                      value={hrStepNotes}
+                      onChange={(e) => setHrStepNotes(e.target.value)}
+                      placeholder="Optional notes"
+                      className="h-9"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleHrWorkflowSave}
+                    disabled={hrStepSaving || !hrWorkflowCode || !hrStepCode}
+                  >
+                    {hrStepSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Save to HR workflow
+                  </Button>
+                </div>
+              )}
+            </section>
+          )}
         </div>
 
         <Dialog
@@ -614,21 +1010,34 @@ export function ComplianceDrawer({
                   <Skeleton className="h-10 w-full rounded-md" />
                 ) : templates.length === 0 ? (
                   <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Inga HR-mallar finns. Skapa de 4 rekommenderade mallarna för att fortsätta.
-                    </p>
-                    <Button
-                      size="sm"
-                      onClick={handleSeedTemplatesInModal}
-                      disabled={seedingTemplates}
-                    >
-                      {seedingTemplates ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="mr-2 h-4 w-4" />
-                      )}
-                      Skapa mallar nu
-                    </Button>
+                    {PILOT_MODE ? (
+                      <>
+                        <p className="text-sm text-muted-foreground">
+                          Pilot mode: Mallar hanteras under HR Templates.
+                        </p>
+                        <Button size="sm" asChild>
+                          <Link href="/app/hr/templates">Gå till HR Templates</Link>
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-muted-foreground">
+                          Inga HR-mallar finns. Skapa de 4 rekommenderade mallarna för att fortsätta.
+                        </p>
+                        <Button
+                          size="sm"
+                          onClick={handleSeedTemplatesInModal}
+                          disabled={seedingTemplates}
+                        >
+                          {seedingTemplates ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Sparkles className="mr-2 h-4 w-4" />
+                          )}
+                          Skapa mallar nu
+                        </Button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <Select
