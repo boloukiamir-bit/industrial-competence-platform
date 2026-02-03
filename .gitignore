@@ -16,3 +16,10 @@ test_*.sh
 
 # build artifacts
 *.tsbuildinfo
+
+# local/dev-only
+app/api/debug/env/
+instrumentation.ts
+scripts/print-db-url.js
+scripts/print-new-db-url.js
+scripts/test-db-conn.js
