@@ -27,7 +27,7 @@ import { apiGet, apiPost } from "@/lib/apiClient";
 
 type TemplateStep = {
   id: string;
-  step_no: number;
+  step_order: number;
   title: string;
   description: string;
   owner_role: string;
@@ -228,10 +228,10 @@ export default function TemplateDetailPage() {
               <div
                 key={step.id}
                 className="flex items-start gap-4 p-4 border rounded-lg"
-                data-testid={`step-${step.step_no}`}
+                data-testid={`step-${step.step_order}`}
               >
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                  {step.step_no}
+                  {step.step_order}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">

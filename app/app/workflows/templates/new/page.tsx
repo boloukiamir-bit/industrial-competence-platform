@@ -32,7 +32,7 @@ const OWNER_ROLES = ["HR", "Supervisor", "IT", "Quality", "Maintenance", "Employ
 
 type Step = {
   id: string;
-  step_no: number;
+  step_order: number;
   title: string;
   description: string;
   owner_role: string;
@@ -54,7 +54,7 @@ export default function NewTemplatePage() {
   const [steps, setSteps] = useState<Step[]>([
     {
       id: generateId(),
-      step_no: 1,
+      step_order: 1,
       title: "",
       description: "",
       owner_role: "Supervisor",
@@ -71,7 +71,7 @@ export default function NewTemplatePage() {
       ...steps,
       {
         id: generateId(),
-        step_no: steps.length + 1,
+        step_order: steps.length + 1,
         title: "",
         description: "",
         owner_role: "Supervisor",
@@ -84,7 +84,7 @@ export default function NewTemplatePage() {
   const removeStep = (index: number) => {
     if (steps.length === 1) return;
     const newSteps = steps.filter((_, i) => i !== index);
-    setSteps(newSteps.map((s, i) => ({ ...s, step_no: i + 1 })));
+    setSteps(newSteps.map((s, i) => ({ ...s, step_order: i + 1 })));
   };
 
   const moveStep = (index: number, direction: "up" | "down") => {
@@ -94,7 +94,7 @@ export default function NewTemplatePage() {
     const newSteps = [...steps];
     const targetIndex = direction === "up" ? index - 1 : index + 1;
     [newSteps[index], newSteps[targetIndex]] = [newSteps[targetIndex], newSteps[index]];
-    setSteps(newSteps.map((s, i) => ({ ...s, step_no: i + 1 })));
+    setSteps(newSteps.map((s, i) => ({ ...s, step_order: i + 1 })));
   };
 
   const updateStep = (index: number, field: keyof Step, value: string | number | boolean) => {
@@ -130,7 +130,7 @@ export default function NewTemplatePage() {
         category,
         description: description.trim() || null,
         steps: steps.map((s) => ({
-          step_no: s.step_no,
+          step_order: s.step_order,
           title: s.title.trim(),
           description: s.description.trim() || null,
           owner_role: s.owner_role,
@@ -249,7 +249,7 @@ export default function NewTemplatePage() {
                       <ChevronUp className="h-4 w-4" />
                     </Button>
                     <span className="text-lg font-bold text-muted-foreground">
-                      {step.step_no}
+                      {step.step_order}
                     </span>
                     <Button
                       variant="ghost"

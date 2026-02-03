@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
-export const runtime = "nodejs";
 import { PoolClient } from "pg";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession, isAdminOrHr } from "@/lib/orgSession";
 
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const session = await getOrgIdFromSession(request);
     if (!session.success) {
@@ -39,12 +47,12 @@ export async function POST(request: NextRequest) {
         description: "Start cross-training for an employee to address skill gaps at a critical station",
         category: "Competence",
         steps: [
-          { step_no: 1, title: "Identify training needs", description: "Assess current skill level and define target competence", owner_role: "Supervisor", default_due_days: 2, required: true },
-          { step_no: 2, title: "Assign trainer/mentor", description: "Select experienced employee to provide training", owner_role: "Supervisor", default_due_days: 3, required: true },
-          { step_no: 3, title: "Create training schedule", description: "Plan training sessions and timeline", owner_role: "HR", default_due_days: 5, required: true },
-          { step_no: 4, title: "Conduct training", description: "Employee completes hands-on training at station", owner_role: "Supervisor", default_due_days: 14, required: true },
-          { step_no: 5, title: "Assess competence", description: "Evaluate employee skill level after training", owner_role: "Supervisor", default_due_days: 2, required: true },
-          { step_no: 6, title: "Update skill matrix", description: "Record new competence level in system", owner_role: "HR", default_due_days: 1, required: true },
+          { step_order: 1, title: "Identify training needs", description: "Assess current skill level and define target competence", owner_role: "Supervisor", default_due_days: 2, required: true },
+          { step_order: 2, title: "Assign trainer/mentor", description: "Select experienced employee to provide training", owner_role: "Supervisor", default_due_days: 3, required: true },
+          { step_order: 3, title: "Create training schedule", description: "Plan training sessions and timeline", owner_role: "HR", default_due_days: 5, required: true },
+          { step_order: 4, title: "Conduct training", description: "Employee completes hands-on training at station", owner_role: "Supervisor", default_due_days: 14, required: true },
+          { step_order: 5, title: "Assess competence", description: "Evaluate employee skill level after training", owner_role: "Supervisor", default_due_days: 2, required: true },
+          { step_order: 6, title: "Update skill matrix", description: "Record new competence level in system", owner_role: "HR", default_due_days: 1, required: true },
         ],
       });
 
@@ -53,14 +61,14 @@ export async function POST(request: NextRequest) {
         description: "Standard onboarding process for new employees",
         category: "HR",
         steps: [
-          { step_no: 1, title: "Prepare workstation", description: "Set up computer, desk, and access cards", owner_role: "HR", default_due_days: 1, required: true },
-          { step_no: 2, title: "IT account setup", description: "Create email, system accounts, and permissions", owner_role: "IT", default_due_days: 2, required: true },
-          { step_no: 3, title: "Safety training", description: "Complete mandatory safety orientation", owner_role: "Supervisor", default_due_days: 3, required: true },
-          { step_no: 4, title: "Equipment training", description: "Train on primary equipment and tools", owner_role: "Supervisor", default_due_days: 7, required: true },
-          { step_no: 5, title: "Meet the team", description: "Introduction to team members and key contacts", owner_role: "Supervisor", default_due_days: 3, required: true },
-          { step_no: 6, title: "HR documentation", description: "Complete all employment paperwork", owner_role: "HR", default_due_days: 5, required: true },
-          { step_no: 7, title: "First week check-in", description: "Manager check-in after first week", owner_role: "Supervisor", default_due_days: 7, required: true },
-          { step_no: 8, title: "30-day review", description: "Performance review at 30 days", owner_role: "Supervisor", default_due_days: 30, required: true },
+          { step_order: 1, title: "Prepare workstation", description: "Set up computer, desk, and access cards", owner_role: "HR", default_due_days: 1, required: true },
+          { step_order: 2, title: "IT account setup", description: "Create email, system accounts, and permissions", owner_role: "IT", default_due_days: 2, required: true },
+          { step_order: 3, title: "Safety training", description: "Complete mandatory safety orientation", owner_role: "Supervisor", default_due_days: 3, required: true },
+          { step_order: 4, title: "Equipment training", description: "Train on primary equipment and tools", owner_role: "Supervisor", default_due_days: 7, required: true },
+          { step_order: 5, title: "Meet the team", description: "Introduction to team members and key contacts", owner_role: "Supervisor", default_due_days: 3, required: true },
+          { step_order: 6, title: "HR documentation", description: "Complete all employment paperwork", owner_role: "HR", default_due_days: 5, required: true },
+          { step_order: 7, title: "First week check-in", description: "Manager check-in after first week", owner_role: "Supervisor", default_due_days: 7, required: true },
+          { step_order: 8, title: "30-day review", description: "Performance review at 30 days", owner_role: "Supervisor", default_due_days: 30, required: true },
         ],
       });
 
@@ -69,11 +77,11 @@ export async function POST(request: NextRequest) {
         description: "Handle and follow up on safety incidents and near-misses",
         category: "Safety",
         steps: [
-          { step_no: 1, title: "Incident report", description: "Document incident details and immediate response", owner_role: "Supervisor", default_due_days: 0, required: true },
-          { step_no: 2, title: "Root cause analysis", description: "Investigate and identify root causes", owner_role: "Supervisor", default_due_days: 3, required: true },
-          { step_no: 3, title: "Corrective actions", description: "Define and implement corrective measures", owner_role: "Supervisor", default_due_days: 7, required: true },
-          { step_no: 4, title: "Follow-up verification", description: "Verify corrective actions are effective", owner_role: "Supervisor", default_due_days: 14, required: true },
-          { step_no: 5, title: "Close case", description: "Document outcomes and close case", owner_role: "HR", default_due_days: 1, required: true },
+          { step_order: 1, title: "Incident report", description: "Document incident details and immediate response", owner_role: "Supervisor", default_due_days: 0, required: true },
+          { step_order: 2, title: "Root cause analysis", description: "Investigate and identify root causes", owner_role: "Supervisor", default_due_days: 3, required: true },
+          { step_order: 3, title: "Corrective actions", description: "Define and implement corrective measures", owner_role: "Supervisor", default_due_days: 7, required: true },
+          { step_order: 4, title: "Follow-up verification", description: "Verify corrective actions are effective", owner_role: "Supervisor", default_due_days: 14, required: true },
+          { step_order: 5, title: "Close case", description: "Document outcomes and close case", owner_role: "HR", default_due_days: 1, required: true },
         ],
       });
 
@@ -114,7 +122,7 @@ type TemplateInput = {
   description: string;
   category: string;
   steps: {
-    step_no: number;
+    step_order: number;
     title: string;
     description: string;
     owner_role: string;
@@ -135,9 +143,9 @@ async function seedTemplate(client: PoolClient, orgId: string, template: Templat
 
   for (const step of template.steps) {
     await client.query(
-      `INSERT INTO wf_template_steps (template_id, step_no, title, description, owner_role, default_due_days, required)
+      `INSERT INTO wf_template_steps (template_id, step_order, title, description, owner_role, default_due_days, required)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [templateId, step.step_no, step.title, step.description, step.owner_role, step.default_due_days, step.required]
+      [templateId, step.step_order, step.title, step.description, step.owner_role, step.default_due_days, step.required]
     );
   }
 

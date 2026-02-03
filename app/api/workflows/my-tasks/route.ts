@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
-export const runtime = "nodejs";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const session = await getOrgIdFromSession(request);
     if (!session.success) {
@@ -16,7 +24,7 @@ export async function GET(request: NextRequest) {
       SELECT 
         t.id,
         t.instance_id,
-        t.step_no,
+        t.step_order,
         t.title,
         t.description,
         t.owner_role,
@@ -40,13 +48,13 @@ export async function GET(request: NextRequest) {
       ORDER BY 
         CASE WHEN t.due_date < CURRENT_DATE THEN 0 ELSE 1 END,
         t.due_date ASC NULLS LAST,
-        t.step_no
+        t.step_order ASC
     `, [orgId]);
 
     type TaskRow = {
       id: string;
       instance_id: string;
-      step_no: number;
+      step_order: number;
       title: string;
       description: string | null;
       owner_role: string;
@@ -70,7 +78,7 @@ export async function GET(request: NextRequest) {
       return {
         id: row.id,
         instanceId: row.instance_id,
-        stepNo: row.step_no,
+        stepOrder: row.step_order,
         title: row.title,
         description: row.description,
         ownerRole: row.owner_role,

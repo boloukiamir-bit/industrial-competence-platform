@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
-export const runtime = "nodejs";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const session = await getOrgIdFromSession(request);
     if (!session.success) {

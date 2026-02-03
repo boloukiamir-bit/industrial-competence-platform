@@ -48,7 +48,7 @@ import { apiGet, apiPatch, apiPost } from "@/lib/apiClient";
 
 type Task = {
   id: string;
-  step_no: number;
+  step_order: number;
   title: string;
   description: string;
   owner_role: string;
@@ -362,7 +362,7 @@ export default function InstanceDetailPage() {
               >
                 <div
                   className="border rounded-lg overflow-hidden"
-                  data-testid={`task-${task.step_no}`}
+                  data-testid={`task-${task.step_order}`}
                 >
                   <CollapsibleTrigger asChild>
                     <div className="flex items-start gap-4 p-4 cursor-pointer hover-elevate">
@@ -411,7 +411,7 @@ export default function InstanceDetailPage() {
                         >
                           <SelectTrigger
                             className="w-[130px]"
-                            data-testid={`select-task-status-${task.step_no}`}
+                            data-testid={`select-task-status-${task.step_order}`}
                             onClick={(e) => e.stopPropagation()}
                           >
                             {updatingTask === task.id ? (
@@ -531,7 +531,7 @@ export default function InstanceDetailPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => startEditingTask(task)}
-                              data-testid={`button-edit-task-${task.step_no}`}
+                              data-testid={`button-edit-task-${task.step_order}`}
                             >
                               <FileText className="h-4 w-4 mr-2" />
                               Edit Details

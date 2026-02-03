@@ -41,7 +41,7 @@ import { apiGet, apiPatch } from "@/lib/apiClient";
 type Task = {
   id: string;
   instanceId: string;
-  stepNo: number;
+  stepOrder: number;
   title: string;
   description: string;
   ownerRole: string;

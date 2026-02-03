@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
-export const runtime = "nodejs";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession } from "@/lib/orgSession";
+
+export const runtime = "nodejs";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const { id } = await params;
     const session = await getOrgIdFromSession(request);
@@ -30,10 +38,10 @@ export async function GET(
     const template = templateResult.rows[0];
 
     const stepsResult = await pool.query(
-      `SELECT id, step_no, title, description, owner_role, default_due_days, required 
+      `SELECT id, step_order, title, description, owner_role, default_due_days, required 
        FROM wf_template_steps 
        WHERE template_id = $1 
-       ORDER BY step_no`,
+       ORDER BY step_order ASC`,
       [id]
     );
 

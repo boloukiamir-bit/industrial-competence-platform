@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
-export const runtime = "nodejs";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession } from "@/lib/orgSession";
+
+export const runtime = "nodejs";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const { id } = await params;
     const session = await getOrgIdFromSession(request);
@@ -36,11 +44,11 @@ export async function GET(
     const inst = instanceResult.rows[0];
 
     const tasksResult = await pool.query(
-      `SELECT id, step_no, title, description, owner_role, owner_user_id, 
+      `SELECT id, step_order, title, description, owner_role, owner_user_id, 
               due_date, status, completed_at, completed_by, notes, evidence_url
        FROM wf_instance_tasks 
        WHERE instance_id = $1 
-       ORDER BY step_no`,
+       ORDER BY step_order ASC`,
       [id]
     );
 
@@ -102,6 +110,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const { id } = await params;
     const session = await getOrgIdFromSession(request);

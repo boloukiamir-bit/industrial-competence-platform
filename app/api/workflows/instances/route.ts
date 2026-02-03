@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
-export const runtime = "nodejs";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const session = await getOrgIdFromSession(request);
     if (!session.success) {
@@ -93,6 +101,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   try {
     const session = await getOrgIdFromSession(request);
     if (!session.success) {
@@ -123,10 +137,10 @@ export async function POST(request: NextRequest) {
     const template = templateResult.rows[0];
 
     const stepsResult = await pool.query(
-      `SELECT step_no, title, description, owner_role, default_due_days, required 
+      `SELECT step_order, title, description, owner_role, default_due_days, required 
        FROM wf_template_steps 
        WHERE template_id = $1 
-       ORDER BY step_no`,
+       ORDER BY step_order ASC`,
       [templateId]
     );
 
@@ -155,11 +169,11 @@ export async function POST(request: NextRequest) {
     const instanceId = instanceResult.rows[0].id;
 
     for (const step of steps) {
-      const taskDueDate = new Date(start.getTime() + step.default_due_days * 24 * 60 * 60 * 1000);
+      const taskDueDate = new Date(start.getTime() + (step as { default_due_days: number }).default_due_days * 24 * 60 * 60 * 1000);
       await pool.query(
-        `INSERT INTO wf_instance_tasks (instance_id, step_no, title, description, owner_role, due_date, status)
+        `INSERT INTO wf_instance_tasks (instance_id, step_order, title, description, owner_role, due_date, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'todo')`,
-        [instanceId, step.step_no, step.title, step.description, step.owner_role, taskDueDate.toISOString().split("T")[0]]
+        [instanceId, (step as { step_order: number }).step_order, step.title, step.description, step.owner_role, taskDueDate.toISOString().split("T")[0]]
       );
     }
 

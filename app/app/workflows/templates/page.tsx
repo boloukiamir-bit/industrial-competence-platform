@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,8 @@ import { FileText, Clock, ArrowRight, Loader2, Plus } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { useToast } from "@/hooks/use-toast";
+
+const PILOT_MODE = process.env.NEXT_PUBLIC_PILOT_MODE === "true";
 
 type WorkflowTemplate = {
   id: string;
@@ -142,19 +145,32 @@ export default function WorkflowTemplatesPage() {
         <Card>
           <CardContent className="pt-6 pb-6 text-center space-y-4">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
-            <p className="text-muted-foreground">
-              No workflow templates yet. Create 4 recommended templates (Onboarding, Offboarding, Medical, Contract) or add your own.
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              <Button onClick={handleSeedDefaults} disabled={seeding} data-testid="button-seed-templates">
-                {seeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-                Create 4 templates
-              </Button>
-              <Button variant="outline" onClick={() => router.push("/app/workflows/templates/new")}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create manually
-              </Button>
-            </div>
+            {PILOT_MODE ? (
+              <>
+                <p className="text-muted-foreground">
+                  Pilot mode: Use HR Templates to seed and manage onboarding/offboarding workflows.
+                </p>
+                <Button asChild>
+                  <Link href="/app/hr/templates">Go to HR Templates</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground">
+                  No workflow templates yet. Create 4 recommended templates (Onboarding, Offboarding, Medical, Contract) or add your own.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Button onClick={handleSeedDefaults} disabled={seeding} data-testid="button-seed-templates">
+                    {seeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                    Create 4 templates
+                  </Button>
+                  <Button variant="outline" onClick={() => router.push("/app/workflows/templates/new")}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create manually
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (

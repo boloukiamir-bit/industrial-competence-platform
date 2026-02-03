@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
+import { isPilotMode } from "@/lib/pilotMode";
 import { getOrgIdFromSession, isAdminOrHr } from "@/lib/orgSession";
 
 export const runtime = "nodejs";
 
 type StepInput = {
-  step_no: number;
+  step_order: number;
   title: string;
   description?: string | null;
   owner_role: string;
@@ -17,7 +18,7 @@ const DEFAULT_TEMPLATES: {
   name: string;
   description: string;
   category: string;
-  steps: Omit<StepInput, "step_no">[];
+  steps: Omit<StepInput, "step_order">[];
 }[] = [
   {
     name: "Onboarding",
@@ -69,6 +70,12 @@ const DEFAULT_TEMPLATES: {
 ];
 
 export async function POST(request: NextRequest) {
+  if (isPilotMode()) {
+    return NextResponse.json(
+      { ok: false, error: "pilot_mode_blocked", message: "Pilot mode: use /api/hr/* and /app/hr/*" },
+      { status: 403 }
+    );
+  }
   const client = await pool.connect();
 
   try {
@@ -118,7 +125,7 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < tmpl.steps.length; i++) {
         const step = tmpl.steps[i];
         await client.query(
-          `INSERT INTO wf_template_steps (template_id, step_no, title, description, owner_role, default_due_days, required)
+          `INSERT INTO wf_template_steps (template_id, step_order, title, description, owner_role, default_due_days, required)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             templateId,
