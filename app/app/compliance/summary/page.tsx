@@ -21,7 +21,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search, Loader2, Inbox, AlertTriangle, Clock, FileX2, CalendarCheck, Sparkles } from "lucide-react";
+import { Search, Loader2, Inbox, AlertTriangle, Clock, FileX2, CalendarCheck, Sparkles, Mail } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
@@ -124,6 +124,12 @@ export default function ComplianceSummaryPage() {
   const [recommendPreview, setRecommendPreview] = useState<RecommendPreviewResponse | null>(null);
   const [recommendPreviewLoading, setRecommendPreviewLoading] = useState(false);
   const [recommendCommitLoading, setRecommendCommitLoading] = useState(false);
+  const [digestLatest, setDigestLatest] = useState<{
+    digest_date: string;
+    created_at: string;
+    kpis?: { open: number; overdue: number; due7d: number; nodue: number; unassigned: number; withEvidence: number; withoutEvidence: number };
+    links?: { inboxOverdue: string; inboxDue7d: string; inboxUnassigned: string; summary: string };
+  } | null>(null);
   const { toast } = useToast();
 
   const buildParams = useCallback(() => {
@@ -163,6 +169,32 @@ export default function ComplianceSummaryPage() {
   useEffect(() => {
     loadSummary();
   }, [loadSummary]);
+
+  const loadDigestLatest = useCallback(async () => {
+    try {
+      const res = await fetch("/api/compliance/digest/latest", {
+        credentials: "include",
+        headers: withDevBearer(),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        digest?: {
+          digest_date: string;
+          created_at: string;
+          kpis?: { open: number; overdue: number; due7d: number; nodue: number; unassigned: number; withEvidence: number; withoutEvidence: number };
+          links?: { inboxOverdue: string; inboxDue7d: string; inboxUnassigned: string; summary: string };
+        } | null;
+      };
+      if (res.ok && json.ok && json.digest) setDigestLatest(json.digest);
+      else setDigestLatest(null);
+    } catch {
+      setDigestLatest(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdminOrHr) loadDigestLatest();
+  }, [isAdminOrHr, loadDigestLatest]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400);
@@ -405,6 +437,47 @@ export default function ComplianceSummaryPage() {
             <p className="text-xs text-muted-foreground">
               {kpis.totalEmployeesInScope} employees in scope
             </p>
+
+            {digestLatest && (
+              <Card className="border-muted">
+                <CardContent className="pt-4">
+                  <h3 className="font-medium mb-2 flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    Latest digest
+                    <span className="text-xs font-normal text-muted-foreground">
+                      ({digestLatest.digest_date})
+                    </span>
+                  </h3>
+                  {digestLatest.kpis && (
+                    <div className="flex flex-wrap gap-3 text-sm mb-3">
+                      <span>Open: <strong>{digestLatest.kpis.open}</strong></span>
+                      <span>Overdue: <strong className="text-destructive">{digestLatest.kpis.overdue}</strong></span>
+                      <span>Due &lt;7d: <strong>{digestLatest.kpis.due7d}</strong></span>
+                      <span>No due: <strong>{digestLatest.kpis.nodue}</strong></span>
+                      <span>Unassigned: <strong>{digestLatest.kpis.unassigned}</strong></span>
+                      <span>With evidence: <strong>{digestLatest.kpis.withEvidence}</strong></span>
+                      <span>Without evidence: <strong>{digestLatest.kpis.withoutEvidence}</strong></span>
+                    </div>
+                  )}
+                  {digestLatest.links && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={digestLatest.links.inboxOverdue}>Overdue</Link>
+                      </Button>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={digestLatest.links.inboxDue7d}>Due 7d</Link>
+                      </Button>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={digestLatest.links.inboxUnassigned}>Unassigned</Link>
+                      </Button>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={digestLatest.links.summary}>Summary</Link>
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid md:grid-cols-2 gap-6">
               <Card>

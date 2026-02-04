@@ -192,7 +192,7 @@ export default function ComplianceTemplatesPage() {
 
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="font-normal text-muted-foreground">
-            Site: {data?.activeSiteId ? (data?.activeSiteName ?? "Unknown") : "All"}
+            Site: {data?.activeSiteId ? (data?.activeSiteName ?? "Unknown site") : "All"}
           </Badge>
         </div>
 
