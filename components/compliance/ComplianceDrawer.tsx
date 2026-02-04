@@ -35,8 +35,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { User, Loader2, ExternalLink, ClipboardList, Sparkles, ChevronDown, Workflow, CheckCircle2, Zap } from "lucide-react";
+import { User, Loader2, ExternalLink, ClipboardList, Sparkles, ChevronDown, Workflow, CheckCircle2, Zap, FileText, Link2, Paperclip } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
+import { DraftModal } from "./DraftModal";
+import { EvidenceModal } from "./EvidenceModal";
 import { useToast } from "@/hooks/use-toast";
 
 type ComplianceActionType = "request_renewal" | "request_evidence" | "notify_employee" | "mark_waived_review";
@@ -49,7 +51,25 @@ type ComplianceAction = {
   created_at: string;
   compliance_code: string | null;
   compliance_name: string | null;
+  last_drafted_at?: string | null;
+  last_drafted_channel?: string | null;
+  evidence_url?: string | null;
+  evidence_notes?: string | null;
+  evidence_added_at?: string | null;
+  evidence_added_by?: string | null;
 };
+
+function relativeDraftLabel(iso: string | null): string {
+  if (!iso) return "Never drafted";
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const min = 60 * 1000, hr = 60 * min, day = 24 * hr;
+  if (diff < min) return "Last drafted: just now";
+  if (diff < hr) return `Last drafted: ${Math.floor(diff / min)}m ago`;
+  if (diff < day) return `Last drafted: ${Math.floor(diff / hr)}h ago`;
+  if (diff < 7 * day) return `Last drafted: ${Math.floor(diff / day)}d ago`;
+  return `Last drafted: ${d.toLocaleDateString()}`;
+}
 const ACTION_TYPE_LABELS: Record<ComplianceActionType, string> = {
   request_renewal: "Request renewal",
   request_evidence: "Request evidence",
@@ -330,6 +350,8 @@ export function ComplianceDrawer({
   const [actions, setActions] = useState<ComplianceAction[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
   const [actionCreating, setActionCreating] = useState(false);
+  const [draftAction, setDraftAction] = useState<ComplianceAction | null>(null);
+  const [evidenceAction, setEvidenceAction] = useState<ComplianceAction | null>(null);
 
   const loadEmployeeCompliance = useCallback(async () => {
     if (!employeeId || !open) return;
@@ -877,27 +899,63 @@ export function ComplianceDrawer({
                   {actions.map((a: ComplianceAction) => (
                     <li
                       key={a.id}
-                      className="flex items-center justify-between gap-2 py-2 px-3 rounded-md bg-muted/30 border border-border/50"
+                      className="flex flex-col gap-2 py-2 px-3 rounded-md bg-muted/30 border border-border/50"
                     >
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium">
-                          {ACTION_TYPE_LABELS[a.action_type as ComplianceActionType] ?? a.action_type}
-                        </span>
-                        {(a.compliance_code || a.compliance_name) && (
-                          <span className="block text-xs text-muted-foreground">
-                            {a.compliance_name ?? a.compliance_code ?? ""}
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium">
+                            {ACTION_TYPE_LABELS[a.action_type as ComplianceActionType] ?? a.action_type}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge variant={a.status === "done" ? "secondary" : "default"} className={a.status === "done" ? "bg-emerald-600/20 text-emerald-700" : ""}>
-                          {a.status === "open" ? "Open" : "Done"}
-                        </Badge>
-                        {a.status === "open" && isAdminOrHr && (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => markActionDone(a.id)}>
-                            Mark done
-                          </Button>
-                        )}
+                          {(a.compliance_code || a.compliance_name) && (
+                            <span className="block text-xs text-muted-foreground">
+                              {a.compliance_name ?? a.compliance_code ?? ""}
+                            </span>
+                          )}
+                          <span className="block text-xs text-muted-foreground mt-0.5">
+                            {relativeDraftLabel(a.last_drafted_at ?? null)}
+                          </span>
+                          {a.evidence_url && (
+                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                              <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <a
+                                href={a.evidence_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline truncate max-w-[200px]"
+                              >
+                                {a.evidence_url}
+                              </a>
+                              {a.evidence_added_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(a.evidence_added_at).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {a.evidence_notes && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{a.evidence_notes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge variant={a.status === "done" ? "secondary" : "default"} className={a.status === "done" ? "bg-emerald-600/20 text-emerald-700" : ""}>
+                            {a.status === "open" ? "Open" : "Done"}
+                          </Badge>
+                          {a.status === "open" && isAdminOrHr && (
+                            <>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setEvidenceAction(a)} title="Attach evidence">
+                                <Paperclip className="h-3 w-3" />
+                                {a.evidence_url ? "Edit" : "Attach"}
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setDraftAction(a)} title="Generate draft">
+                                <FileText className="h-3 w-3" />
+                                Draft
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => markActionDone(a.id)}>
+                                Mark done
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </li>
                   ))}
@@ -905,6 +963,29 @@ export function ComplianceDrawer({
               )}
             </section>
           )}
+
+          <DraftModal
+            open={!!draftAction}
+            onOpenChange={(open) => !open && setDraftAction(null)}
+            input={draftAction ? { actionId: draftAction.id } : null}
+            activeSiteId={activeSiteId ?? null}
+          />
+
+          <EvidenceModal
+            open={!!evidenceAction}
+            onOpenChange={(open) => !open && setEvidenceAction(null)}
+            actionId={evidenceAction?.id ?? null}
+            existingEvidence={
+              evidenceAction
+                ? {
+                    evidence_url: evidenceAction.evidence_url ?? "",
+                    evidence_notes: evidenceAction.evidence_notes,
+                    evidence_added_at: evidenceAction.evidence_added_at,
+                  }
+                : null
+            }
+            onSaved={() => loadActions()}
+          />
 
           {PILOT_MODE && employeeId && isAdminOrHr && (
             <section className="mt-6 pt-4 border-t border-border">

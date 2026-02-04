@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from("compliance_actions")
       .select(
-        "id, employee_id, compliance_id, action_type, status, due_date, notes, created_at"
+        "id, employee_id, compliance_id, action_type, status, due_date, notes, created_at, evidence_url, evidence_notes, evidence_added_at, evidence_added_by"
       )
       .eq("org_id", org.activeOrgId)
       .eq("employee_id", employeeId)
@@ -68,8 +68,33 @@ export async function GET(request: NextRequest) {
       (catalogRows ?? []).map((c) => [c.id, { code: c.code, name: c.name }])
     );
 
-    const actions = (rows ?? []).map((r: Record<string, unknown>) => {
+    const rowList = rows ?? [];
+    const ids = rowList.map((r: { id: string }) => r.id);
+    const latestDraftByAction = new Map<
+      string,
+      { last_drafted_at: string; last_drafted_channel: string | null }
+    >();
+    if (ids.length > 0) {
+      const { data: eventRows } = await supabaseAdmin
+        .from("compliance_action_events")
+        .select("action_id, created_at, channel")
+        .eq("org_id", org.activeOrgId)
+        .eq("event_type", "draft_copied")
+        .in("action_id", ids)
+        .order("created_at", { ascending: false });
+      for (const e of eventRows ?? []) {
+        if (!latestDraftByAction.has(e.action_id)) {
+          latestDraftByAction.set(e.action_id, {
+            last_drafted_at: e.created_at,
+            last_drafted_channel: e.channel ?? null,
+          });
+        }
+      }
+    }
+
+    const actions = rowList.map((r: Record<string, unknown>) => {
       const cat = catalogMap.get(r.compliance_id as string);
+      const draftMeta = latestDraftByAction.get(r.id as string);
       return {
         id: r.id,
         employee_id: r.employee_id,
@@ -81,6 +106,12 @@ export async function GET(request: NextRequest) {
         created_at: r.created_at,
         compliance_code: cat?.code ?? null,
         compliance_name: cat?.name ?? null,
+        last_drafted_at: draftMeta?.last_drafted_at ?? null,
+        last_drafted_channel: draftMeta?.last_drafted_channel ?? null,
+        evidence_url: r.evidence_url ?? null,
+        evidence_notes: r.evidence_notes ?? null,
+        evidence_added_at: r.evidence_added_at ?? null,
+        evidence_added_by: r.evidence_added_by ?? null,
       };
     });
 
