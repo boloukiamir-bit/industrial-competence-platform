@@ -113,3 +113,30 @@ export function getPgPool(): Pool {
 
 /** Shared pg pool; prefer getPgPool() for clarity. */
 export const pool = getPgPool();
+
+/**
+ * Returns current pool SSL diagnostic for logging (no secrets). Use when DEBUG_DIAGNOSTICS=true.
+ */
+export function getPoolSslDiagnostic(): {
+  rejectUnauthorized: boolean;
+  hostname: string;
+} {
+  const connectionString = process.env.DATABASE_URL ?? "";
+  const ssl = connectionString ? getSslConfig(connectionString) : false;
+  const rejectUnauthorized = typeof ssl === "object" ? ssl.rejectUnauthorized : false;
+  const hostname = (() => {
+    try {
+      const u = connectionString.replace(/^postgres(?:ql)?:\/\//, "");
+      const at = u.indexOf("@");
+      if (at === -1) return "(no @ in url)";
+      const hostPart = u.slice(at + 1);
+      const slash = hostPart.indexOf("/");
+      const hostPort = slash === -1 ? hostPart : hostPart.slice(0, slash);
+      const colon = hostPort.lastIndexOf(":");
+      return colon === -1 ? hostPort : hostPort.slice(0, colon);
+    } catch {
+      return "(parse error)";
+    }
+  })();
+  return { rejectUnauthorized, hostname };
+}

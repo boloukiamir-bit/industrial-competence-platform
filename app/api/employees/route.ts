@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db/pool";
+import { getPgPool, getPoolSslDiagnostic } from "@/lib/db";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import {
   buildEmployeeScope,
@@ -38,6 +38,13 @@ function dbErrorFields(err: unknown): { code: string; message: string; hint?: st
  */
 export async function GET(request: NextRequest) {
   const requestId = randomUUID();
+  const pool = getPgPool();
+  if (DEBUG) {
+    const diag = getPoolSslDiagnostic();
+    console.log(
+      `[${requestId}] GET /api/employees pg: NODE_ENV=${process.env.NODE_ENV} rejectUnauthorized=${diag.rejectUnauthorized} hostname=${diag.hostname}`
+    );
+  }
   let userIdPresent = false;
   let orgIdPresent = false;
   let siteIdPresent = false;
