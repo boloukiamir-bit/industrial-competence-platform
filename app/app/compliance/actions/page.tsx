@@ -21,12 +21,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Loader2, CheckCircle2, Calendar, UserPlus } from "lucide-react";
+import { Search, Loader2, CheckCircle2, Calendar, UserPlus, FileText, Paperclip } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { ComplianceDrawer } from "@/components/compliance/ComplianceDrawer";
+import { DraftModal } from "@/components/compliance/DraftModal";
+import { EvidenceModal } from "@/components/compliance/EvidenceModal";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type SlaFlag = "overdue" | "due7d" | "nodue" | "ok";
@@ -50,6 +58,14 @@ type InboxAction = {
   compliance_name: string | null;
   compliance_category: string | null;
   site_name: string | null;
+  lastDraftedAt?: string | null;
+  lastDraftedBy?: string | null;
+  lastDraftedChannel?: string | null;
+  lastDraftedTemplateId?: string | null;
+  hasEvidence?: boolean;
+  evidenceAddedAt?: string | null;
+  evidenceUrl?: string | null;
+  evidenceNotes?: string | null;
 };
 
 type InboxResponse = {
@@ -99,6 +115,19 @@ const CATEGORY_OPTIONS = [
   { value: "contract", label: "Contract" },
 ] as const;
 
+function relativeDraftTime(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const min = 60 * 1000;
+  const hr = 60 * min;
+  const day = 24 * hr;
+  if (diff < min) return "just now";
+  if (diff < hr) return `${Math.floor(diff / min)}m ago`;
+  if (diff < day) return `${Math.floor(diff / hr)}h ago`;
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+  return d.toLocaleDateString();
+}
+
 export default function ActionInboxPage() {
   const { isAdminOrHr } = useOrg();
   const { user } = useAuth();
@@ -127,6 +156,8 @@ export default function ActionInboxPage() {
   } | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [markingDoneId, setMarkingDoneId] = useState<string | null>(null);
+  const [draftAction, setDraftAction] = useState<InboxAction | null>(null);
+  const [evidenceAction, setEvidenceAction] = useState<InboxAction | null>(null);
 
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
@@ -506,6 +537,8 @@ export default function ActionInboxPage() {
                       <th className="text-left py-2 px-3 font-medium">Due date</th>
                       <th className="text-left py-2 px-3 font-medium">Owner</th>
                       <th className="text-left py-2 px-3 font-medium">Status</th>
+                      <th className="text-left py-2 px-3 font-medium">Last drafted</th>
+                      <th className="text-left py-2 px-3 font-medium">Evidence</th>
                       <th className="w-[90px]" />
                     </tr>
                   </thead>
@@ -615,24 +648,89 @@ export default function ActionInboxPage() {
                             {a.status}
                           </Badge>
                         </td>
+                        <td className="py-2 px-3 text-muted-foreground text-xs">
+                          {a.lastDraftedAt ? (
+                            <span
+                              title={`${new Date(a.lastDraftedAt).toLocaleString()}${a.lastDraftedChannel ? ` · ${a.lastDraftedChannel}` : ""}`}
+                            >
+                              {relativeDraftTime(a.lastDraftedAt)}
+                            </span>
+                          ) : (
+                            "Never"
+                          )}
+                        </td>
                         <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                          <TooltipProvider>
+                            {a.hasEvidence ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="secondary" className="font-normal text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">
+                                    Attached
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                  <p className="font-mono text-xs break-all">{a.evidenceUrl ?? "—"}</p>
+                                  {a.evidenceNotes && (
+                                    <p className="text-xs text-muted-foreground mt-1">{a.evidenceNotes}</p>
+                                  )}
+                                  {a.evidenceAddedAt && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {new Date(a.evidenceAddedAt).toLocaleString()}
+                                    </p>
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">None</span>
+                            )}
+                          </TooltipProvider>
                           {a.status === "open" && (
                             <Button
                               size="sm"
-                              variant="secondary"
-                              className="h-8"
-                              disabled={!!markingDoneId}
-                              onClick={(e) => handleMarkDone(a.action_id, e)}
+                              variant="ghost"
+                              className="h-8 w-8 p-0 ml-1"
+                              title="Attach evidence"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEvidenceAction(a);
+                              }}
                             >
-                              {markingDoneId === a.action_id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Mark done
-                                </>
-                              )}
+                              <Paperclip className="h-3.5 w-3.5" />
                             </Button>
+                          )}
+                        </td>
+                        <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                          {a.status === "open" && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                title="Generate draft"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDraftAction(a);
+                                }}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="h-8"
+                                disabled={!!markingDoneId}
+                                onClick={(e) => handleMarkDone(a.action_id, e)}
+                              >
+                                {markingDoneId === a.action_id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Mark done
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -643,6 +741,29 @@ export default function ActionInboxPage() {
             )}
           </CardContent>
         </Card>
+
+        <DraftModal
+          open={!!draftAction}
+          onOpenChange={(open) => !open && setDraftAction(null)}
+          input={draftAction ? { actionId: draftAction.action_id } : null}
+          activeSiteId={data?.activeSiteId ?? null}
+        />
+
+        <EvidenceModal
+          open={!!evidenceAction}
+          onOpenChange={(open) => !open && setEvidenceAction(null)}
+          actionId={evidenceAction?.action_id ?? null}
+          existingEvidence={
+            evidenceAction
+              ? {
+                  evidence_url: evidenceAction.evidenceUrl ?? "",
+                  evidence_notes: evidenceAction.evidenceNotes,
+                  evidence_added_at: evidenceAction.evidenceAddedAt,
+                }
+              : null
+          }
+          onSaved={loadInbox}
+        />
 
         <ComplianceDrawer
           open={!!drawerEmployee}

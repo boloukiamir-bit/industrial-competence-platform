@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
     // Base actions query
     let actionsQuery = supabaseAdmin
       .from("compliance_actions")
-      .select("id, org_id, site_id, employee_id, compliance_id, action_type, status, due_date, owner_user_id, notes, created_at")
+      .select("id, org_id, site_id, employee_id, compliance_id, action_type, status, due_date, owner_user_id, notes, created_at, evidence_url, evidence_notes, evidence_added_at")
       .eq("org_id", orgId)
       .order("due_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false })
@@ -207,6 +207,32 @@ export async function GET(request: NextRequest) {
 
     const catalogMap = new Map(catalog.map((c) => [c.id, c]));
 
+    // P1.5: Latest draft_copied event per action
+    const actionIds = actions.map((a: { id: string }) => a.id);
+    const latestDraftByAction = new Map<
+      string,
+      { last_drafted_at: string; last_drafted_by: string | null; last_drafted_channel: string | null; last_drafted_template_id: string | null }
+    >();
+    if (actionIds.length > 0) {
+      const { data: eventRows } = await supabaseAdmin
+        .from("compliance_action_events")
+        .select("action_id, created_at, created_by, channel, template_id")
+        .eq("org_id", orgId)
+        .eq("event_type", "draft_copied")
+        .in("action_id", actionIds)
+        .order("created_at", { ascending: false });
+      for (const e of eventRows ?? []) {
+        if (!latestDraftByAction.has(e.action_id)) {
+          latestDraftByAction.set(e.action_id, {
+            last_drafted_at: e.created_at,
+            last_drafted_by: e.created_by ?? null,
+            last_drafted_channel: e.channel ?? null,
+            last_drafted_template_id: e.template_id ?? null,
+          });
+        }
+      }
+    }
+
     // q filter: search over employee name or employee number (client-side filter on enriched data)
     let filtered = actions;
     if (q) {
@@ -256,6 +282,8 @@ export async function GET(request: NextRequest) {
       const siteId = a.site_id as string | null;
       const dueDate = (a.due_date as string | null) ?? null;
       const sla = computeSla(a.status as string, dueDate, todayStr, in7Str);
+      const evidenceUrl = (a.evidence_url as string | null) ?? null;
+      const evidenceAddedAt = (a.evidence_added_at as string | null) ?? null;
       return {
         action_id: a.id,
         status: a.status,
@@ -275,6 +303,14 @@ export async function GET(request: NextRequest) {
         compliance_name: cat?.name ?? null,
         compliance_category: cat?.category ?? null,
         site_name: !activeSiteId && siteId ? siteNameMap.get(siteId) ?? null : null,
+        lastDraftedAt: latestDraftByAction.get(a.id as string)?.last_drafted_at ?? null,
+        lastDraftedBy: latestDraftByAction.get(a.id as string)?.last_drafted_by ?? null,
+        lastDraftedChannel: latestDraftByAction.get(a.id as string)?.last_drafted_channel ?? null,
+        lastDraftedTemplateId: latestDraftByAction.get(a.id as string)?.last_drafted_template_id ?? null,
+        hasEvidence: Boolean(evidenceUrl || evidenceAddedAt),
+        evidenceAddedAt: evidenceAddedAt,
+        evidenceUrl: evidenceUrl,
+        evidenceNotes: (a.evidence_notes as string | null) ?? null,
       };
     });
 
