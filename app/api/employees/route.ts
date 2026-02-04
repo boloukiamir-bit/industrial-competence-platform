@@ -183,6 +183,7 @@ export async function GET(request: NextRequest) {
         dbHost: diag.dbHost,
         dbPort: diag.dbPort,
         sslRejectUnauthorized: diag.sslRejectUnauthorized,
+        hasCaPem: diag.hasCaPem,
       };
       const res = NextResponse.json(payload, { status: 500 });
       res.headers.set("X-Request-Id", requestId);
