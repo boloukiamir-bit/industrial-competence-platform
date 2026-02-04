@@ -43,6 +43,7 @@ function computeSla(
 export type DigestContext = {
   orgId: string;
   activeSiteId: string | null;
+  digestSiteId: string | null;
   activeSiteName: string | null;
   asOf: string;
   expiringDays: number;
@@ -95,8 +96,8 @@ export type DigestPayload = {
   links: DigestLinks;
 };
 
-function buildLinks(siteId: string | null): DigestLinks {
-  const siteQ = siteId ? `&siteId=${encodeURIComponent(siteId)}` : "";
+function buildLinks(sessionSiteIdForLinks: string | null): DigestLinks {
+  const siteQ = sessionSiteIdForLinks ? `&siteId=${encodeURIComponent(sessionSiteIdForLinks)}` : "";
   return {
     inboxOverdue: `/app/compliance/actions?sla=overdue${siteQ}`,
     inboxDue7d: `/app/compliance/actions?sla=due7d${siteQ}`,
@@ -107,6 +108,7 @@ function buildLinks(siteId: string | null): DigestLinks {
 
 /**
  * Build digest payload for the given org/site and date. Used by GET digest and cron.
+ * siteId = org_units.id used for data scope and storage. sessionSiteIdForLinks = session site id (sites.id) for link query params; when omitted (cron), use siteId.
  */
 export async function buildDigestPayload(
   supabase: SupabaseClient,
@@ -114,7 +116,8 @@ export async function buildDigestPayload(
   siteId: string | null,
   asOf: Date,
   expiringDays: number,
-  activeSiteName: string | null
+  activeSiteName: string | null,
+  sessionSiteIdForLinks?: string | null
 ): Promise<DigestPayload> {
   asOf.setHours(0, 0, 0, 0);
   const asOfStr = asOf.toISOString().slice(0, 10);
@@ -122,14 +125,16 @@ export async function buildDigestPayload(
   in7.setDate(in7.getDate() + 7);
   const in7Str = in7.toISOString().slice(0, 10);
 
+  const linkSiteId = sessionSiteIdForLinks ?? siteId;
   const context: DigestContext = {
     orgId,
-    activeSiteId: siteId,
+    activeSiteId: linkSiteId,
+    digestSiteId: siteId,
     activeSiteName,
     asOf: asOfStr,
     expiringDays,
   };
-  const links = buildLinks(siteId);
+  const links = buildLinks(linkSiteId);
 
   // 1) Employees in scope
   let empQ = supabase

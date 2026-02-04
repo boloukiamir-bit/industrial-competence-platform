@@ -2,10 +2,11 @@
 
 ## Overview
 
-- **DB:** `public.compliance_daily_digests` — one row per (org_id, site_id, digest_date); payload = digest JSON.
-- **GET /api/compliance/digest** — Live digest (Admin/HR, tenant-scoped). Params: `asOf`, `expiringDays`. Optional site filter via session `activeSiteId`.
-- **POST /api/cron/compliance-digest** — Cron: generates digests for all orgs/sites. Protected by `CRON_SECRET` header. Idempotent UPSERT.
-- **GET /api/compliance/digest/latest** — Latest stored digest for current org/site (Admin/HR). Used by Summary page “Latest digest” card.
+- **DB:** `public.compliance_daily_digests` — one row per (org_id, site_id, digest_date); `site_id` is **org_units.id** (not sites.id).
+- **Site mapping:** Session `active_site_id` (profiles) may point to **sites.id**. Digest storage and lookup use **org_units.id**. `lib/server/siteMapping.ts` maps session site → org_unit so GET digest/latest and digest data stay consistent.
+- **GET /api/compliance/digest** — Live digest (Admin/HR, tenant-scoped). Params: `asOf`, `expiringDays`. Session `activeSiteId` mapped to org_unit for data; response includes `context.activeSiteId` (session) and `context.digestSiteId` (org_unit id used).
+- **POST /api/cron/compliance-digest** — Cron: generates digests for all orgs; sites = org_units (source of truth). Protected by `CRON_SECRET` header. Idempotent UPSERT.
+- **GET /api/compliance/digest/latest** — Latest stored digest for current org/site (Admin/HR). Uses mapped org_unit id for lookup so session with **sites.id** still returns the digest. Used by Summary page “Latest digest” card.
 
 ---
 
@@ -47,7 +48,7 @@ curl -b cookies.txt "<BASE_URL>/api/compliance/digest?asOf=2025-02-04&expiringDa
 Expected JSON shape (excerpt):
 
 - `ok: true`
-- `context`: `{ orgId, activeSiteId, activeSiteName, asOf, expiringDays }`
+- `context`: `{ orgId, activeSiteId, digestSiteId, activeSiteName, asOf, expiringDays }` — `activeSiteId` = session (sites.id); `digestSiteId` = org_unit id used for data.
 - `kpis`: `{ open, overdue, due7d, nodue, unassigned, withEvidence, withoutEvidence }`
 - `topItems`: array (max 10) `{ compliance_code, compliance_name, category, overdueCount, expiringCount, missingCount }`
 - `topActions`: array (max 20) enriched actions with `sla`, `owner_user_id`, `due_date`, `employee_name`, `evidence_status`, `last_drafted_at`
@@ -61,7 +62,7 @@ Expected JSON shape (excerpt):
 curl -b cookies.txt "<BASE_URL>/api/compliance/digest/latest"
 ```
 
-Expected: `{ ok: true, digest: { id, digest_date, created_at, context, kpis, topItems, topActions, links } }` or `digest: null` if none.
+Expected: `{ ok: true, digest: { id, digest_date, created_at, context, kpis, topItems, topActions, links } }` or `digest: null` if none. When session `active_site_id` is a **sites.id**, the response includes `context.digestSiteId` (the org_unit id used for lookup) and the digest is returned when a matching org_unit digest exists.
 
 ---
 
@@ -88,7 +89,15 @@ Expected: `{ ok: true, digestsCreated, digestsSkipped }`. Without valid secret: 
    - Digest date
    - KPIs: Open, Overdue, Due <7d, No due, Unassigned, With evidence, Without evidence
    - Links: Overdue, Due 7d, Unassigned, Summary (each goes to the corresponding inbox/summary view).
-3. **Site scope** — With a site selected in the org switcher, latest digest and live digest are scoped to that site.
+3. **Site scope** — With a site selected in the org switcher (profile `active_site_id` = sites.id), mapping resolves to org_unit; latest digest and live digest are scoped correctly and “Latest digest” card shows when a digest exists for that org_unit.
+
+---
+
+## 6. Verification steps (site mapping)
+
+1. **Run cron** — `POST /api/cron/compliance-digest` with `CRON_SECRET` → creates/updates digests (by org_units).
+2. **GET digest/latest with session site** — Call `GET /api/compliance/digest/latest` with session where `active_site_id` is a **sites.id** that maps to an org_unit (by name). Response should return a digest (not `digest: null`) and include `context.digestSiteId` populated with the org_unit id.
+3. **Summary “Latest digest” card** — Open `/app/compliance/summary` as Admin/HR with a site selected; confirm the “Latest digest” card renders when a digest exists for the mapped org/site.
 
 ---
 

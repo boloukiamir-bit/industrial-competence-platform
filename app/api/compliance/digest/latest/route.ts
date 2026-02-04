@@ -5,7 +5,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { resolveOrgUnitIdForSessionSite } from "@/lib/server/siteMapping";
 import { isHrAdmin } from "@/lib/auth";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 function errorPayload(step: string, error: unknown) {
   const msg = error instanceof Error ? error.message : String(error);
@@ -38,6 +45,7 @@ export async function GET(request: NextRequest) {
   try {
     const orgId = org.activeOrgId;
     const activeSiteId = org.activeSiteId ?? null;
+    const mappedOrgUnitId = await resolveOrgUnitIdForSessionSite(supabaseAdmin, orgId, activeSiteId);
 
     let q = supabase
       .from("compliance_daily_digests")
@@ -45,8 +53,8 @@ export async function GET(request: NextRequest) {
       .eq("org_id", orgId)
       .order("digest_date", { ascending: false })
       .limit(1);
-    if (activeSiteId != null) {
-      q = q.eq("site_id", activeSiteId);
+    if (mappedOrgUnitId != null) {
+      q = q.eq("site_id", mappedOrgUnitId);
     } else {
       q = q.is("site_id", null);
     }
@@ -64,16 +72,24 @@ export async function GET(request: NextRequest) {
     const payload = row?.payload;
     const payloadObj =
       typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload : {};
+    const digestPayload = row
+      ? {
+          id: row.id,
+          digest_date: row.digest_date,
+          created_at: row.created_at,
+          ...payloadObj,
+          context: {
+            ...(typeof payloadObj.context === "object" && payloadObj.context !== null
+              ? payloadObj.context
+              : {}),
+            activeSiteId: activeSiteId,
+            digestSiteId: mappedOrgUnitId,
+          },
+        }
+      : null;
     const res = NextResponse.json({
       ok: true,
-      digest: row
-        ? {
-            id: row.id,
-            digest_date: row.digest_date,
-            created_at: row.created_at,
-            ...payloadObj,
-          }
-        : null,
+      digest: digestPayload,
     });
     applySupabaseCookies(res, pendingCookies);
     return res;

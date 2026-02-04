@@ -39,6 +39,7 @@ import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { SessionDebugStrip } from "@/components/SessionDebugStrip";
 import { VersionStrip } from "@/components/VersionStrip";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
+import { Skeleton } from "@/components/ui/skeleton";
 import { COPY } from "@/lib/copy";
 import { getSpaliDevMode } from "@/lib/spaliDevMode";
 
@@ -186,6 +187,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Predicate: true when role can see HR Tools (Compliance Summary, Action Inbox, etc.). Same as /api/admin/me membership_role semantics. */
+function canSeeHrTools(role: string | null | undefined): boolean {
+  return isHrAdmin((role ?? "").toLowerCase());
+}
+
 function AppLayoutContent({
   pathname,
   authUser,
@@ -208,22 +214,39 @@ function AppLayoutContent({
   children: React.ReactNode;
 }) {
   const { currentRole } = useOrg();
+  const [membershipRoleFromApi, setMembershipRoleFromApi] = useState<string | null>(null);
+  const [roleLoadStatus, setRoleLoadStatus] = useState<"loading" | "done">("loading");
   const isProduction = process.env.NODE_ENV === "production";
   const showVersionStrip = process.env.NEXT_PUBLIC_SHOW_VERSION_STRIP === "true";
 
-  const filterItems = (items: NavItem[]) => {
-    const roleNormalized = (currentRole ?? "").toLowerCase();
+  useEffect(() => {
+    fetch("/api/admin/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json && typeof json.membership_role === "string") {
+          setMembershipRoleFromApi(json.membership_role.trim());
+        }
+      })
+      .catch(() => {})
+      .finally(() => setRoleLoadStatus("done"));
+  }, []);
+
+  const roleForNav = (membershipRoleFromApi ?? currentRole ?? "").trim();
+
+  const filterItems = (items: NavItem[], role: string) => {
     return items.filter((item) => {
-      if (item.hrAdminOnly && !isHrAdmin(roleNormalized)) return false;
+      if (item.hrAdminOnly && !canSeeHrTools(role)) return false;
       return true;
     });
   };
 
-  const visibleCoreItems = isPilotMode ? filterItems(pilotModeCoreNavItems) : filterItems(coreNavItems);
-  const visibleHrItems = isPilotMode ? filterItems(pilotModeHrNavItems) : filterItems(hrNavItems);
+  const visibleCoreItems = isPilotMode ? filterItems(pilotModeCoreNavItems, roleForNav) : filterItems(coreNavItems, roleForNav);
+  const visibleHrItems = isPilotMode ? filterItems(pilotModeHrNavItems, roleForNav) : filterItems(hrNavItems, roleForNav);
   const visibleMoreItems = isPilotMode ? [] : moreNavItems;
   const visibleSpaljistenItems = isPilotMode ? [] : showSpaljistenNav ? spaljistenNavItems : [];
-  const visibleSettingsItems = isPilotMode ? [] : filterItems(settingsNavItems).filter((item) => (isProduction && item.name === "Debug") ? false : true);
+  const visibleSettingsItems = isPilotMode ? [] : filterItems(settingsNavItems, roleForNav).filter((item) => (isProduction && item.name === "Debug") ? false : true);
+
+  const showHrToolsSection = roleLoadStatus === "loading" || visibleHrItems.length > 0;
 
   return (
     <>
@@ -251,14 +274,24 @@ function AppLayoutContent({
                 </div>
               )}
 
-              {visibleHrItems.length > 0 && (
-                <div className="mb-4">
+              {showHrToolsSection && (
+                <div className="mb-4" data-testid="nav-hr-tools-section">
                   <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                     HR Tools
                   </p>
-                  <ul className="space-y-1">
-                    {visibleHrItems.map(renderNavItem)}
-                  </ul>
+                  {roleLoadStatus === "loading" ? (
+                    <ul className="space-y-1" aria-busy="true">
+                      {[1, 2, 3, 4].map((i) => (
+                        <li key={i}>
+                          <Skeleton className="h-9 w-full" />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <ul className="space-y-1">
+                      {visibleHrItems.map(renderNavItem)}
+                    </ul>
+                  )}
                 </div>
               )}
 

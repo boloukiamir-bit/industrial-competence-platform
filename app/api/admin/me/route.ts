@@ -8,6 +8,11 @@ import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -18,7 +23,7 @@ export async function GET(request: NextRequest) {
     const { supabase, pendingCookies } = await createSupabaseServerClient();
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      const res = NextResponse.json({ error: session.error }, { status: session.status, headers: NO_CACHE_HEADERS });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
@@ -32,7 +37,7 @@ export async function GET(request: NextRequest) {
     if (profileError || !profile) {
       const res = NextResponse.json(
         { error: "Profile not found" },
-        { status: 403 }
+        { status: 403, headers: NO_CACHE_HEADERS }
       );
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -42,7 +47,7 @@ export async function GET(request: NextRequest) {
     if (!activeOrgId) {
       const res = NextResponse.json(
         { error: "No active organization" },
-        { status: 403 }
+        { status: 403, headers: NO_CACHE_HEADERS }
       );
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -59,24 +64,27 @@ export async function GET(request: NextRequest) {
     if (membershipError || !membership) {
       const res = NextResponse.json(
         { error: "No active membership for this organization" },
-        { status: 403 }
+        { status: 403, headers: NO_CACHE_HEADERS }
       );
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
-    const res = NextResponse.json({
-      email: profile.email ?? null,
-      active_org_id: activeOrgId,
-      membership_role: membership.role,
-    });
+    const res = NextResponse.json(
+      {
+        email: profile.email ?? null,
+        active_org_id: activeOrgId,
+        membership_role: membership.role,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
     console.error("[admin/me]", err);
     return NextResponse.json(
       { error: "Failed to load admin context" },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }

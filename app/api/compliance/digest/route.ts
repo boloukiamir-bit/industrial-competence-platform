@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
+import { resolveOrgUnitIdForSessionSite } from "@/lib/server/siteMapping";
 import { isHrAdmin } from "@/lib/auth";
 import { buildDigestPayload } from "@/lib/server/complianceDigest";
 
@@ -60,17 +61,25 @@ export async function GET(request: NextRequest) {
   try {
     const orgId = org.activeOrgId;
     const activeSiteId = org.activeSiteId ?? null;
+    const mappedOrgUnitId = await resolveOrgUnitIdForSessionSite(supabaseAdmin, orgId, activeSiteId);
     const activeSiteName =
-      activeSiteId != null ? await getActiveSiteName(supabaseAdmin, activeSiteId, orgId) : null;
+      mappedOrgUnitId != null
+        ? await getActiveSiteName(supabaseAdmin, mappedOrgUnitId, orgId)
+        : activeSiteId != null
+          ? await getActiveSiteName(supabaseAdmin, activeSiteId, orgId)
+          : null;
 
     const payload = await buildDigestPayload(
       supabaseAdmin,
       orgId,
-      activeSiteId,
+      mappedOrgUnitId,
       asOf,
       expiringDays,
-      activeSiteName
+      activeSiteName,
+      activeSiteId
     );
+    payload.context.activeSiteId = activeSiteId;
+    payload.context.digestSiteId = mappedOrgUnitId;
 
     const res = NextResponse.json({ ok: true, ...payload });
     applySupabaseCookies(res, pendingCookies);
