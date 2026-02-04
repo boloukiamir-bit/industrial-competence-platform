@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   if (DEBUG) {
     const diag = getPoolSslDiagnostic();
     console.log(
-      `[${requestId}] GET /api/employees pg: NODE_ENV=${process.env.NODE_ENV} rejectUnauthorized=${diag.rejectUnauthorized} hostname=${diag.hostname}`
+      `[${requestId}] GET /api/employees pg: usedDbEnvKey=${diag.usedDbEnvKey} dbHost=${diag.dbHost} dbPort=${diag.dbPort} sslRejectUnauthorized=${diag.sslRejectUnauthorized}`
     );
   }
   let userIdPresent = false;
@@ -163,6 +163,7 @@ export async function GET(request: NextRequest) {
     try {
       const { code, message, hint } = dbErrorFields(err);
       if (DEBUG) {
+        const diag = getPoolSslDiagnostic();
         logDiag(requestId, {
           userIdPresent,
           orgIdPresent,
@@ -170,14 +171,35 @@ export async function GET(request: NextRequest) {
           code,
           message,
           ...(hint != null && { hint }),
+          usedDbEnvKey: diag.usedDbEnvKey,
+          dbHost: diag.dbHost,
+          dbPort: diag.dbPort,
+          sslRejectUnauthorized: diag.sslRejectUnauthorized,
         });
       }
-      const payload: { error: string; requestId: string; code: string; message: string; hint?: string } = {
+      const diag = DEBUG ? getPoolSslDiagnostic() : null;
+      const payload: {
+        error: string;
+        requestId: string;
+        code: string;
+        message: string;
+        hint?: string;
+        usedDbEnvKey?: string;
+        dbHost?: string;
+        dbPort?: string;
+        sslRejectUnauthorized?: boolean;
+      } = {
         error: "employees_failed",
         requestId,
         code,
         message,
         ...(hint != null && { hint }),
+        ...(diag != null && {
+          usedDbEnvKey: diag.usedDbEnvKey,
+          dbHost: diag.dbHost,
+          dbPort: diag.dbPort,
+          sslRejectUnauthorized: diag.sslRejectUnauthorized,
+        }),
       };
       const res = NextResponse.json(payload, { status: 500 });
       res.headers.set("X-Request-Id", requestId);

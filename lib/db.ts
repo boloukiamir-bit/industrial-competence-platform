@@ -5,6 +5,40 @@ declare global {
   var __pgPool: Pool | undefined;
 }
 
+export type DbEnvKey = "DATABASE_URL" | "POSTGRES_URL" | "SUPABASE_DB_URL" | "NONE";
+
+/**
+ * Returns which env key is used for the DB connection. We use DATABASE_URL only;
+ * no fallback to POSTGRES_URL or SUPABASE_DB_URL.
+ */
+function getDbConnectionSource(): {
+  usedDbEnvKey: DbEnvKey;
+  connectionString: string;
+} {
+  const url = process.env.DATABASE_URL?.trim();
+  if (url && !url.includes("[YOUR_PASSWORD]")) {
+    return { usedDbEnvKey: "DATABASE_URL", connectionString: url };
+  }
+  return { usedDbEnvKey: "NONE", connectionString: "" };
+}
+
+/** Parse host and port from connection URL; no username/password. */
+function parseDbUrl(connectionString: string): { host: string; port: string } {
+  try {
+    const u = connectionString.replace(/^postgres(?:ql)?:\/\//, "");
+    const at = u.indexOf("@");
+    if (at === -1) return { host: "(no @ in url)", port: "" };
+    const hostPart = u.slice(at + 1);
+    const slash = hostPart.indexOf("/");
+    const hostPort = slash === -1 ? hostPart : hostPart.slice(0, slash);
+    const colon = hostPort.lastIndexOf(":");
+    if (colon === -1) return { host: hostPort, port: "" };
+    return { host: hostPort.slice(0, colon), port: hostPort.slice(colon + 1) };
+  } catch {
+    return { host: "(parse error)", port: "" };
+  }
+}
+
 /**
  * Validates that DATABASE_URL is using Supabase Transaction Pooler (not direct connection).
  *
@@ -50,18 +84,28 @@ function getSslConfig(connectionString: string): false | { rejectUnauthorized: b
 }
 
 function createPool(): Pool {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("Missing DATABASE_URL");
+  const { usedDbEnvKey, connectionString } = getDbConnectionSource();
+  if (usedDbEnvKey === "NONE" || !connectionString) {
+    throw new Error("Missing DATABASE_URL (only DATABASE_URL is used; no fallback to POSTGRES_URL/SUPABASE_DB_URL)");
   }
 
   validateConnectionString(connectionString);
 
   const ssl = getSslConfig(connectionString);
   const rejectUnauthorized = typeof ssl === "object" ? ssl.rejectUnauthorized : false;
+  const { host, port } = parseDbUrl(connectionString);
 
   if (process.env.DEBUG_DIAGNOSTICS === "true") {
-    console.log("[DEBUG_DIAGNOSTICS] pg ssl rejectUnauthorized =", rejectUnauthorized);
+    console.log(
+      "[DEBUG_DIAGNOSTICS] pg usedDbEnvKey =",
+      usedDbEnvKey,
+      "host =",
+      host,
+      "port =",
+      port,
+      "ssl rejectUnauthorized =",
+      rejectUnauthorized
+    );
   }
 
   return new Pool({
@@ -85,8 +129,8 @@ export function getPgPool(): Pool {
 
   const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
   const isDevMode = process.env.NODE_ENV !== "production";
-  const missingDatabaseUrl =
-    !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("[YOUR_PASSWORD]");
+  const { usedDbEnvKey, connectionString } = getDbConnectionSource();
+  const missingDatabaseUrl = usedDbEnvKey === "NONE" || !connectionString;
 
   if (missingDatabaseUrl && (isBuildPhase || isDevMode)) {
     const errorMessage =
@@ -111,28 +155,26 @@ export function getPgPool(): Pool {
 export const pool = getPgPool();
 
 /**
- * Returns current pool SSL diagnostic for logging (no secrets). Use when DEBUG_DIAGNOSTICS=true.
+ * Returns current pool connection diagnostic (no secrets). Use when DEBUG_DIAGNOSTICS=true.
  */
 export function getPoolSslDiagnostic(): {
+  usedDbEnvKey: DbEnvKey;
+  dbHost: string;
+  dbPort: string;
+  sslRejectUnauthorized: boolean;
   rejectUnauthorized: boolean;
   hostname: string;
 } {
-  const connectionString = process.env.DATABASE_URL ?? "";
+  const { usedDbEnvKey, connectionString } = getDbConnectionSource();
   const ssl = connectionString ? getSslConfig(connectionString) : false;
-  const rejectUnauthorized = typeof ssl === "object" ? ssl.rejectUnauthorized : false;
-  const hostname = (() => {
-    try {
-      const u = connectionString.replace(/^postgres(?:ql)?:\/\//, "");
-      const at = u.indexOf("@");
-      if (at === -1) return "(no @ in url)";
-      const hostPart = u.slice(at + 1);
-      const slash = hostPart.indexOf("/");
-      const hostPort = slash === -1 ? hostPart : hostPart.slice(0, slash);
-      const colon = hostPort.lastIndexOf(":");
-      return colon === -1 ? hostPort : hostPort.slice(0, colon);
-    } catch {
-      return "(parse error)";
-    }
-  })();
-  return { rejectUnauthorized, hostname };
+  const sslRejectUnauthorized = typeof ssl === "object" ? ssl.rejectUnauthorized : false;
+  const { host, port } = connectionString ? parseDbUrl(connectionString) : { host: "", port: "" };
+  return {
+    usedDbEnvKey,
+    dbHost: host,
+    dbPort: port,
+    sslRejectUnauthorized,
+    rejectUnauthorized: sslRejectUnauthorized,
+    hostname: host,
+  };
 }
