@@ -45,13 +45,20 @@ export default function EmployeesPage() {
       if (!res.ok) {
         setEmployees([]);
         const message = json.error ?? res.statusText;
+        const requestId = json.requestId ?? res.headers.get("x-request-id") ?? null;
+        const errorDetail = json.errorDetail ?? null;
         const friendly = res.status === 401 ? "Invalid or expired session" : String(message || "Request failed");
         const toastMessage =
           res.status === 401
             ? "Request failed (401) — Session expired. Please reload/login."
             : `Request failed (${res.status}) — ${friendly}`;
         toast({ title: toastMessage, variant: "destructive" });
-        setError(friendly);
+        const displayError = errorDetail
+          ? `${friendly}\n\n${errorDetail}`
+          : requestId
+            ? `${friendly} (requestId: ${requestId})`
+            : friendly;
+        setError(displayError);
         return;
       }
       const list = Array.isArray(json.employees) ? json.employees : [];
@@ -124,7 +131,10 @@ export default function EmployeesPage() {
         <Card>
           <CardContent className="py-8 text-center">
             <Users className="h-10 w-10 mx-auto text-destructive mb-3" />
-            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap break-words">{error}</p>
+            <p className="text-xs text-muted-foreground mb-4 font-mono">
+              If you see a requestId above, share it when reporting the issue.
+            </p>
             <Button onClick={() => window.location.reload()}>Reload</Button>
           </CardContent>
         </Card>
