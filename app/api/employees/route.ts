@@ -163,7 +163,6 @@ export async function GET(request: NextRequest) {
     try {
       const { code, message, hint } = dbErrorFields(err);
       if (DEBUG) {
-        const diag = getPoolSslDiagnostic();
         logDiag(requestId, {
           userIdPresent,
           orgIdPresent,
@@ -171,35 +170,19 @@ export async function GET(request: NextRequest) {
           code,
           message,
           ...(hint != null && { hint }),
-          usedDbEnvKey: diag.usedDbEnvKey,
-          dbHost: diag.dbHost,
-          dbPort: diag.dbPort,
-          sslRejectUnauthorized: diag.sslRejectUnauthorized,
         });
       }
-      const diag = DEBUG ? getPoolSslDiagnostic() : null;
-      const payload: {
-        error: string;
-        requestId: string;
-        code: string;
-        message: string;
-        hint?: string;
-        usedDbEnvKey?: string;
-        dbHost?: string;
-        dbPort?: string;
-        sslRejectUnauthorized?: boolean;
-      } = {
+      const diag = getPoolSslDiagnostic();
+      const payload = {
         error: "employees_failed",
         requestId,
         code,
         message,
         ...(hint != null && { hint }),
-        ...(diag != null && {
-          usedDbEnvKey: diag.usedDbEnvKey,
-          dbHost: diag.dbHost,
-          dbPort: diag.dbPort,
-          sslRejectUnauthorized: diag.sslRejectUnauthorized,
-        }),
+        usedDbEnvKey: diag.usedDbEnvKey,
+        dbHost: diag.dbHost,
+        dbPort: diag.dbPort,
+        sslRejectUnauthorized: diag.sslRejectUnauthorized,
       };
       const res = NextResponse.json(payload, { status: 500 });
       res.headers.set("X-Request-Id", requestId);
