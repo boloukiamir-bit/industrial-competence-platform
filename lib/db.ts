@@ -37,19 +37,15 @@ function validateConnectionString(connectionString: string): void {
 /**
  * Explicit SSL config for pg Pool to avoid Vercel SELF_SIGNED_CERT_IN_CHAIN when
  * connecting to Supabase pooler. We do NOT set NODE_TLS_REJECT_UNAUTHORIZED.
+ * Uses connection string only (not NODE_ENV) so serverless runtimes always get the right config.
  */
 function getSslConfig(connectionString: string): false | { rejectUnauthorized: boolean } {
-  const isProduction = process.env.NODE_ENV === "production";
-  const isLocalhost = connectionString.includes("localhost");
-
-  if (isProduction) {
-    // Vercel/Supabase pooler: use SSL with rejectUnauthorized false to accept pooler cert
-    return { rejectUnauthorized: false };
-  }
-  // Non-production: no SSL for localhost, otherwise same as production for remote dev
+  const isLocalhost =
+    connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
   if (isLocalhost) {
     return false;
   }
+  // Any remote host (Supabase pooler, etc.): accept self-signed/in-chain certs
   return { rejectUnauthorized: false };
 }
 
