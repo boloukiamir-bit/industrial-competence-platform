@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { getActiveSiteName } from "@/lib/server/siteName";
 import { isHrAdmin } from "@/lib/auth";
 import {
   COMPLIANCE_ACTION_DRAFT_CATEGORY,
@@ -172,11 +173,10 @@ export async function POST(request: NextRequest) {
     compliance_name = catRow?.name ?? "";
   }
 
-  const { data: siteRow } =
+  site_name =
     siteIdCandidate != null
-      ? await supabaseAdmin.from("sites").select("name").eq("id", siteIdCandidate).eq("org_id", org.activeOrgId).maybeSingle()
-      : { data: null };
-  site_name = siteRow?.name ?? "—";
+      ? (await getActiveSiteName(supabaseAdmin, siteIdCandidate, org.activeOrgId)) ?? "—"
+      : "—";
 
   const daysLeft =
     due_date != null

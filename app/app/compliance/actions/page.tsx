@@ -21,7 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Loader2, CheckCircle2, Calendar, UserPlus, FileText, Paperclip } from "lucide-react";
+import { Search, Loader2, CheckCircle2, Calendar, UserPlus, FileText, Paperclip, Download } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
@@ -158,6 +158,8 @@ export default function ActionInboxPage() {
   const [markingDoneId, setMarkingDoneId] = useState<string | null>(null);
   const [draftAction, setDraftAction] = useState<InboxAction | null>(null);
   const [evidenceAction, setEvidenceAction] = useState<InboxAction | null>(null);
+  const [exportChannel, setExportChannel] = useState<"email" | "sms" | "note">("email");
+  const [exportLoading, setExportLoading] = useState(false);
 
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
@@ -171,7 +173,41 @@ export default function ActionInboxPage() {
     if (line) params.set("line", line);
     if (searchDebounced.trim()) params.set("q", searchDebounced.trim());
     return params;
-  }, [status, due, actionType, category, line, searchDebounced]);
+  }, [status, due, actionType, category, line, searchDebounced, slaFilter, ownerFilter, unassignedOnly]);
+
+  const handleExportCsv = useCallback(async () => {
+    setExportLoading(true);
+    try {
+      const params = buildParams();
+      params.set("channel", exportChannel);
+      params.set("limit", "500");
+      const url = `/api/compliance/actions/export?${params}`;
+      const res = await fetch(url, { credentials: "include", headers: withDevBearer() });
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        toast({ title: "Export failed", description: json.error ?? res.statusText, variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition");
+      const match = disposition?.match(/filename="?([^";]+)"?/);
+      const filename = match?.[1] ?? `compliance-actions-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "Export downloaded", description: filename });
+    } catch (err) {
+      toast({
+        title: "Export failed",
+        description: err instanceof Error ? err.message : "Download failed",
+        variant: "destructive",
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  }, [buildParams, exportChannel, toast]);
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -506,6 +542,35 @@ export default function ActionInboxPage() {
           >
             Mine
           </button>
+          <span className="text-xs text-muted-foreground mx-2">|</span>
+          <Select
+            value={exportChannel}
+            onValueChange={(v) => setExportChannel(v as "email" | "sms" | "note")}
+          >
+            <SelectTrigger className="w-[100px] h-9 rounded-md border px-2.5 py-1 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="email">Email</SelectItem>
+              <SelectItem value="sms">SMS</SelectItem>
+              <SelectItem value="note">Note</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={handleExportCsv}
+            disabled={exportLoading}
+          >
+            {exportLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export CSV
+          </Button>
         </div>
 
         {error && (
