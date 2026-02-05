@@ -25,7 +25,6 @@ export async function GET(request: NextRequest) {
       .from("compliance_catalog")
       .select("id, org_id, site_id, category, code, name, description, default_validity_days, is_active, created_at, updated_at")
       .eq("org_id", org.activeOrgId)
-      .eq("is_active", true)
       .order("category")
       .order("code");
 

@@ -42,7 +42,7 @@ const CARDS: Array<{
   },
   {
     key: "valid",
-    label: "Valid",
+    label: "Compliant",
     icon: CheckCircle,
     bgClass: "bg-emerald-50 dark:bg-emerald-950/30",
     borderClass: "border-emerald-200 dark:border-emerald-900/50",

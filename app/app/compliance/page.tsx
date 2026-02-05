@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
-import { BarChart3, ChevronDown, ChevronRight, Grid3X3, Inbox, Loader2, Plus, Users } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, Grid3X3, Inbox, Loader2, Pencil, Plus, Users } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +37,7 @@ import {
   type KpiCardState,
 } from "@/components/compliance/ComplianceKpiCards";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   ComplianceFilters,
   type CategoryTab,
@@ -71,6 +72,19 @@ type OverviewResponse = {
   activeSiteId?: string | null;
   activeSiteName?: string | null;
 };
+
+type CatalogItem = {
+  id: string;
+  category: string;
+  code: string;
+  name: string;
+  description: string | null;
+  default_validity_days: number | null;
+  is_active: boolean;
+};
+type CatalogResponse = { ok: boolean; catalog?: CatalogItem[] };
+const CATEGORY_ORDER = ["license", "medical", "contract"] as const;
+const CATEGORY_LABELS: Record<string, string> = { license: "Licenser", medical: "Medicinskt", contract: "Avtal" };
 
 type Pack = { id: string; label: string; description: string; codes: string[] };
 const COMPLIANCE_PACKS: Pack[] = [
@@ -198,13 +212,18 @@ export default function CompliancePage() {
     number: string;
   } | null>(null);
   const [avanceratOpen, setAvanceratOpen] = useState(false);
+  const [catalogList, setCatalogList] = useState<CatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
+  const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null);
   const [catalogForm, setCatalogForm] = useState({
     code: "",
     name: "",
     category: "license",
     description: "",
     default_validity_days: "",
+    is_active: true,
   });
   const [catalogSaving, setCatalogSaving] = useState(false);
   const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false);
@@ -256,9 +275,33 @@ export default function CompliancePage() {
     }
   }, [searchDebounced]);
 
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    setCatalogError(null);
+    try {
+      const res = await fetch("/api/compliance/catalog", { credentials: "include", headers: withDevBearer() });
+      const json = (await res.json()) as CatalogResponse;
+      if (!res.ok || !json.ok) {
+        setCatalogError((json as { error?: string }).error ?? "Kunde inte ladda katalogen");
+        setCatalogList([]);
+        return;
+      }
+      setCatalogList(json.catalog ?? []);
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : "Kunde inte ladda katalogen");
+      setCatalogList([]);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadOverview();
   }, [loadOverview]);
+
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400);
@@ -304,7 +347,12 @@ export default function CompliancePage() {
 
   const handleBucketClick = useCallback((bucket: KpiBucket) => {
     setActiveBucket((prev) => (prev === bucket ? null : bucket));
-    if (bucket === "action_required") setActionRequiredOnly(true);
+    setActionRequiredOnly(bucket === "action_required");
+  }, []);
+
+  const clearKpiFilter = useCallback(() => {
+    setActiveBucket(null);
+    setActionRequiredOnly(false);
   }, []);
 
   const handleReview = useCallback((employeeId: string, name: string, number: string) => {
@@ -378,6 +426,8 @@ export default function CompliancePage() {
             lines={lines}
             actionRequiredOnly={actionRequiredOnly}
             onActionRequiredOnlyChange={setActionRequiredOnly}
+            kpiFilterActive={activeBucket != null}
+            onClearKpiFilter={clearKpiFilter}
           />
         </div>
 
@@ -404,6 +454,86 @@ export default function CompliancePage() {
           />
         )}
 
+        {/* Compliance catalog — visible to all; Add/Edit only for admin/hr */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-foreground">Compliancekatalog</h2>
+            {canWrite && (
+              <Button size="sm" onClick={() => { setEditingCatalogItem(null); setCatalogForm({ code: "", name: "", category: "license", description: "", default_validity_days: "", is_active: true }); setCatalogDialogOpen(true); }}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Lägg till
+              </Button>
+            )}
+          </div>
+          {catalogLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Laddar katalog…
+            </div>
+          ) : catalogError ? (
+            <p className="text-sm text-destructive py-2">{catalogError}</p>
+          ) : catalogList.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">Inga katalogposter. {canWrite ? "Lägg till ovan." : ""}</p>
+          ) : (
+            <div className="space-y-4">
+              {CATEGORY_ORDER.map((cat) => {
+                const items = catalogList.filter((i) => i.category === cat);
+                if (items.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                      {CATEGORY_LABELS[cat] ?? cat} ({items.length})
+                    </h3>
+                    <ul className="rounded-lg border border-border divide-y divide-border">
+                      {items.map((item) => (
+                        <li
+                          key={item.id}
+                          className={`flex items-center justify-between gap-3 px-3 py-2 ${!item.is_active ? "bg-muted/40 text-muted-foreground" : ""}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-sm">{item.name}</span>
+                            <span className="block text-xs text-muted-foreground">{item.code}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 text-xs">
+                            {item.default_validity_days != null ? (
+                              <span className="text-muted-foreground">{item.default_validity_days} dagar</span>
+                            ) : null}
+                            <Badge variant={item.is_active ? "default" : "secondary"} className={item.is_active ? "bg-emerald-600/20 text-emerald-700" : ""}>
+                              {item.is_active ? "Aktiv" : "Inaktiv"}
+                            </Badge>
+                            {canWrite && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  setEditingCatalogItem(item);
+                                  setCatalogForm({
+                                    code: item.code,
+                                    name: item.name,
+                                    category: item.category,
+                                    description: item.description ?? "",
+                                    default_validity_days: item.default_validity_days != null ? String(item.default_validity_days) : "",
+                                    is_active: item.is_active,
+                                  });
+                                  setCatalogDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5 mr-1" />
+                                Redigera
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         {/* Admin: Avancerat */}
         {canWrite && (
           <Collapsible open={avanceratOpen} onOpenChange={setAvanceratOpen}>
@@ -429,10 +559,6 @@ export default function CompliancePage() {
                     {pack.label}
                   </Button>
                 ))}
-                <Button size="sm" variant="ghost" onClick={() => setCatalogDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Add catalog item
-                </Button>
                 <Button variant="outline" size="sm" onClick={() => setBulkAssignDialogOpen(true)}>
                   <Users className="h-4 w-4 mr-1.5" />
                   Bulk assign
@@ -711,47 +837,95 @@ export default function CompliancePage() {
           </DialogContent>
         </Dialog>
 
-        {/* Catalog dialog */}
-        <Dialog open={catalogDialogOpen} onOpenChange={setCatalogDialogOpen}>
+        {/* Catalog dialog — Add/Edit (admin/hr only) */}
+        <Dialog
+          open={catalogDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) setEditingCatalogItem(null);
+            setCatalogDialogOpen(open);
+          }}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add catalog item</DialogTitle>
-              <DialogDescription>Create a compliance type. Code must be unique.</DialogDescription>
+              <DialogTitle>{editingCatalogItem ? "Redigera katalogpost" : "Lägg till katalogpost"}</DialogTitle>
+              <DialogDescription>
+                {editingCatalogItem ? "Uppdatera fält. Koden kan inte ändras." : "Kod måste vara unik. Rekommenderat: STORA_BOKSTÄVER_UNDERSTRECK."}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label>Code</Label>
-                <Input value={catalogForm.code} onChange={(e) => setCatalogForm((f) => ({ ...f, code: e.target.value }))} placeholder="e.g. FORKLIFT_A" />
+                <Label>Kod</Label>
+                <Input
+                  value={catalogForm.code}
+                  onChange={(e) => setCatalogForm((f) => ({ ...f, code: e.target.value.trim().toUpperCase().replace(/\s+/g, "_") }))}
+                  placeholder="t.ex. FORKLIFT_A"
+                  disabled={!!editingCatalogItem}
+                />
               </div>
               <div className="grid gap-2">
-                <Label>Name</Label>
-                <Input value={catalogForm.name} onChange={(e) => setCatalogForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Forklift A" />
+                <Label>Namn</Label>
+                <Input value={catalogForm.name} onChange={(e) => setCatalogForm((f) => ({ ...f, name: e.target.value }))} placeholder="t.ex. Truckkort A" />
               </div>
               <div className="grid gap-2">
-                <Label>Category</Label>
+                <Label>Kategori</Label>
                 <Select value={catalogForm.category} onValueChange={(v) => setCatalogForm((f) => ({ ...f, category: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="license">License</SelectItem>
-                    <SelectItem value="medical">Medical</SelectItem>
-                    <SelectItem value="contract">Contract</SelectItem>
+                    <SelectItem value="license">Licens</SelectItem>
+                    <SelectItem value="medical">Medicinskt</SelectItem>
+                    <SelectItem value="contract">Avtal</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Description (optional)</Label>
-                <Input value={catalogForm.description} onChange={(e) => setCatalogForm((f) => ({ ...f, description: e.target.value }))} placeholder="Short description" />
+                <Label>Beskrivning (valfritt)</Label>
+                <Input value={catalogForm.description} onChange={(e) => setCatalogForm((f) => ({ ...f, description: e.target.value }))} placeholder="Kort beskrivning" />
               </div>
               <div className="grid gap-2">
-                <Label>Default validity (days, optional)</Label>
-                <Input type="number" value={catalogForm.default_validity_days} onChange={(e) => setCatalogForm((f) => ({ ...f, default_validity_days: e.target.value }))} placeholder="365" />
+                <Label>Standard giltighet (dagar, valfritt)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={catalogForm.default_validity_days}
+                  onChange={(e) => setCatalogForm((f) => ({ ...f, default_validity_days: e.target.value }))}
+                  placeholder="365"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={catalogForm.is_active}
+                  onCheckedChange={(c: boolean) => setCatalogForm((f) => ({ ...f, is_active: c }))}
+                />
+                <Label className="text-sm">Aktiv</Label>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCatalogDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setCatalogDialogOpen(false)}>Avbryt</Button>
               <Button
-                disabled={!catalogForm.code.trim() || !catalogForm.name.trim() || catalogSaving}
+                disabled={
+                  !catalogForm.code.trim() ||
+                  !catalogForm.name.trim() ||
+                  catalogSaving ||
+                  (() => {
+                    const days = catalogForm.default_validity_days.trim();
+                    if (!days) return false;
+                    const n = parseInt(days, 10);
+                    return isNaN(n) || n < 0;
+                  })()
+                }
                 onClick={async () => {
+                  const code = catalogForm.code.trim();
+                  const name = catalogForm.name.trim();
+                  const daysStr = catalogForm.default_validity_days.trim();
+                  let default_validity_days: number | null = null;
+                  if (daysStr) {
+                    const n = parseInt(daysStr, 10);
+                    if (isNaN(n) || n < 0) {
+                      toast({ title: "Giltighet måste vara ≥ 0", variant: "destructive" });
+                      return;
+                    }
+                    default_validity_days = n;
+                  }
                   setCatalogSaving(true);
                   try {
                     const res = await fetch("/api/compliance/catalog/upsert", {
@@ -759,21 +933,24 @@ export default function CompliancePage() {
                       credentials: "include",
                       headers: withDevBearer({ "Content-Type": "application/json" }),
                       body: JSON.stringify({
-                        code: catalogForm.code.trim(),
-                        name: catalogForm.name.trim(),
+                        code,
+                        name,
                         category: catalogForm.category,
                         description: catalogForm.description?.trim() || null,
-                        default_validity_days: catalogForm.default_validity_days ? parseInt(catalogForm.default_validity_days, 10) : null,
+                        default_validity_days,
+                        is_active: catalogForm.is_active,
                       }),
                     });
-                    const json = await res.json().catch(() => ({}));
+                    const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; step?: string };
                     if (!res.ok) {
-                      toast({ title: (json as { error?: string }).error ?? "Could not save", variant: "destructive" });
+                      toast({ title: json.error ?? (json.step ? `Sparande misslyckades (${json.step})` : "Kunde inte spara"), variant: "destructive" });
                       return;
                     }
-                    toast({ title: "Catalog item saved" });
+                    toast({ title: "Katalogpost sparad" });
                     setCatalogDialogOpen(false);
-                    setCatalogForm({ code: "", name: "", category: "license", description: "", default_validity_days: "" });
+                    setEditingCatalogItem(null);
+                    setCatalogForm({ code: "", name: "", category: "license", description: "", default_validity_days: "", is_active: true });
+                    loadCatalog();
                     loadOverview();
                   } finally {
                     setCatalogSaving(false);
@@ -781,7 +958,7 @@ export default function CompliancePage() {
                 }}
               >
                 {catalogSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Save
+                Spara
               </Button>
             </DialogFooter>
           </DialogContent>

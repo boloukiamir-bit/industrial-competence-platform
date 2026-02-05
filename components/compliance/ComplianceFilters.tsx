@@ -24,6 +24,9 @@ type ComplianceFiltersProps = {
   lines: string[];
   actionRequiredOnly: boolean;
   onActionRequiredOnlyChange: (v: boolean) => void;
+  /** When a KPI card filter is active, show "Clear filter" and call onClearKpiFilter when clicked */
+  kpiFilterActive?: boolean;
+  onClearKpiFilter?: () => void;
 };
 
 export function ComplianceFilters({
@@ -36,6 +39,8 @@ export function ComplianceFilters({
   lines,
   actionRequiredOnly,
   onActionRequiredOnlyChange,
+  kpiFilterActive,
+  onClearKpiFilter,
 }: ComplianceFiltersProps) {
   return (
     <div className="space-y-3">
@@ -93,6 +98,15 @@ export function ComplianceFilters({
         >
           {actionRequiredOnly ? "Action required only" : "Show all"}
         </Button>
+        {kpiFilterActive && onClearKpiFilter && (
+          <button
+            type="button"
+            onClick={onClearKpiFilter}
+            className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            Clear filter
+          </button>
+        )}
       </div>
     </div>
   );
