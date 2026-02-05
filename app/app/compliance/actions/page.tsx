@@ -130,6 +130,7 @@ function relativeDraftTime(iso: string): string {
 
 export default function ActionInboxPage() {
   const { isAdminOrHr } = useOrg();
+  const canWrite = isAdminOrHr;
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -344,18 +345,7 @@ export default function ActionInboxPage() {
   return (
     <OrgGuard>
       <div className="max-w-full mx-auto px-4 py-6 space-y-6">
-        {!isAdminOrHr && (
-          <Card className="border-destructive/50">
-            <CardContent className="pt-6">
-              <p className="text-destructive font-medium">Admin or HR access required</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                This page is for HR and administrators to execute compliance actions.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-        {isAdminOrHr && (
-          <>
+        {!canWrite && <p className="text-sm text-muted-foreground">Read-only.</p>}
         <header className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">Action Inbox</h1>
           <p className="text-sm text-muted-foreground">
@@ -836,7 +826,7 @@ export default function ActionInboxPage() {
           employeeId={drawerEmployee?.id ?? null}
           employeeName={drawerEmployee?.name ?? ""}
           employeeNumber={drawerEmployee?.number ?? ""}
-          isAdminOrHr={!!isAdminOrHr}
+          isAdminOrHr={!!canWrite}
           onSaved={() => {
             toast({ title: "Saved" });
             loadInbox();
@@ -879,8 +869,6 @@ export default function ActionInboxPage() {
             )}
           </DialogContent>
         </Dialog>
-          </>
-        )}
       </div>
     </OrgGuard>
   );

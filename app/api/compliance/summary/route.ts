@@ -1,6 +1,6 @@
 /**
  * GET /api/compliance/summary — executive view: risk + expirations + actions.
- * Admin/HR only. Tenant: getActiveOrgFromSession. Site: strict when activeSiteId set.
+ * Any org member (including manager) can read. Tenant: getActiveOrgFromSession. Site: strict when activeSiteId set.
  *
  * Query: asOf, expiringDays, category, line, q, limitUpcoming
  */
@@ -10,7 +10,6 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
 import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
-import { isHrAdmin } from "@/lib/auth";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,8 +70,8 @@ export async function GET(request: NextRequest) {
     .eq("status", "active")
     .maybeSingle();
 
-  if (!isHrAdmin(membership?.role)) {
-    const res = NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
+  if (!membership) {
+    const res = NextResponse.json(errorPayload("forbidden", "Not an org member"), { status: 403 });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }

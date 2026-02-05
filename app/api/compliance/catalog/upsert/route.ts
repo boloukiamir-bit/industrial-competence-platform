@@ -32,7 +32,10 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (!isHrAdmin(membership?.role)) {
-    const res = NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
+    const res = NextResponse.json(
+      { ok: false as const, step: "forbidden", error: "Admin or HR role required" },
+      { status: 403 }
+    );
     applySupabaseCookies(res, pendingCookies);
     return res;
   }

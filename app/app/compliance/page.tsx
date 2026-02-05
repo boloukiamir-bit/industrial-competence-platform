@@ -181,6 +181,7 @@ function aggregateRows(
 
 export default function CompliancePage() {
   const { isAdminOrHr, currentOrg } = useOrg();
+  const canWrite = isAdminOrHr;
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -319,7 +320,7 @@ export default function CompliancePage() {
   return (
     <OrgGuard>
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        {!isAdminOrHr && (
+        {!canWrite && (
           <p className="text-sm text-muted-foreground">Read-only.</p>
         )}
 
@@ -330,7 +331,7 @@ export default function CompliancePage() {
           </p>
         </header>
         <div className="flex justify-end gap-2">
-          {isAdminOrHr && (
+          {canWrite && (
             <>
               <Button variant="outline" size="sm" asChild>
                 <Link href="/app/compliance/summary">
@@ -404,7 +405,7 @@ export default function CompliancePage() {
         )}
 
         {/* Admin: Avancerat */}
-        {isAdminOrHr && (
+        {canWrite && (
           <Collapsible open={avanceratOpen} onOpenChange={setAvanceratOpen}>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm" className="gap-1">
@@ -448,7 +449,7 @@ export default function CompliancePage() {
           employeeId={drawerEmployee?.id ?? null}
           employeeName={drawerEmployee?.name ?? ""}
           employeeNumber={drawerEmployee?.number ?? ""}
-          isAdminOrHr={!!isAdminOrHr}
+          isAdminOrHr={!!canWrite}
           onSaved={() => {
             toast({ title: "Saved" });
             loadOverview();

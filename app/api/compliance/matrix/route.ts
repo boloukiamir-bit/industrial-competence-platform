@@ -59,6 +59,19 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("role")
+    .eq("user_id", org.userId)
+    .eq("org_id", org.activeOrgId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!membership) {
+    const res = NextResponse.json(errorPayload("forbidden", "Not an org member"), { status: 403 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
   const { searchParams } = new URL(request.url);
   const siteId = searchParams.get("siteId")?.trim() || null;
   const categoryParam = searchParams.get("category")?.trim() || "all";

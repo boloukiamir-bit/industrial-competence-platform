@@ -103,6 +103,7 @@ function CellBadge({
 
 export default function ComplianceMatrixPage() {
   const { isAdminOrHr } = useOrg();
+  const canWrite = isAdminOrHr;
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +181,7 @@ export default function ComplianceMatrixPage() {
     <OrgGuard>
       <TooltipProvider>
         <div className="max-w-full mx-auto px-4 py-6 space-y-6">
-          {!isAdminOrHr && <p className="text-sm text-muted-foreground">Read-only.</p>}
+          {!canWrite && <p className="text-sm text-muted-foreground">Read-only.</p>}
           <header className="space-y-1">
             <h1 className="text-xl font-semibold tracking-tight">Compliance Matrix</h1>
             <p className="text-sm text-muted-foreground">Per-employee compliance status. Click a cell to open details.</p>
@@ -290,7 +291,7 @@ export default function ComplianceMatrixPage() {
             employeeId={drawerEmployee?.id ?? null}
             employeeName={drawerEmployee?.name ?? ""}
             employeeNumber={drawerEmployee?.number ?? ""}
-            isAdminOrHr={!!isAdminOrHr}
+            isAdminOrHr={!!canWrite}
             onSaved={() => { toast({ title: "Saved" }); loadMatrix(); }}
             posterContext={null}
             activeSiteId={data?.activeSiteId ?? null}

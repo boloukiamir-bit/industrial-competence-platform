@@ -107,6 +107,7 @@ const CATEGORY_OPTIONS = [
 
 export default function ComplianceSummaryPage() {
   const { isAdminOrHr } = useOrg();
+  const canWrite = isAdminOrHr;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<SummaryResponse | null>(null);
@@ -193,8 +194,8 @@ export default function ComplianceSummaryPage() {
   }, []);
 
   useEffect(() => {
-    if (isAdminOrHr) loadDigestLatest();
-  }, [isAdminOrHr, loadDigestLatest]);
+    if (canWrite) loadDigestLatest();
+  }, [canWrite, loadDigestLatest]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400);
@@ -292,23 +293,6 @@ export default function ComplianceSummaryPage() {
   const topRiskItems = data?.topRiskItems ?? [];
   const upcoming = data?.upcomingExpirations ?? [];
   const lines = data?.lines ?? [];
-
-  if (!isAdminOrHr) {
-    return (
-      <OrgGuard>
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <Card className="border-destructive/50">
-            <CardContent className="pt-6">
-              <p className="text-destructive font-medium">Admin or HR access required</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                This page is for HR and administrators.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </OrgGuard>
-    );
-  }
 
   return (
     <OrgGuard>
@@ -702,7 +686,7 @@ export default function ComplianceSummaryPage() {
           employeeId={drawerEmployee?.id ?? null}
           employeeName={drawerEmployee?.name ?? ""}
           employeeNumber={drawerEmployee?.number ?? ""}
-          isAdminOrHr={!!isAdminOrHr}
+          isAdminOrHr={!!canWrite}
           onSaved={() => loadSummary()}
           posterContext={null}
           activeSiteId={data?.context?.activeSiteId ?? null}

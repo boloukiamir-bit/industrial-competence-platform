@@ -125,6 +125,25 @@ const STATUS_LABELS: Record<string, string> = {
   waived: "Undantaget",
 };
 
+/** Header display: Valid / Expiring / Missing / Waived (expired counts as Missing) */
+const HEADER_STATUS_LABELS: Record<string, string> = {
+  valid: "Valid",
+  expiring: "Expiring",
+  missing: "Missing",
+  waived: "Waived",
+};
+
+function statusCounts(items: ComplianceItem[]): { valid: number; expiring: number; missing: number; waived: number } {
+  const counts = { valid: 0, expiring: 0, missing: 0, waived: 0 };
+  for (const item of items) {
+    if (item.status === "valid") counts.valid++;
+    else if (item.status === "expiring") counts.expiring++;
+    else if (item.status === "waived") counts.waived++;
+    else counts.missing++; // missing + expired
+  }
+  return counts;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   license: "Licenser",
   medical: "Medicinskt",
@@ -209,25 +228,23 @@ function ItemRow({
             </div>
           )}
         </div>
-        {isAdminOrHr && (
-          <div className="flex flex-col gap-2 shrink-0">
-            {isProblematic && (
-              <Button size="sm" onClick={() => onCreateTask(item)} className="w-full">
-                <ClipboardList className="h-4 w-4 mr-2" />
-                Skapa HR-ärende
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onEdit(editing ? null : item.code)}
-            >
-              {editing ? "Avbryt" : "Redigera"}
+        <div className="flex flex-col gap-2 shrink-0">
+          {isAdminOrHr && isProblematic && (
+            <Button size="sm" onClick={() => onCreateTask(item)} className="w-full">
+              <ClipboardList className="h-4 w-4 mr-2" />
+              Skapa HR-ärende
             </Button>
-          </div>
-        )}
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onEdit(editing ? null : item.code)}
+          >
+            {editing ? (isAdminOrHr ? "Avbryt" : "Stäng") : isAdminOrHr ? "Redigera" : "Visa detaljer"}
+          </Button>
+        </div>
       </div>
-      {isAdminOrHr && editing && (
+      {editing && (
         <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -235,8 +252,9 @@ function ItemRow({
               <Input
                 type="date"
                 value={form.valid_from}
-                onChange={(e) => onFormChange({ ...form, valid_from: e.target.value })}
+                onChange={(e) => isAdminOrHr && onFormChange({ ...form, valid_from: e.target.value })}
                 className="h-9"
+                disabled={!isAdminOrHr}
               />
             </div>
             <div className="space-y-1">
@@ -244,8 +262,9 @@ function ItemRow({
               <Input
                 type="date"
                 value={form.valid_to}
-                onChange={(e) => onFormChange({ ...form, valid_to: e.target.value })}
+                onChange={(e) => isAdminOrHr && onFormChange({ ...form, valid_to: e.target.value })}
                 className="h-9"
+                disabled={!isAdminOrHr}
               />
             </div>
           </div>
@@ -253,30 +272,35 @@ function ItemRow({
             <Label className="text-xs">Bevis (URL)</Label>
             <Input
               value={form.evidence_url}
-              onChange={(e) => onFormChange({ ...form, evidence_url: e.target.value })}
+              onChange={(e) => isAdminOrHr && onFormChange({ ...form, evidence_url: e.target.value })}
               placeholder="https://..."
               className="h-9"
+              disabled={!isAdminOrHr}
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Anteckningar</Label>
             <Textarea
               value={form.notes}
-              onChange={(e) => onFormChange({ ...form, notes: e.target.value })}
+              onChange={(e) => isAdminOrHr && onFormChange({ ...form, notes: e.target.value })}
               rows={2}
               className="resize-none"
+              disabled={!isAdminOrHr}
             />
           </div>
           <div className="flex items-center gap-2">
             <Switch
               checked={form.waived}
-              onCheckedChange={(c) => onFormChange({ ...form, waived: c })}
+              onCheckedChange={(c: boolean) => isAdminOrHr && onFormChange({ ...form, waived: c })}
+              disabled={!isAdminOrHr}
             />
             <Label className="text-sm">Undantaget</Label>
           </div>
-          <Button size="sm" onClick={onSave} disabled={saving}>
-            {saving ? "Sparar…" : "Spara"}
-          </Button>
+          {isAdminOrHr && (
+            <Button size="sm" onClick={onSave} disabled={saving}>
+              {saving ? "Sparar…" : "Spara"}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -613,9 +637,10 @@ export function ComplianceDrawer({
           waived: form.waived,
         }),
       });
-      const json = await res.json().catch(() => ({}));
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; step?: string };
       if (!res.ok) {
-        toast({ title: (json as { error?: string }).error ?? "Kunde inte spara", variant: "destructive" });
+        const message = json.error ?? (json.step ? `Sparande misslyckades (${json.step})` : "Kunde inte spara");
+        toast({ title: message, variant: "destructive" });
         return;
       }
       toast({ title: "Sparat" });
@@ -860,6 +885,37 @@ export function ComplianceDrawer({
                 Visa profil
                 <ExternalLink className="h-3 w-3" />
               </Link>
+            </div>
+          )}
+          {!isPosterMode && employeeId && items.length > 0 && !loading && (
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              {(() => {
+                const c = statusCounts(items);
+                return (
+                  <>
+                    {c.valid > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-emerald-600 text-white">
+                        {HEADER_STATUS_LABELS.valid} {c.valid}
+                      </span>
+                    )}
+                    {c.expiring > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-amber-500 text-white">
+                        {HEADER_STATUS_LABELS.expiring} {c.expiring}
+                      </span>
+                    )}
+                    {c.missing > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-red-600 text-white">
+                        {HEADER_STATUS_LABELS.missing} {c.missing}
+                      </span>
+                    )}
+                    {c.waived > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
+                        {HEADER_STATUS_LABELS.waived} {c.waived}
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </SheetHeader>
