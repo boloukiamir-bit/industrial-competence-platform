@@ -177,6 +177,9 @@ export default function HrTemplatesPage() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button size="sm" variant="outline" asChild>
+            <Link href="/app/hr/templates/action-packs">Action packs</Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
             <Link href="/app/hr">Go to HR Inbox</Link>
           </Button>
         </div>

@@ -10,6 +10,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import {
+  type ComplianceStatusFlag,
+  complianceDaysLeft,
+  computeComplianceStatus,
+} from "@/lib/server/complianceStatus";
 import { getActiveSiteName } from "@/lib/server/siteName";
 import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 
@@ -21,6 +26,8 @@ const supabaseAdmin = createClient(
 const ACTION_TYPES = ["request_renewal", "request_evidence", "notify_employee", "mark_waived_review"] as const;
 const CATEGORIES = ["license", "medical", "contract"] as const;
 export type SlaFlag = "overdue" | "due7d" | "nodue" | "ok";
+
+export type { ComplianceStatusFlag };
 
 function computeSla(
   status: string,
@@ -73,6 +80,7 @@ export async function GET(request: NextRequest) {
   const unassignedOnly = searchParams.get("unassignedOnly") === "1";
   const slaParam = (searchParams.get("sla")?.trim() || "all") as "overdue" | "due7d" | "nodue" | "all";
   const ownerParam = (searchParams.get("owner")?.trim() || "all") as "me" | "unassigned" | "all";
+  const complianceStatusParam = (searchParams.get("complianceStatus")?.trim() || "all") as "all" | "missing_expired" | "expiring" | "waived";
   const limitParam = searchParams.get("limit");
   const limit = limitParam != null ? Math.min(500, Math.max(1, parseInt(limitParam, 10) || 200)) : 200;
 
@@ -267,6 +275,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // P1.9: compliance status (valid_to, waived) for filter/sort — fetch employee_compliance for (employee_id, compliance_id) in scope
+    const pairKeys = new Set(filtered.map((a: { employee_id: string; compliance_id: string }) => `${a.employee_id}:${a.compliance_id}`));
+    const ecMap = new Map<string, { valid_to: string | null; waived: boolean }>();
+    if (pairKeys.size > 0) {
+      const { data: ecRows } = await supabaseAdmin
+        .from("employee_compliance")
+        .select("employee_id, compliance_id, valid_to, waived")
+        .eq("org_id", orgId);
+      for (const r of ecRows ?? []) {
+        const key = `${r.employee_id}:${r.compliance_id}`;
+        if (pairKeys.has(key)) {
+          ecMap.set(key, { valid_to: r.valid_to ?? null, waived: r.waived ?? false });
+        }
+      }
+    }
+
     // Distinct lines from employees in scope (for line dropdown)
     const linesList = [...new Set(employees.map((e) => e.line).filter((v): v is string => Boolean(v)))].sort();
 
@@ -280,8 +304,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Enrich with employee/compliance and compute per-row sla for UI badge (SLA filtering is done in SQL above).
-    const enriched = filtered.map((a: Record<string, unknown>) => {
+    // Enrich with employee/compliance, per-row sla, and P1.9 compliance status (valid_to, days_left) for filter/sort.
+    let enriched = filtered.map((a: Record<string, unknown>) => {
       const emp = empMap.get(a.employee_id as string);
       const cat = catalogMap.get(a.compliance_id as string);
       const siteId = a.site_id as string | null;
@@ -289,6 +313,12 @@ export async function GET(request: NextRequest) {
       const sla = computeSla(a.status as string, dueDate, todayStr, in7Str);
       const evidenceUrl = (a.evidence_url as string | null) ?? null;
       const evidenceAddedAt = (a.evidence_added_at as string | null) ?? null;
+      const ecKey = `${a.employee_id}:${a.compliance_id}`;
+      const ec = ecMap.get(ecKey);
+      const validTo = ec?.valid_to ?? null;
+      const waived = ec?.waived ?? false;
+      const compliance_status = computeComplianceStatus(validTo, waived);
+      const days_left = complianceDaysLeft(validTo);
       return {
         action_id: a.id,
         status: a.status,
@@ -316,7 +346,41 @@ export async function GET(request: NextRequest) {
         evidenceAddedAt: evidenceAddedAt,
         evidenceUrl: evidenceUrl,
         evidenceNotes: (a.evidence_notes as string | null) ?? null,
+        compliance_status,
+        days_left,
+        valid_to: validTo,
       };
+    });
+
+    // P1.9: filter by compliance status chip
+    if (complianceStatusParam === "missing_expired") {
+      enriched = enriched.filter((r: { compliance_status: ComplianceStatusFlag }) => r.compliance_status === "expired" || r.compliance_status === "missing");
+    } else if (complianceStatusParam === "expiring") {
+      enriched = enriched.filter((r: { compliance_status: ComplianceStatusFlag }) => r.compliance_status === "expiring");
+    } else if (complianceStatusParam === "waived") {
+      enriched = enriched.filter((r: { compliance_status: ComplianceStatusFlag }) => r.compliance_status === "waived");
+    }
+
+    // P1.9: sort — expired first, then missing, then expiring (asc days_left), then waived
+    const complianceOrder = (s: ComplianceStatusFlag) =>
+      s === "expired" ? 0 : s === "missing" ? 1 : s === "expiring" ? 2 : s === "waived" ? 3 : 4;
+    enriched.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+      const oa = complianceOrder(a.compliance_status as ComplianceStatusFlag);
+      const ob = complianceOrder(b.compliance_status as ComplianceStatusFlag);
+      if (oa !== ob) return oa - ob;
+      if (a.compliance_status === "expiring" && b.compliance_status === "expiring") {
+        const da = a.days_left as number | null;
+        const db = b.days_left as number | null;
+        if (da != null && db != null) return da - db;
+        if (da != null) return -1;
+        if (db != null) return 1;
+      }
+      const dueA = a.due_date as string | null;
+      const dueB = b.due_date as string | null;
+      if (dueA != null && dueB != null) return dueA.localeCompare(dueB);
+      if (dueA != null) return -1;
+      if (dueB != null) return 1;
+      return (b.created_at as string).localeCompare(a.created_at as string);
     });
 
     // KPIs: computed for current site scope, without q/line/category filters (per spec: "if hard, compute without filters")

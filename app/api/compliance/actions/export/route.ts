@@ -9,6 +9,11 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
+import {
+  type ComplianceStatusFlag,
+  complianceDaysLeft,
+  computeComplianceStatus,
+} from "@/lib/server/complianceStatus";
 import { renderDraftForAction } from "@/lib/server/complianceDraftRender";
 import { escapeCsvField } from "@/lib/csvEscape";
 import { isHrAdmin } from "@/lib/auth";
@@ -32,10 +37,13 @@ const CSV_HEADERS = [
   "employee_id",
   "employee_number",
   "employee_name",
-  "site_name",
-  "line",
   "compliance_code",
   "compliance_name",
+  "status",
+  "days_left",
+  "valid_to",
+  "site_name",
+  "line",
   "action_type",
   "channel",
   "due_date",
@@ -82,6 +90,7 @@ export async function GET(request: NextRequest) {
   const unassignedOnly = searchParams.get("unassignedOnly") === "1";
   const slaParam = (searchParams.get("sla")?.trim() || "all") as "overdue" | "due7d" | "nodue" | "all";
   const ownerParam = (searchParams.get("owner")?.trim() || "all") as "me" | "unassigned" | "all";
+  const complianceStatusParam = (searchParams.get("complianceStatus")?.trim() || "all") as "all" | "missing_expired" | "expiring" | "waived";
   const limitParam = searchParams.get("limit");
   const limit =
     limitParam != null
@@ -107,7 +116,7 @@ export async function GET(request: NextRequest) {
     let actionsQuery = supabaseAdmin
       .from("compliance_actions")
       .select(
-        "id, org_id, site_id, employee_id, compliance_id, action_type, status, due_date, owner_user_id, evidence_url, evidence_notes, evidence_added_at"
+        "id, org_id, site_id, employee_id, compliance_id, action_type, status, due_date, owner_user_id, evidence_url, evidence_notes, evidence_added_at, created_at"
       )
       .eq("org_id", orgId)
       .order("due_date", { ascending: true, nullsFirst: false })
@@ -262,11 +271,76 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // P1.9: compliance status for filter/sort — same as inbox
+    const pairKeys = new Set(
+      filtered.map((a: { employee_id: string; compliance_id: string }) => `${a.employee_id}:${a.compliance_id}`)
+    );
+    const ecMap = new Map<string, { valid_to: string | null; waived: boolean }>();
+    if (pairKeys.size > 0) {
+      const { data: ecRows } = await supabaseAdmin
+        .from("employee_compliance")
+        .select("employee_id, compliance_id, valid_to, waived")
+        .eq("org_id", orgId);
+      for (const r of ecRows ?? []) {
+        const key = `${r.employee_id}:${r.compliance_id}`;
+        if (pairKeys.has(key)) {
+          ecMap.set(key, { valid_to: r.valid_to ?? null, waived: r.waived ?? false });
+        }
+      }
+    }
+
+    type EnrichedAction = (typeof filtered)[number] & {
+      compliance_status: ComplianceStatusFlag;
+      days_left: number | null;
+      valid_to: string | null;
+    };
+    let enriched: EnrichedAction[] = (filtered as Array<Record<string, unknown>>).map((a) => {
+      const key = `${a.employee_id}:${a.compliance_id}`;
+      const ec = ecMap.get(key);
+      const validTo = ec?.valid_to ?? null;
+      const waived = ec?.waived ?? false;
+      return {
+        ...a,
+        compliance_status: computeComplianceStatus(validTo, waived),
+        days_left: complianceDaysLeft(validTo),
+        valid_to: validTo,
+      };
+    }) as EnrichedAction[];
+
+    if (complianceStatusParam === "missing_expired") {
+      enriched = enriched.filter((r) => r.compliance_status === "expired" || r.compliance_status === "missing");
+    } else if (complianceStatusParam === "expiring") {
+      enriched = enriched.filter((r) => r.compliance_status === "expiring");
+    } else if (complianceStatusParam === "waived") {
+      enriched = enriched.filter((r) => r.compliance_status === "waived");
+    }
+
+    const complianceOrder = (s: ComplianceStatusFlag) =>
+      s === "expired" ? 0 : s === "missing" ? 1 : s === "expiring" ? 2 : s === "waived" ? 3 : 4;
+    enriched.sort((a, b) => {
+      if (complianceOrder(a.compliance_status) !== complianceOrder(b.compliance_status)) {
+        return complianceOrder(a.compliance_status) - complianceOrder(b.compliance_status);
+      }
+      if (a.compliance_status === "expiring" && b.compliance_status === "expiring") {
+        const da = a.days_left;
+        const db = b.days_left;
+        if (da != null && db != null) return da - db;
+        if (da != null) return -1;
+        if (db != null) return 1;
+      }
+      const dueA = a.due_date ?? "";
+      const dueB = b.due_date ?? "";
+      if (dueA && dueB) return dueA.localeCompare(dueB);
+      if (dueA) return -1;
+      if (dueB) return 1;
+      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+    });
+
     const siteNameMap = new Map<string, string>();
-    if (!activeSiteId && filtered.length > 0) {
+    if (!activeSiteId && enriched.length > 0) {
       const siteIds = [
         ...new Set(
-          filtered.map((a: { site_id?: string }) => a.site_id).filter((v): v is string => Boolean(v))
+          enriched.map((a: { site_id?: string }) => a.site_id).filter((v): v is string => Boolean(v))
         ),
       ];
       for (const sid of siteIds) {
@@ -283,19 +357,7 @@ export async function GET(request: NextRequest) {
     const rows: string[][] = [];
     rows.push([...CSV_HEADERS]);
 
-    type ActionRow = {
-      id: string;
-      employee_id: string;
-      compliance_id: string;
-      site_id?: string | null;
-      action_type: string;
-      due_date: string | null;
-      owner_user_id?: string | null;
-      evidence_url?: string | null;
-      evidence_notes?: string | null;
-      evidence_added_at?: string | null;
-    };
-    for (const a of filtered as ActionRow[]) {
+    for (const a of enriched) {
       const emp = empMap.get(a.employee_id);
       const cat = catalogMap.get(a.compliance_id);
       const siteId = a.site_id ?? null;
@@ -332,10 +394,13 @@ export async function GET(request: NextRequest) {
         escapeCsvField(a.employee_id),
         escapeCsvField(emp?.employee_number ?? ""),
         escapeCsvField(emp?.name ?? ""),
-        escapeCsvField(site_name),
-        escapeCsvField(emp?.line ?? ""),
         escapeCsvField(cat?.code ?? ""),
         escapeCsvField(cat?.name ?? ""),
+        escapeCsvField(a.compliance_status),
+        escapeCsvField(a.days_left != null ? String(a.days_left) : ""),
+        escapeCsvField(a.valid_to ?? ""),
+        escapeCsvField(site_name),
+        escapeCsvField(emp?.line ?? ""),
         escapeCsvField(a.action_type),
         escapeCsvField(channel),
         escapeCsvField(a.due_date != null ? String(a.due_date).slice(0, 10) : ""),

@@ -73,6 +73,7 @@ const hrNavItems: NavItem[] = [
   { name: "HR Workflows", href: "/app/workflows/templates", icon: Workflow, hrAdminOnly: true },
   { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
   { name: "Compliance Templates", href: "/app/hr/templates/compliance-actions", icon: FileText, hrAdminOnly: true },
+  { name: "Action packs", href: "/app/hr/templates/action-packs", icon: ClipboardCheck, hrAdminOnly: false },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
 ];
 

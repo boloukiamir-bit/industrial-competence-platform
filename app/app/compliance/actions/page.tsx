@@ -66,6 +66,10 @@ type InboxAction = {
   evidenceAddedAt?: string | null;
   evidenceUrl?: string | null;
   evidenceNotes?: string | null;
+  /** P1.9: compliance status for filter/sort (from employee_compliance) */
+  compliance_status?: string;
+  days_left?: number | null;
+  valid_to?: string | null;
 };
 
 type InboxResponse = {
@@ -161,6 +165,7 @@ export default function ActionInboxPage() {
   const [evidenceAction, setEvidenceAction] = useState<InboxAction | null>(null);
   const [exportChannel, setExportChannel] = useState<"email" | "sms" | "note">("email");
   const [exportLoading, setExportLoading] = useState(false);
+  const [complianceFilter, setComplianceFilter] = useState<"all" | "missing_expired" | "expiring" | "waived">("all");
 
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
@@ -173,8 +178,9 @@ export default function ActionInboxPage() {
     if (category !== "all") params.set("category", category);
     if (line) params.set("line", line);
     if (searchDebounced.trim()) params.set("q", searchDebounced.trim());
+    if (complianceFilter !== "all") params.set("complianceStatus", complianceFilter);
     return params;
-  }, [status, due, actionType, category, line, searchDebounced, slaFilter, ownerFilter, unassignedOnly]);
+  }, [status, due, actionType, category, line, searchDebounced, slaFilter, ownerFilter, unassignedOnly, complianceFilter]);
 
   const handleExportCsv = useCallback(async () => {
     setExportLoading(true);
@@ -479,6 +485,40 @@ export default function ActionInboxPage() {
           )}
         </div>
 
+        {/* P1.9: Compliance status filter chips — Missing/Expired, Expiring soon, Waived, All */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground mr-1">Status:</span>
+          {[
+            { value: "all" as const, label: "All" },
+            { value: "missing_expired" as const, label: "Missing/Expired" },
+            { value: "expiring" as const, label: "Expiring soon" },
+            { value: "waived" as const, label: "Waived" },
+          ].map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setComplianceFilter(value)}
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                complianceFilter === value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted/50 border-border hover:bg-muted"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+          {complianceFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setComplianceFilter("all")}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
+
         {/* Quick filters: SLA + ownership */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground mr-1">Quick:</span>
@@ -532,35 +572,39 @@ export default function ActionInboxPage() {
           >
             Mine
           </button>
-          <span className="text-xs text-muted-foreground mx-2">|</span>
-          <Select
-            value={exportChannel}
-            onValueChange={(v) => setExportChannel(v as "email" | "sms" | "note")}
-          >
-            <SelectTrigger className="w-[100px] h-9 rounded-md border px-2.5 py-1 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="email">Email</SelectItem>
-              <SelectItem value="sms">SMS</SelectItem>
-              <SelectItem value="note">Note</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={handleExportCsv}
-            disabled={exportLoading}
-          >
-            {exportLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Export CSV
-          </Button>
+          {canWrite && (
+            <>
+              <span className="text-xs text-muted-foreground mx-2">|</span>
+              <Select
+                value={exportChannel}
+                onValueChange={(v) => setExportChannel(v as "email" | "sms" | "note")}
+              >
+                <SelectTrigger className="w-[100px] h-9 rounded-md border px-2.5 py-1 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="note">Note</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5"
+                onClick={handleExportCsv}
+                disabled={exportLoading}
+              >
+                {exportLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Export CSV
+              </Button>
+            </>
+          )}
         </div>
 
         {error && (
@@ -631,7 +675,7 @@ export default function ActionInboxPage() {
                             <span className={a.due_date && new Date(a.due_date) < new Date() ? "text-destructive" : ""}>
                               {a.due_date ? new Date(a.due_date).toLocaleDateString() : "—"}
                             </span>
-                            {a.status === "open" && (
+                            {a.status === "open" && canWrite && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -673,7 +717,7 @@ export default function ActionInboxPage() {
                               <Badge variant="secondary" className="font-normal text-xs">Mine</Badge>
                             ) : a.owner_user_id ? (
                               <span className="text-xs text-muted-foreground">Assigned</span>
-                            ) : (
+                            ) : canWrite ? (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -690,6 +734,8 @@ export default function ActionInboxPage() {
                                   </>
                                 )}
                               </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
                             )
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
@@ -739,7 +785,7 @@ export default function ActionInboxPage() {
                               <span className="text-xs text-muted-foreground">None</span>
                             )}
                           </TooltipProvider>
-                          {a.status === "open" && (
+                          {a.status === "open" && canWrite && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -757,34 +803,38 @@ export default function ActionInboxPage() {
                         <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
                           {a.status === "open" && (
                             <div className="flex items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2"
-                                title="Generate draft"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDraftAction(a);
-                                }}
-                              >
-                                <FileText className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="h-8"
-                                disabled={!!markingDoneId}
-                                onClick={(e) => handleMarkDone(a.action_id, e)}
-                              >
-                                {markingDoneId === a.action_id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                                    Mark done
-                                  </>
-                                )}
-                              </Button>
+                              {canWrite && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-2"
+                                  title="Generate draft"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDraftAction(a);
+                                  }}
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {canWrite && (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="h-8"
+                                  disabled={!!markingDoneId}
+                                  onClick={(e) => handleMarkDone(a.action_id, e)}
+                                >
+                                  {markingDoneId === a.action_id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                                      Mark done
+                                    </>
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           )}
                         </td>
