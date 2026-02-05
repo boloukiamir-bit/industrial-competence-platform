@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
+import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,10 +59,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const orgId = org.activeOrgId;
-    const activeSiteName =
-      org.activeSiteId != null
-        ? await getActiveSiteName(supabaseAdmin, org.activeSiteId, orgId)
-        : null;
+    const activeSiteIdRaw = org.activeSiteId ?? null;
+    const activeSiteNameRaw =
+      activeSiteIdRaw != null ? await getActiveSiteName(supabaseAdmin, activeSiteIdRaw, orgId) : null;
+    const { activeSiteId, activeSiteName } = await normalizeProfileActiveSiteIfStale(
+      supabaseAdmin,
+      org.userId,
+      activeSiteIdRaw,
+      activeSiteNameRaw
+    );
 
     const employeesQuery = supabaseAdmin
       .from("employees")

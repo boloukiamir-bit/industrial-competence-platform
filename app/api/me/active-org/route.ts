@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     const { error } = await supabaseAdmin
       .from("profiles")
-      .update({ active_org_id: orgId })
+      .update({ active_org_id: orgId, active_site_id: null })
       .eq("id", session.userId);
 
     if (error) {

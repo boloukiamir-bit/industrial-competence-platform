@@ -180,7 +180,7 @@ function aggregateRows(
 }
 
 export default function CompliancePage() {
-  const { isAdminOrHr } = useOrg();
+  const { isAdminOrHr, currentOrg } = useOrg();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -263,6 +263,16 @@ export default function CompliancePage() {
     const t = setTimeout(() => setSearchDebounced(search), 400);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    if (data == null) return;
+    console.log("[Compliance site chip diagnostic]", {
+      active_org_id: currentOrg?.id ?? null,
+      active_site_id: data.activeSiteId ?? null,
+      resolved_site_name: data.activeSiteName ?? null,
+      source: "API response from GET /api/compliance/overview",
+    });
+  }, [data, currentOrg?.id]);
 
   const rows = data?.rows ?? [];
   const kpiStats = useMemo(() => computeKpiStats(rows), [rows]);

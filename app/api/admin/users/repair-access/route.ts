@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
 import { getServiceSupabase } from "@/lib/server/adminUsers";
+import { validateActiveSiteIdForOrg } from "@/lib/server/validateActiveSite";
 
 const repairSchema = z.object({
   email: z.string().email(),
@@ -39,9 +40,10 @@ export async function POST(request: NextRequest) {
 
     const { email, orgId, role, siteId } = parsed.data;
     const normalizedEmail = email.toLowerCase().trim();
-    const activeSiteId = siteId ?? auth.activeSiteId ?? null;
 
     const admin = getServiceSupabase();
+    const rawSiteId = siteId ?? auth.activeSiteId ?? null;
+    const activeSiteId = await validateActiveSiteIdForOrg(admin, rawSiteId, orgId);
 
     const { data: listData } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     const users = listData?.users ?? [];

@@ -11,6 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
+import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 import { isHrAdmin } from "@/lib/auth";
 
 const supabaseAdmin = createClient(
@@ -88,10 +89,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const orgId = org.activeOrgId;
-    const activeSiteId = org.activeSiteId ?? null;
-
-    const activeSiteName =
-      activeSiteId != null ? await getActiveSiteName(supabaseAdmin, activeSiteId, orgId) : null;
+    const activeSiteIdRaw = org.activeSiteId ?? null;
+    const activeSiteNameRaw =
+      activeSiteIdRaw != null ? await getActiveSiteName(supabaseAdmin, activeSiteIdRaw, orgId) : null;
+    const { activeSiteId, activeSiteName } = await normalizeProfileActiveSiteIfStale(
+      supabaseAdmin,
+      org.userId,
+      activeSiteIdRaw,
+      activeSiteNameRaw
+    );
 
     // Base actions query
     let actionsQuery = supabaseAdmin

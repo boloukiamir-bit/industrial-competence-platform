@@ -8,6 +8,7 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { isHrAdmin } from "@/lib/auth";
 import { getActiveSiteName } from "@/lib/server/siteName";
+import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 import { COMPLIANCE_ACTION_DRAFT_CATEGORY } from "@/lib/hrTemplatesCompliance";
 
 const supabaseAdmin = createClient(
@@ -43,9 +44,15 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const activeSiteId = org.activeSiteId ?? null;
-  const activeSiteName =
-    activeSiteId != null ? await getActiveSiteName(supabaseAdmin, activeSiteId, org.activeOrgId) : null;
+  const activeSiteIdRaw = org.activeSiteId ?? null;
+  const activeSiteNameRaw =
+    activeSiteIdRaw != null ? await getActiveSiteName(supabaseAdmin, activeSiteIdRaw, org.activeOrgId) : null;
+  const { activeSiteId, activeSiteName } = await normalizeProfileActiveSiteIfStale(
+    supabaseAdmin,
+    org.userId,
+    activeSiteIdRaw,
+    activeSiteNameRaw
+  );
 
   try {
     const { data: rows, error } = await supabaseAdmin

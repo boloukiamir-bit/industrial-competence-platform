@@ -15,6 +15,7 @@ import {
   getRedirectBase,
   isProduction,
 } from "@/lib/server/adminUsers";
+import { validateActiveSiteIdForOrg } from "@/lib/server/validateActiveSite";
 
 const inviteSchema = z.object({
   email: z.string().email(),
@@ -132,8 +133,8 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    // Inviter's active org/site so invited user lands in same context
-    const activeSiteId = auth.activeSiteId ?? null;
+    // Inviter's active org/site so invited user lands in same context (validated for org)
+    const activeSiteId = await validateActiveSiteIdForOrg(admin, auth.activeSiteId ?? null, orgId);
     const profilePayload: { id: string; email: string; active_org_id: string; active_site_id?: string | null } = {
       id: userId,
       email: normalizedEmail,

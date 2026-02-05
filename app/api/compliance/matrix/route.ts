@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
+import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,11 +80,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const orgId = org.activeOrgId;
-    const effectiveSiteId = siteId || org.activeSiteId;
-    const activeSiteName =
-      org.activeSiteId != null
-        ? await getActiveSiteName(supabaseAdmin, org.activeSiteId, orgId)
-        : null;
+    const activeSiteIdRaw = org.activeSiteId ?? null;
+    const activeSiteNameRaw =
+      activeSiteIdRaw != null ? await getActiveSiteName(supabaseAdmin, activeSiteIdRaw, orgId) : null;
+    const { activeSiteId, activeSiteName } = await normalizeProfileActiveSiteIfStale(
+      supabaseAdmin,
+      org.userId,
+      activeSiteIdRaw,
+      activeSiteNameRaw
+    );
+    const effectiveSiteId = siteId || activeSiteId;
 
     // Distinct lines for dropdown (org + site scope, no line/search filter)
     const linesQuery = supabaseAdmin
@@ -231,7 +237,7 @@ export async function GET(request: NextRequest) {
         catalog: catalogList,
         cells: cellsFiltered,
         lines: linesList,
-        activeSiteId: org.activeSiteId ?? null,
+        activeSiteId,
         activeSiteName,
       });
       applySupabaseCookies(res, pendingCookies);
@@ -244,7 +250,7 @@ export async function GET(request: NextRequest) {
       catalog: catalogList,
       cells: cellsOut,
       lines: linesList,
-      activeSiteId: org.activeSiteId ?? null,
+      activeSiteId,
       activeSiteName,
     });
     applySupabaseCookies(res, pendingCookies);
