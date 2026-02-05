@@ -23,3 +23,7 @@ instrumentation.ts
 scripts/print-db-url.js
 scripts/print-new-db-url.js
 scripts/test-db-conn.js
+
+# SSL certs / bundles (never commit)
+cert-*.pem
+supabase_pooler_ca_bundle.pem

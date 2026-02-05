@@ -62,17 +62,31 @@ async function main(): Promise<void> {
   console.log("user:", user);
   console.log("db:", db);
 
-  // Determine SSL configuration
+  // SSL: same as lib/db.ts — use SUPABASE_DB_CA_PEM_B64 for pooler
   const isLocalhost = host.startsWith("localhost") || host.startsWith("127.0.0.1");
-  let ssl: boolean | { rejectUnauthorized: boolean };
-  
+  let ssl: boolean | { rejectUnauthorized: boolean; ca?: string };
+
   if (isLocalhost) {
     ssl = false;
-  } else if (process.env.DB_SMOKE_INSECURE_SSL === "1") {
-    console.warn("⚠️  WARNING: Using insecure SSL (rejectUnauthorized: false) due to DB_SMOKE_INSECURE_SSL=1");
-    ssl = { rejectUnauthorized: false };
   } else {
-    ssl = { rejectUnauthorized: true };
+    const caB64 = process.env.SUPABASE_DB_CA_PEM_B64?.trim();
+    if (caB64) {
+      try {
+        const ca = Buffer.from(caB64, "base64").toString("utf8");
+        ssl = { ca, rejectUnauthorized: true };
+      } catch {
+        console.error("SUPABASE_DB_CA_PEM_B64 is set but failed to decode as base64");
+        process.exit(1);
+      }
+    } else if (process.env.DB_SMOKE_INSECURE_SSL === "1") {
+      console.warn("⚠️  WARNING: Using insecure SSL (rejectUnauthorized: false) due to DB_SMOKE_INSECURE_SSL=1");
+      ssl = { rejectUnauthorized: false };
+    } else {
+      console.error(
+        "Missing SUPABASE_DB_CA_PEM_B64. For Supabase pooler set SUPABASE_DB_CA_PEM_B64 (base64 of cert-2.pem + cert-3.pem). Or set DB_SMOKE_INSECURE_SSL=1 for local testing only."
+      );
+      process.exit(1);
+    }
   }
 
   const pool = new Pool({
