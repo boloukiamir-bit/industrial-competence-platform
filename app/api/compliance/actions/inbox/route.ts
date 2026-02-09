@@ -17,6 +17,7 @@ import {
 } from "@/lib/server/complianceStatus";
 import { getActiveSiteName } from "@/lib/server/siteName";
 import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
+import { getActiveLines } from "@/lib/server/getActiveLines";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -180,11 +181,11 @@ export async function GET(request: NextRequest) {
     const employeeIds = [...new Set(actions.map((a: { employee_id: string }) => a.employee_id))];
     const complianceIds = [...new Set(actions.map((a: { compliance_id: string }) => a.compliance_id))];
 
-    let employees: Array<{ id: string; name: string; first_name?: string; last_name?: string; employee_number?: string; line?: string; site_id?: string }> = [];
+    let employees: Array<{ id: string; name: string; first_name?: string; last_name?: string; employee_number?: string; line?: string; line_code?: string; site_id?: string }> = [];
     if (employeeIds.length > 0) {
       let empQ = supabaseAdmin
         .from("employees")
-        .select("id, name, first_name, last_name, employee_number, line, site_id")
+        .select("id, name, first_name, last_name, employee_number, line, line_code, site_id")
         .eq("org_id", orgId)
         .in("id", employeeIds);
       if (activeSiteId) empQ = empQ.eq("site_id", activeSiteId);
@@ -199,6 +200,7 @@ export async function GET(request: NextRequest) {
           name: e.name || [e.first_name, e.last_name].filter(Boolean).join(" ") || "—",
           employee_number: e.employee_number ?? null,
           line: e.line ?? null,
+          line_code: e.line_code ?? e.line ?? null,
           site_id: e.site_id ?? null,
         },
       ])
@@ -259,11 +261,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // line filter
+    // line filter (canonical: line_code)
     if (line) {
       filtered = filtered.filter((a: { employee_id: string }) => {
         const emp = empMap.get(a.employee_id);
-        return emp?.line === line;
+        return emp?.line_code === line || emp?.line === line;
       });
     }
 
@@ -291,8 +293,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Distinct lines from employees in scope (for line dropdown)
-    const linesList = [...new Set(employees.map((e) => e.line).filter((v): v is string => Boolean(v)))].sort();
+    const linesList = await getActiveLines(orgId);
 
     // Resolve site_name for each distinct site_id when activeSiteId is null (all sites view)
     const siteNameMap = new Map<string, string>();
@@ -430,6 +431,7 @@ export async function GET(request: NextRequest) {
       kpis: { open: openCount, overdue: overdueCount, due7d: due7dCount, done7d: done7dCount },
       unassignedCount,
       lines: linesList,
+      source: "stations",
     });
     applySupabaseCookies(res, pendingCookies);
     return res;

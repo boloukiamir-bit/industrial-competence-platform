@@ -16,7 +16,7 @@ const supabaseAdmin = createClient(
  */
 export async function GET(request: NextRequest) {
   try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
       const res = NextResponse.json({ error: session.error }, { status: session.status });

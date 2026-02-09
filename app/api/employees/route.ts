@@ -95,6 +95,7 @@ export async function GET(request: NextRequest) {
       activeSiteId: org.activeSiteId ?? null,
     });
     const [orgId, activeSiteId] = getEmployeeScopeSqlParams(scope);
+    const lineCode = request.nextUrl.searchParams.get("lineCode")?.trim() || null;
 
     logDiag(requestId, {
       userIdPresent: true,
@@ -106,15 +107,16 @@ export async function GET(request: NextRequest) {
 
     const result = await pool.query(
       `SELECT id, name, first_name, last_name, employee_number, email, phone, date_of_birth,
-              role, line, team, employment_type, start_date, contract_end_date, manager_id,
+              role, line, line_code, team, employment_type, start_date, contract_end_date, manager_id,
               address, city, postal_code, country, is_active
        FROM employees 
        WHERE org_id = $1
          AND is_active = true
          AND ${EMPLOYEE_SCOPE_SITE_FRAGMENT}
+         AND ($3::text IS NULL OR $3 = '' OR line_code = $3)
        ORDER BY name 
        LIMIT 500`,
-      [orgId, activeSiteId]
+      [orgId, activeSiteId, lineCode]
     );
 
     if (result.rows.length === 0 && org.activeOrgId === SPALJISTEN_ORG_ID) {
@@ -144,6 +146,7 @@ export async function GET(request: NextRequest) {
       dateOfBirth: row.date_of_birth ?? undefined,
       role: row.role ?? "",
       line: row.line ?? "",
+      lineCode: row.line_code ?? row.line ?? "",
       team: row.team ?? "",
       employmentType: row.employment_type ?? "permanent",
       startDate: row.start_date ?? undefined,
@@ -155,7 +158,11 @@ export async function GET(request: NextRequest) {
       country: row.country ?? "Sweden",
       isActive: row.is_active ?? true,
     }));
-    const res = NextResponse.json({ employees, requestId });
+    const res = NextResponse.json({
+      employees,
+      requestId,
+      sourceLineField: "line_code",
+    });
     res.headers.set("X-Request-Id", requestId);
     applySupabaseCookies(res, pendingCookies);
     return res;

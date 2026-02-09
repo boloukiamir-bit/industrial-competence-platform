@@ -1,13 +1,15 @@
 /**
- * GET /api/admin/master-data/lines — list lines (pl_lines + any line_code from stations). Admin/hr only.
- * POST /api/admin/master-data/lines — create line. PATCH — update line.
+ * GET /api/admin/master-data/lines — list lines from canonical source (public.stations). Admin/hr only.
+ * POST/PATCH — create/update line as placeholder station row in public.stations. No writes to pl_lines.
  * Tenant-scoped by active_org_id.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
+import { getActiveLines } from "@/lib/server/getActiveLines";
 import { getLineName } from "@/lib/lineOverviewLineNames";
+import { lineToStationPayload } from "@/lib/server/lineToStation";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,74 +43,20 @@ export async function GET(request: NextRequest) {
 
   const activeOrgId = auth.activeOrgId;
   let lines: LineRow[] = [];
-  let metaSource: "pl_lines" | "stations" | "none" = "none";
-  let metaError: string | undefined;
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Primary: query pl_lines (safe select — only columns that exist in 007 schema)
-  // ──────────────────────────────────────────────────────────────────────────
-  const { data: plLines, error: plError } = await supabaseAdmin
-    .from("pl_lines")
-    .select("id, line_code, line_name, department_code")
-    .eq("org_id", activeOrgId)
-    .order("line_code");
-
-  if (!plError && plLines && plLines.length > 0) {
-    metaSource = "pl_lines";
-    // Station counts for enrichment
+  try {
+    const lineCodes = await getActiveLines(activeOrgId);
     const stationCountByLine = await getStationCountByLine(activeOrgId);
-
-    lines = plLines.map((l) => ({
-      id: l.id ?? null,
-      line_code: l.line_code,
-      line_name: l.line_name || getLineName(l.line_code),
-      department_code: l.department_code ?? null,
-      leader_employee_id: null,
-      leader_employee_number: null,
-      leader_name: null,
-      is_active: true,
-      station_count: stationCountByLine[l.line_code] ?? 0,
-    }));
-  } else {
-    // Log if pl_lines query failed (but don't 500)
-    if (plError) {
-      console.warn("[admin/master-data/lines GET] pl_lines query failed (falling back to stations):", plError.message, plError.code);
-      metaError = plError.message;
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Fallback: derive lines from stations table
-    // ──────────────────────────────────────────────────────────────────────────
-    const { data: stationRows, error: stationsError } = await supabaseAdmin
+    const { data: placeholderStations } = await supabaseAdmin
       .from("stations")
-      .select("line, area_code")
-      .eq("org_id", activeOrgId);
-
-    if (stationsError) {
-      console.error("[admin/master-data/lines GET] stations fallback query failed:", stationsError.message, stationsError.code);
-      metaError = metaError ? `${metaError}; ${stationsError.message}` : stationsError.message;
-      // Return empty but valid response — no 500
-      const res = NextResponse.json({ lines: [], meta: { source: "none", count: 0, error: metaError } });
-      applySupabaseCookies(res, pendingCookies);
-      if (auth.debugHeader) res.headers.set("x-auth-debug", auth.debugHeader);
-      return res;
+      .select("id, line")
+      .eq("org_id", activeOrgId)
+      .like("code", "LINE-%");
+    const idByLine = new Map<string, string>();
+    for (const s of placeholderStations ?? []) {
+      if (s.line) idByLine.set(String(s.line).trim(), s.id);
     }
-
-    metaSource = "stations";
-    const lineCodesSet = new Set<string>();
-    const stationCountByLine: Record<string, number> = {};
-
-    for (const s of stationRows || []) {
-      // Prefer `line`, fallback to `area_code`
-      const code = (s.line ?? s.area_code ?? "").toString().trim();
-      if (code) {
-        lineCodesSet.add(code);
-        stationCountByLine[code] = (stationCountByLine[code] ?? 0) + 1;
-      }
-    }
-
-    lines = [...lineCodesSet].sort().map((code) => ({
-      id: null,
+    lines = lineCodes.map((code) => ({
+      id: idByLine.get(code) ?? null,
       line_code: code,
       line_name: getLineName(code),
       department_code: code,
@@ -118,26 +66,34 @@ export async function GET(request: NextRequest) {
       is_active: true,
       station_count: stationCountByLine[code] ?? 0,
     }));
+  } catch (err) {
+    console.error("[admin/master-data/lines GET] getActiveLines failed:", err);
+    const res = NextResponse.json({ lines: [], meta: { source: "stations", count: 0, error: err instanceof Error ? err.message : "Failed to load lines" } });
+    applySupabaseCookies(res, pendingCookies);
+    if (auth.debugHeader) res.headers.set("x-auth-debug", auth.debugHeader);
+    return res;
   }
 
-  const res = NextResponse.json({ lines, meta: { source: metaSource, count: lines.length } });
+  const res = NextResponse.json({ lines, meta: { source: "stations", count: lines.length } });
   applySupabaseCookies(res, pendingCookies);
   if (auth.debugHeader) res.headers.set("x-auth-debug", auth.debugHeader);
   return res;
 }
 
-/** Helper: get station counts grouped by line code */
+/** Helper: get station counts grouped by line (active stations only, matches getActiveLines) */
 async function getStationCountByLine(orgId: string): Promise<Record<string, number>> {
   const { data, error } = await supabaseAdmin
     .from("stations")
-    .select("line, area_code")
-    .eq("org_id", orgId);
+    .select("line")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .not("line", "is", null);
 
   if (error || !data) return {};
 
   const counts: Record<string, number> = {};
   for (const s of data) {
-    const code = (s.line ?? s.area_code ?? "").toString().trim();
+    const code = (s.line ?? "").toString().trim();
     if (code) counts[code] = (counts[code] ?? 0) + 1;
   }
   return counts;
@@ -159,7 +115,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const line_code = typeof body.line_code === "string" ? body.line_code.trim() : "";
     const line_name = typeof body.line_name === "string" ? body.line_name.trim() : line_code;
-    const department_code = typeof body.department_code === "string" ? body.department_code.trim() : line_code;
+    const is_active = body.is_active !== false;
 
     if (!line_code) {
       const res = NextResponse.json({ error: "line_code is required" }, { status: 400 });
@@ -167,17 +123,11 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    // Insert using columns from 007 schema (no is_active / leader_employee_id)
+    const payload = lineToStationPayload(auth.activeOrgId, line_code, line_name || line_code, is_active);
     const { data, error } = await supabaseAdmin
-      .from("pl_lines")
-      .insert({
-        org_id: auth.activeOrgId,
-        line_code,
-        line_name: line_name || line_code,
-        department_code: department_code || line_code,
-        updated_at: new Date().toISOString(),
-      })
-      .select("id, line_code, line_name, department_code")
+      .from("stations")
+      .upsert(payload, { onConflict: "org_id,area_code,code" })
+      .select("id, line, name")
       .single();
 
     if (error) {
@@ -186,13 +136,18 @@ export async function POST(request: NextRequest) {
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
-      console.error("[admin/master-data/lines POST] insert failed:", error.message, error.code);
+      console.error("[admin/master-data/lines POST] stations upsert failed:", error.message, error.code);
       const res = NextResponse.json({ error: error.message }, { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
-    const res = NextResponse.json(data);
+    const res = NextResponse.json({
+      id: data?.id ?? null,
+      line_code: data?.line ?? line_code,
+      line_name: (data?.name ?? "").replace(/\s*\(LINE\)\s*$/, "") || line_code,
+      department_code: line_code,
+    });
     applySupabaseCookies(res, pendingCookies);
     if (auth.debugHeader) {
       res.headers.set("x-auth-debug", auth.debugHeader);
@@ -225,22 +180,24 @@ export async function PATCH(request: NextRequest) {
       return res;
     }
 
-    // Only update columns that exist in 007 schema
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (typeof body.line_name === "string") updates.line_name = body.line_name.trim();
-    if (typeof body.department_code === "string") updates.department_code = body.department_code.trim();
-    if (typeof body.notes === "string") updates.notes = body.notes;
+    if (typeof body.line_name === "string") {
+      const name = body.line_name.trim();
+      if (name) updates.name = `${name} (LINE)`;
+    }
+    if (typeof body.is_active === "boolean") updates.is_active = body.is_active;
 
     const { data, error } = await supabaseAdmin
-      .from("pl_lines")
+      .from("stations")
       .update(updates)
       .eq("id", id)
       .eq("org_id", auth.activeOrgId)
-      .select("id, line_code, line_name, department_code")
+      .like("code", "LINE-%")
+      .select("id, line, name, is_active")
       .single();
 
     if (error) {
-      console.error("[admin/master-data/lines PATCH] update failed:", error.message, error.code);
+      console.error("[admin/master-data/lines PATCH] stations update failed:", error.message, error.code);
       const res = NextResponse.json({ error: error.message }, { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -251,7 +208,13 @@ export async function PATCH(request: NextRequest) {
       return res;
     }
 
-    const res = NextResponse.json(data);
+    const res = NextResponse.json({
+      id: data.id,
+      line_code: data.line,
+      line_name: (data.name ?? "").replace(/\s*\(LINE\)\s*$/, ""),
+      department_code: data.line,
+      is_active: data.is_active,
+    });
     applySupabaseCookies(res, pendingCookies);
     if (auth.debugHeader) {
       res.headers.set("x-auth-debug", auth.debugHeader);

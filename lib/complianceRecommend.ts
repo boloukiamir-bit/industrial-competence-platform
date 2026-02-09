@@ -84,11 +84,11 @@ export async function computeRecommendations(
   // 1) Employees in scope (same as summary)
   let empQ = supabase
     .from("employees")
-    .select("id, name, first_name, last_name, employee_number, line, site_id")
+    .select("id, name, first_name, last_name, employee_number, line, line_code, site_id")
     .eq("org_id", orgId)
     .eq("is_active", true);
   if (activeSiteId) empQ = empQ.eq("site_id", activeSiteId);
-  if (line) empQ = empQ.eq("line", line);
+  if (line) empQ = empQ.eq("line_code", line);
   const { data: empRows, error: empErr } = await empQ.order("name");
   if (empErr) throw new Error(empErr.message);
   const empList = empRows ?? [];

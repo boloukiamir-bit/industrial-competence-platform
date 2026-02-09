@@ -1,6 +1,6 @@
 /**
- * GET /api/admin/master-data/lines/export — CSV export of area leaders (line_code, line_name, leader_employee_number, is_active).
- * Admin/hr only. Tenant-scoped by active_org_id.
+ * GET /api/admin/master-data/lines/export — CSV export of lines from public.stations (line_code, line_name, is_active).
+ * Admin/hr only. Tenant-scoped by active_org_id. Read-only from stations; no pl_lines.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -28,10 +28,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: rows, error } = await supabaseAdmin
-      .from("pl_lines")
-      .select("line_code, line_name, leader_employee_id, is_active")
+      .from("stations")
+      .select("line, name, is_active")
       .eq("org_id", auth.activeOrgId)
-      .order("line_code");
+      .like("code", "LINE-%")
+      .order("line");
 
     if (error) {
       const res = NextResponse.json({ error: "Failed to fetch lines" }, { status: 500 });
@@ -39,27 +40,14 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const leaderIds = [...new Set((rows || []).map((r: { leader_employee_id: string | null }) => r.leader_employee_id).filter(Boolean))] as string[];
-    let leaderNumMap: Record<string, string> = {};
-    if (leaderIds.length > 0) {
-      const { data: emps } = await supabaseAdmin
-        .from("employees")
-        .select("id, employee_number")
-        .in("id", leaderIds);
-      if (emps) {
-        leaderNumMap = Object.fromEntries(emps.map((e: { id: string; employee_number: string }) => [e.id, e.employee_number ?? ""]));
-      }
-    }
-
-    const header = ["line_code", "line_name", "leader_employee_number", "is_active"];
+    const header = ["line_code", "line_name", "is_active"];
     const lines = [header.map(escapeCsvCell).join(",")];
     for (const r of rows || []) {
-      const leaderNum = r.leader_employee_id ? leaderNumMap[r.leader_employee_id] ?? "" : "";
+      const line_name = (r.name ?? "").replace(/\s*\(LINE\)\s*$/, "").trim() || (r.line ?? "");
       lines.push([
-        escapeCsvCell(r.line_code ?? ""),
-        escapeCsvCell(r.line_name ?? ""),
-        escapeCsvCell(leaderNum),
-        escapeCsvCell(r.is_active ? "true" : "false"),
+        escapeCsvCell(r.line ?? ""),
+        escapeCsvCell(line_name),
+        escapeCsvCell(r.is_active !== false ? "true" : "false"),
       ].join(","));
     }
 
@@ -68,7 +56,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": "attachment; filename=area_leaders.csv",
+        "Content-Disposition": "attachment; filename=lines.csv",
       },
     });
     applySupabaseCookies(res, pendingCookies);

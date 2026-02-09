@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiGet, apiPost, apiPatch } from "@/lib/apiClient";
 import { StationsLinesPanel } from "@/components/admin/StationsLinesPanel";
 import type { LineMeta } from "@/lib/normalize";
+import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 import {
   ChevronLeft,
   Layers,
@@ -52,6 +53,7 @@ function StationsContent() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [linesList, setLinesList] = useState<LineMeta[]>([]);
+  const displayLines = linesList.filter((l) => !isLegacyLine(l.lineCode) && !isLegacyLine(l.lineName ?? ""));
 
   const fetchStations = useCallback(async () => {
     if (!currentOrg) return;
@@ -293,15 +295,15 @@ function StationsContent() {
           <div className="space-y-4 mt-2">
             <div>
               <Label>Line code</Label>
-              {linesList.length > 0 ? (
-                <select
+              {displayLines.length > 0 ? (
+                  <select
                   value={addForm.line_code}
                   onChange={(e) => setAddForm((f) => ({ ...f, line_code: e.target.value }))}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   data-testid="add-station-line"
                 >
                   <option value="">Select line…</option>
-                  {linesList.map((l) => (
+                  {displayLines.map((l) => (
                     <option key={l.lineCode} value={l.lineCode}>
                       {l.lineName} ({l.lineCode})
                       {typeof l.stationCount === "number" ? ` — ${l.stationCount} stations` : ""}
@@ -312,7 +314,7 @@ function StationsContent() {
                 <Input
                   value={addForm.line_code}
                   onChange={(e) => setAddForm((f) => ({ ...f, line_code: e.target.value }))}
-                  placeholder="e.g. BEA"
+                  placeholder="e.g. OMM"
                   data-testid="add-station-line"
                 />
               )}
@@ -365,7 +367,7 @@ function StationsContent() {
             <div className="space-y-4 mt-2">
               <div>
                 <Label>Line code</Label>
-                {linesList.length > 0 ? (
+                {displayLines.length > 0 ? (
                   <select
                     value={editForm.line_code}
                     onChange={(e) => setEditForm((f) => ({ ...f, line_code: e.target.value }))}
@@ -373,7 +375,7 @@ function StationsContent() {
                     data-testid="edit-station-line"
                   >
                     <option value="">Select line…</option>
-                    {linesList.map((l) => (
+                    {displayLines.map((l) => (
                       <option key={l.lineCode} value={l.lineCode}>
                         {l.lineName} ({l.lineCode})
                         {typeof l.stationCount === "number" ? ` — ${l.stationCount} stations` : ""}
@@ -384,7 +386,7 @@ function StationsContent() {
                   <Input
                     value={editForm.line_code}
                     onChange={(e) => setEditForm((f) => ({ ...f, line_code: e.target.value }))}
-                    placeholder="e.g. BEA"
+                    placeholder="e.g. OMM"
                     data-testid="edit-station-line"
                   />
                 )}

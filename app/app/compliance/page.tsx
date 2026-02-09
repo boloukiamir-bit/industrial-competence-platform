@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
-import { BarChart3, ChevronDown, ChevronRight, Grid3X3, Inbox, Loader2, Pencil, Plus, Users } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, Clipboard, Grid3X3, Inbox, Loader2, Pencil, Plus, Users } from "lucide-react";
 import { withDevBearer } from "@/lib/devBearer";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
@@ -378,7 +378,11 @@ export default function CompliancePage() {
             Licenses, medical checks, contracts — validity and triage
           </p>
         </header>
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-between items-center gap-2 flex-wrap">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/app/onboarding">Get started</Link>
+          </Button>
+          <div className="flex gap-2">
           {canWrite && (
             <>
               <Button variant="outline" size="sm" asChild>
@@ -396,11 +400,18 @@ export default function CompliancePage() {
             </>
           )}
           <Button variant="outline" size="sm" asChild>
+            <Link href="/app/compliance/digest">
+              <Clipboard className="h-4 w-4 mr-1.5" />
+              Weekly Digest
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/app/compliance/matrix">
               <Grid3X3 className="h-4 w-4 mr-1.5" />
               Compliance Matrix
             </Link>
           </Button>
+          </div>
         </div>
 
         {/* Triage KPI bar */}

@@ -38,7 +38,7 @@ export async function calculateTomorrowsGaps(orgId: string): Promise<GapItem[]> 
       .select("id")
       .eq("org_id", orgId)
       .eq("role", role)
-      .eq("line", line)
+      .eq("line_code", line)
       .eq("is_active", true);
 
     const employeeIds = (employees || []).map((e) => e.id);

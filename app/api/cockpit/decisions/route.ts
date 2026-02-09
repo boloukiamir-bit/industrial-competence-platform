@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { normalizeShift } from "@/lib/shift";
-import { lineShiftTargetId } from "@/lib/tomorrowsGapsDecisions";
+import { lineShiftTargetId } from "@/lib/shared/decisionIds";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

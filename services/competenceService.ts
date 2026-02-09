@@ -153,18 +153,22 @@ export async function getFilterOptions(
   if (!orgId && !allowGlobal) {
     return { lines: [], teams: [] };
   }
+
+  const rawLines = orgId ? await (await import("@/lib/server/getActiveLines")).getActiveLines(orgId) : [];
+  const { isLegacyLine } = await import("@/lib/shared/isLegacyLine");
+  const lines = rawLines.filter((l) => !isLegacyLine(l));
+
   const query = orgId
-    ? employeesBaseQuery(client, orgId, "line, team")
-    : client.from("employees").select("line, team").eq("is_active", true);
+    ? employeesBaseQuery(client, orgId, "team")
+    : client.from("employees").select("team").eq("is_active", true);
   const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch filter options: ${error.message}`);
   }
 
-  type Row = { line?: string | null; team?: string | null };
+  type Row = { team?: string | null };
   const rows = (data || []) as Row[];
-  const lines = [...new Set(rows.map((row) => row.line).filter((x): x is string => Boolean(x)))].sort();
   const teams = [...new Set(rows.map((row) => row.team).filter((x): x is string => Boolean(x)))].sort();
 
   return { lines, teams };
@@ -213,7 +217,7 @@ export async function getEmployeesWithSkills(filters?: {
 
   let employeesQuery = employeesBaseQuery(client, orgId).select("*");
   if (filters?.line) {
-    employeesQuery = employeesQuery.eq("line", filters.line);
+    employeesQuery = employeesQuery.eq("line_code", filters.line);
   }
   if (filters?.team) {
     employeesQuery = employeesQuery.eq("team", filters.team);
@@ -318,7 +322,7 @@ export async function getTomorrowsGaps(orgId?: string | null): Promise<Competenc
       orgId,
       "id"
     )
-      .eq("line", line)
+      .eq("line_code", line)
       .eq("team", team);
 
     if (empError) {

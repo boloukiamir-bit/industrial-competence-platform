@@ -1,59 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { getOrgIdFromSession } from "@/lib/orgSession";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { normalizeShiftParam } from "@/lib/server/fetchCockpitIssues";
+import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+/** Distinct areas from v_cockpit_station_summary for date+shift (cockpit line filter). No legacy line codes. */
 export async function GET(request: NextRequest) {
   try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
-    const session = await getOrgIdFromSession(request, supabase);
-    if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+    const org = await getActiveOrgFromSession(request, supabase);
+    if (!org.ok) {
+      const res = NextResponse.json({ error: org.error }, { status: org.status });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("active_org_id")
-      .eq("id", session.userId)
-      .single();
 
-    if (!profile?.active_org_id) {
-      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+    const searchParams = request.nextUrl.searchParams;
+    const date = searchParams.get("date")?.trim();
+    const shiftCode = searchParams.get("shift_code") || searchParams.get("shift") || undefined;
+    const shift = normalizeShiftParam(shiftCode, searchParams.get("shift"));
+
+    if (!date || !shift) {
+      const res = NextResponse.json({ lines: [], source: "v_cockpit_station_summary" });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
-    const activeOrgId = profile.active_org_id as string;
 
-    // Get distinct lines from stations
-    const { data: stations, error } = await supabaseAdmin
-      .from("stations")
-      .select("line")
-      .eq("org_id", activeOrgId)
-      .eq("is_active", true)
-      .not("line", "is", null);
+    let query = supabaseAdmin
+      .from("v_cockpit_station_summary")
+      .select("area")
+      .eq("org_id", org.activeOrgId)
+      .eq("shift_date", date)
+      .eq("shift_code", shift);
+
+    if (org.activeSiteId) {
+      query = query.or(`site_id.is.null,site_id.eq.${org.activeSiteId}`);
+    }
+
+    const { data: rows, error } = await query;
 
     if (error) {
-      const res = NextResponse.json(
-        { error: "Failed to fetch lines" },
-        { status: 500 }
-      );
+      console.error("[cockpit/lines] v_cockpit_station_summary error:", error);
+      const res = NextResponse.json({ lines: [], source: "v_cockpit_station_summary" });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
-    const uniqueLines = [...new Set((stations || []).map((s: { line?: string }) => s.line).filter((v): v is string => Boolean(v)))].sort();
-
-    const res = NextResponse.json({ lines: uniqueLines });
+    const raw = [...new Set((rows ?? []).map((r: { area?: string | null }) => r.area).filter((v): v is string => Boolean(v)))];
+    const areas = raw.filter((a) => !isLegacyLine(a)).sort();
+    const res = NextResponse.json({ lines: areas, source: "v_cockpit_station_summary" });
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (error) {
-    console.error("getLines error:", error);
+    console.error("[cockpit/lines] error:", error);
     return NextResponse.json(
       { error: "Failed to get lines" },
       { status: 500 }

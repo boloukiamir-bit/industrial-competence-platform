@@ -36,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 
 type SlaFlag = "overdue" | "due7d" | "nodue" | "ok";
 
@@ -346,7 +347,7 @@ export default function ActionInboxPage() {
 
   const actions = data?.actions ?? [];
   const kpis = data?.kpis ?? { open: 0, overdue: 0, due7d: 0, done7d: 0 };
-  const lines = useMemo(() => data?.lines ?? [], [data?.lines]);
+  const lines = useMemo(() => (data?.lines ?? []).filter((l) => !isLegacyLine(l)), [data?.lines]);
 
   return (
     <OrgGuard>

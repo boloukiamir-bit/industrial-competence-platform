@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { getActiveLines } from "@/lib/server/getActiveLines";
 import { getLineName } from "@/lib/lineOverviewLineNames";
 
 const supabaseAdmin = createClient(
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
     }
     const activeOrgId = org.activeOrgId;
 
+    const lineCodes = await getActiveLines(activeOrgId);
+
     const { data: stations, error } = await supabaseAdmin
       .from("stations")
       .select("line")
@@ -32,12 +35,11 @@ export async function GET(request: NextRequest) {
       .not("line", "is", null);
 
     if (error) {
-      const res = NextResponse.json({ error: "Failed to fetch lines" }, { status: 500 });
+      const res = NextResponse.json({ error: "Failed to fetch station counts" }, { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
-    const lineCodes = [...new Set((stations || []).map((s: { line?: string }) => s.line).filter((v): v is string => Boolean(v)))].sort();
     const countByLine = new Map<string, number>();
     for (const s of stations || []) {
       const line = (s as { line?: string }).line;
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
       station_count: countByLine.get(line_code) ?? 0,
     }));
 
-    const res = NextResponse.json({ lines });
+    const res = NextResponse.json({ lines, source: "stations" });
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {

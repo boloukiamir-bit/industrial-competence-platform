@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShieldAlert, Clock, AlertTriangle, Plus } from "lucide-react";
 import type { ComplianceItem } from "@/types/cockpit";
@@ -41,82 +39,67 @@ export function ComplianceWidget({ items, onCreateAction }: ComplianceWidgetProp
   const overdueCount = items.filter(i => i.status === "expired").length;
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <ShieldAlert className="h-4 w-4 text-amber-500" />
-            Compliance Radar
-          </CardTitle>
-        </div>
+    <div className="cockpit-card-secondary overflow-hidden h-full">
+      <div className="px-4 py-3 border-b border-border">
+        <h3 className="cockpit-title flex items-center gap-2">
+          <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
+          Compliance
+        </h3>
         <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)} className="mt-2">
-          <TabsList className="grid w-full grid-cols-3 h-8">
-            <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
-              All ({items.length})
-            </TabsTrigger>
-            <TabsTrigger value="expiring" className="text-xs" data-testid="tab-expiring">
-              Expiring ({expiringCount})
-            </TabsTrigger>
-            <TabsTrigger value="overdue" className="text-xs" data-testid="tab-overdue">
-              Overdue ({overdueCount})
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 h-7 cockpit-label">
+            <TabsTrigger value="all" className="text-[11px]" data-testid="tab-all">All ({items.length})</TabsTrigger>
+            <TabsTrigger value="expiring" className="text-[11px]" data-testid="tab-expiring">Expiring ({expiringCount})</TabsTrigger>
+            <TabsTrigger value="overdue" className="text-[11px]" data-testid="tab-overdue">Overdue ({overdueCount})</TabsTrigger>
           </TabsList>
         </Tabs>
-      </CardHeader>
-      <CardContent className="space-y-2 max-h-[280px] overflow-y-auto">
+      </div>
+      <div className="space-y-1 max-h-[220px] overflow-y-auto p-3">
         {filteredItems.length === 0 ? (
-          <div className="text-center py-6 text-muted-foreground">
-            <ShieldAlert className="h-8 w-8 mx-auto mb-2 text-green-500" />
-            <p className="text-sm">No compliance issues in this category.</p>
+          <div className="text-center py-6 cockpit-body text-muted-foreground">
+            <ShieldAlert className="h-6 w-6 mx-auto mb-2 cockpit-status-ok" />
+            <p>No compliance issues in this category.</p>
           </div>
         ) : (
           filteredItems.map((item) => (
             <div
               key={item.id}
-              className={`group flex items-center gap-3 p-3 rounded-lg border transition-all ${
+              className={`group flex items-center gap-2 p-2.5 rounded-sm border-l-[3px] ${
                 item.status === "expired"
-                  ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                  : "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800"
+                  ? "border-l-[hsl(var(--ds-status-blocking-text))]"
+                  : "border-l-[hsl(var(--ds-status-at-risk-text))]"
               }`}
               data-testid={`compliance-item-${item.id}`}
             >
               {item.status === "expired" ? (
-                <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                <AlertTriangle className="h-3.5 w-3.5 cockpit-status-blocking shrink-0" />
               ) : (
-                <Clock className="h-4 w-4 text-yellow-600 shrink-0" />
+                <Clock className="h-3.5 w-3.5 cockpit-status-at-risk shrink-0" />
               )}
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{item.employeeName}</p>
-                <p className="text-xs text-muted-foreground truncate">{item.title}</p>
+                <p className="cockpit-body font-medium truncate">{item.employeeName}</p>
+                <p className="cockpit-label truncate">{item.title}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className={`text-xs ${
-                    item.status === "expired"
-                      ? "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300"
-                      : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300"
-                  }`}
-                >
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`cockpit-label cockpit-num ${item.status === "expired" ? "cockpit-status-blocking" : "cockpit-status-at-risk"}`}>
                   {formatExpiryDate(item.expiryDate)}
-                </Badge>
+                </span>
                 {onCreateAction && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                    className="h-6 w-6 p-0"
                     onClick={() => onCreateAction(item)}
                     title="Create renewal action"
                     data-testid={`button-action-${item.id}`}
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3 w-3" />
                   </Button>
                 )}
               </div>
             </div>
           ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
 import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
+import { getActiveLines } from "@/lib/server/getActiveLines";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,25 +105,15 @@ export async function GET(request: NextRequest) {
     );
     const effectiveSiteId = siteId || activeSiteId;
 
-    // Distinct lines for dropdown (org + site scope, no line/search filter)
-    const linesQuery = supabaseAdmin
-      .from("employees")
-      .select("line")
-      .eq("org_id", orgId)
-      .eq("is_active", true);
-    if (effectiveSiteId) linesQuery.eq("site_id", effectiveSiteId);
-    const { data: lineRows } = await linesQuery;
-    const linesList = [
-      ...new Set((lineRows ?? []).map((r) => r?.line).filter((v): v is string => Boolean(v))),
-    ].sort();
+    const linesList = await getActiveLines(orgId);
 
     const employeesQuery = supabaseAdmin
       .from("employees")
-      .select("id, name, first_name, last_name, employee_number, line, team, site_id")
+      .select("id, name, first_name, last_name, employee_number, line, line_code, team, site_id")
       .eq("org_id", orgId)
       .eq("is_active", true);
     if (effectiveSiteId) employeesQuery.eq("site_id", effectiveSiteId);
-    if (line) employeesQuery.eq("line", line);
+    if (line) employeesQuery.eq("line_code", line);
     const { data: employees, error: empErr } = await employeesQuery.order("name");
 
     if (empErr) {
@@ -180,6 +171,7 @@ export async function GET(request: NextRequest) {
       name: string;
       employee_number: string;
       line: string | null;
+      line_code: string | null;
     }> = [];
     const cellsOut: Array<{
       employee_id: string;
@@ -235,6 +227,7 @@ export async function GET(request: NextRequest) {
           name: empName || empCode || emp.id,
           employee_number: empCode,
           line: emp.line ?? null,
+          line_code: emp.line_code ?? emp.line ?? null,
         });
       }
     }
@@ -250,6 +243,7 @@ export async function GET(request: NextRequest) {
         catalog: catalogList,
         cells: cellsFiltered,
         lines: linesList,
+        source: "stations",
         activeSiteId,
         activeSiteName,
       });
@@ -263,6 +257,7 @@ export async function GET(request: NextRequest) {
       catalog: catalogList,
       cells: cellsOut,
       lines: linesList,
+      source: "stations",
       activeSiteId,
       activeSiteName,
     });

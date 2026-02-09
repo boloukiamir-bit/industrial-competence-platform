@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { pool } from "@/lib/db/pool";
 import { registerDevErrorHooks } from "@/lib/server/devErrorHooks";
 import { getRequestId } from "@/lib/server/requestId";
-import { lineShiftTargetId } from "@/lib/tomorrowsGapsDecisions";
+import { lineShiftTargetId } from "@/lib/shared/decisionIds";
 
 export const runtime = "nodejs";
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -21,15 +20,15 @@ interface HandoverWidgetProps {
 }
 
 const typeConfig = {
-  open_loop: { icon: CircleDot, label: "Open", color: "text-orange-500" },
-  decision: { icon: CheckCircle2, label: "Decision", color: "text-green-500" },
-  risk: { icon: AlertTriangle, label: "Risk", color: "text-red-500" },
+  open_loop: { icon: CircleDot, label: "Open", status: "cockpit-status-at-risk" },
+  decision: { icon: CheckCircle2, label: "Decision", status: "cockpit-status-ok" },
+  risk: { icon: AlertTriangle, label: "Risk", status: "cockpit-status-blocking" },
 };
 
 const severityStyles = {
-  low: "bg-slate-100 dark:bg-slate-800",
-  medium: "bg-orange-100 dark:bg-orange-900/30",
-  high: "bg-red-100 dark:bg-red-900/30",
+  low: "border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]",
+  medium: "border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]",
+  high: "border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]",
 };
 
 export function HandoverWidget({
@@ -48,8 +47,8 @@ export function HandoverWidget({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 ${config.color}`} />
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <Icon className={`h-3.5 w-3.5 ${config.status}`} />
+          <span className="cockpit-label">
             {title} ({items.length})
           </span>
         </div>
@@ -57,17 +56,17 @@ export function HandoverWidget({
           {items.slice(0, 3).map((item) => (
             <div
               key={item.id}
-              className={`p-2 rounded-md text-sm ${item.severity ? severityStyles[item.severity] : 'bg-muted/50'}`}
+              className={`p-2 rounded-sm cockpit-body ${item.severity ? severityStyles[item.severity] : "border-l-[3px] border-l-border"}`}
               data-testid={`handover-item-${item.id}`}
             >
-              <p className="font-medium text-sm leading-tight">{item.title}</p>
+              <p className="cockpit-body font-medium leading-tight">{item.title}</p>
               {item.description && (
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{item.description}</p>
+                <p className="cockpit-label mt-0.5 line-clamp-1">{item.description}</p>
               )}
             </div>
           ))}
           {items.length > 3 && (
-            <p className="text-xs text-muted-foreground pl-2">+{items.length - 3} more</p>
+            <p className="cockpit-label pl-2 cockpit-num">+{items.length - 3} more</p>
           )}
         </div>
       </div>
@@ -75,34 +74,31 @@ export function HandoverWidget({
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <ArrowRightLeft className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-foreground">Shift Handover</h3>
-              <p className="text-xs text-muted-foreground">{totalItems} items to hand over</p>
-            </div>
+    <div className="cockpit-card-secondary overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
+          <div>
+            <h3 className="cockpit-title">Shift Handover</h3>
+            <p className="cockpit-label mt-0.5">{totalItems} items to hand over</p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onGenerateHandover}
-            data-testid="button-handover-generate"
-          >
-            <FileText className="h-3.5 w-3.5 mr-1.5" />
-            Generate
-          </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[13px]"
+          onClick={onGenerateHandover}
+          data-testid="button-handover-generate"
+        >
+          <FileText className="h-3.5 w-3.5 mr-1.5" />
+          Generate
+        </Button>
+      </div>
+      <div className="space-y-4 p-4">
         {totalItems === 0 ? (
-          <div className="text-center py-6">
-            <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">All clear for handover</p>
+          <div className="text-center py-6 cockpit-body text-muted-foreground">
+            <CheckCircle2 className="h-6 w-6 cockpit-status-ok mx-auto mb-2" />
+            <p>All clear for handover</p>
           </div>
         ) : (
           <>
@@ -111,7 +107,7 @@ export function HandoverWidget({
             {renderSection("Risks for Next Shift", risks, "risk")}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
