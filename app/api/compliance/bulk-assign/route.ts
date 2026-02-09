@@ -116,11 +116,11 @@ export async function POST(request: NextRequest) {
       .eq("is_active", true);
 
     if (scope === "line" && scope_value) {
-      employeesQuery.eq("line", scope_value);
+      employeesQuery.eq("line_code", scope_value);
     } else if (scope === "department" && scope_value) {
       employeesQuery.eq("team", scope_value);
     } else if (scope === "area" && scope_value) {
-      employeesQuery.eq("line", scope_value);
+      employeesQuery.eq("line_code", scope_value);
     }
     // "shift" not supported on employees table — no filter (all)
 

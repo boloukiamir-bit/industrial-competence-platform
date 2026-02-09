@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 const supabaseAdmin = createClient(
@@ -31,12 +32,14 @@ function toEmployeeDto(row: Record<string, unknown> & { manager?: { name: string
     dateOfBirth: row.date_of_birth ?? undefined,
     role: row.role ?? "",
     line: row.line ?? "",
+    lineCode: (row.line_code ?? row.line) ?? "",
     team: row.team ?? "",
     employmentType: row.employment_type ?? "permanent",
     startDate: row.start_date ?? undefined,
     contractEndDate: row.contract_end_date ?? undefined,
     managerId: row.manager_id ?? undefined,
     managerName: (row.manager as { name?: string } | null)?.name ?? undefined,
+    positionId: row.position_id ?? undefined,
     address: row.address ?? undefined,
     city: row.city ?? undefined,
     postalCode: row.postal_code ?? undefined,
@@ -114,6 +117,35 @@ export async function PATCH(
     const body = await request.json().catch(() => ({}));
     const updates: Record<string, unknown> = {};
     if (typeof body.is_active === "boolean") updates.is_active = body.is_active;
+
+    if (body.position_id !== undefined) {
+      const auth = await requireAdminOrHr(request, supabase);
+      if (!auth.ok) {
+        const res = NextResponse.json({ error: auth.error }, { status: auth.status });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      const positionId = body.position_id === null || body.position_id === "" ? null : body.position_id;
+      if (positionId !== null && typeof positionId !== "string") {
+        const res = NextResponse.json({ error: "position_id must be string or null" }, { status: 400 });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      if (positionId) {
+        const { data: pos } = await supabaseAdmin
+          .from("positions")
+          .select("id")
+          .eq("id", positionId)
+          .eq("org_id", activeOrgId)
+          .maybeSingle();
+        if (!pos) {
+          const res = NextResponse.json({ error: "Position not found" }, { status: 404 });
+          applySupabaseCookies(res, pendingCookies);
+          return res;
+        }
+      }
+      updates.position_id = positionId;
+    }
 
     if (Object.keys(updates).length === 0) {
       const res = NextResponse.json({ error: "No allowed fields to update" }, { status: 400 });

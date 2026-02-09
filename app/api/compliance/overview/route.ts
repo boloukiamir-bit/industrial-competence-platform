@@ -141,12 +141,21 @@ export async function GET(request: NextRequest) {
       contract: { valid: 0, expiring: 0, expired: 0, missing: 0, waived: 0 },
     };
 
+    const siteIds = [...new Set(empList.map((e) => e.site_id).filter((v): v is string => Boolean(v)))];
+    const siteNameMap = new Map<string, string>();
+    for (const sid of siteIds) {
+      const name = await getActiveSiteName(supabaseAdmin, sid, orgId);
+      siteNameMap.set(sid, name ?? "Unknown site");
+    }
+
     const rows: Array<{
       employee_id: string;
       employee_name: string;
       employee_number: string;
       line: string | null;
       department: string | null;
+      site_id: string | null;
+      site_name: string;
       compliance_id: string;
       compliance_code: string;
       compliance_name: string;
@@ -181,12 +190,15 @@ export async function GET(request: NextRequest) {
 
         if (statusFilter && status !== statusFilter) continue;
 
+        const siteId = emp.site_id ?? null;
         rows.push({
           employee_id: emp.id,
           employee_name: empName || empCode || emp.id,
           employee_number: empCode,
           line: emp.line ?? null,
           department: emp.team ?? null,
+          site_id: siteId,
+          site_name: siteId ? siteNameMap.get(siteId) ?? "Unknown site" : "",
           compliance_id: c.id,
           compliance_code: c.code,
           compliance_name: c.name,

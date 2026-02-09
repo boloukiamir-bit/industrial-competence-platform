@@ -124,7 +124,7 @@ async function handleSuggestions(
 
   const { stationId, lineCode } = await resolveStationByCode(activeOrgId, machineCode);
 
-  let employeesQuery = employeesBaseQuery(supabaseAdmin, activeOrgId, "id, employee_number, name, line");
+  let employeesQuery = employeesBaseQuery(supabaseAdmin, activeOrgId, "id, employee_number, name, line, line_code");
   if (activeSiteId) {
     employeesQuery = employeesQuery.eq("site_id", activeSiteId);
   }
@@ -159,10 +159,11 @@ async function handleSuggestions(
     employee_number: string;
     name: string;
     line?: string | null;
+    line_code?: string | null;
   }>;
   const filteredByLineCode = lineCode ? normalizeEmployeeLineToCode(lineCode) : null;
   const employees = filteredByLineCode
-    ? allEmployees.filter((emp) => normalizeEmployeeLineToCode(emp?.line) === filteredByLineCode)
+    ? allEmployees.filter((emp) => (emp?.line_code ?? normalizeEmployeeLineToCode(emp?.line ?? "")) === filteredByLineCode)
     : allEmployees;
 
   const attendance = attendanceRes.data || [];

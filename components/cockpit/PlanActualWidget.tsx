@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import type { PlanVsActual } from "@/types/cockpit";
@@ -16,24 +15,20 @@ export function PlanActualWidget({ data }: PlanActualWidgetProps) {
   const variancePercent = ((variance / todayPlan) * 100).toFixed(1);
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <BarChart2 className="h-4 w-4 text-indigo-500" />
-            Plan vs Actual
-          </CardTitle>
-          <div className="text-right">
-            <p className="text-sm font-medium">
-              {todayActual} / {todayPlan}
-            </p>
-            <p className={`text-xs ${variance >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {variance >= 0 ? "+" : ""}{variancePercent}%
-            </p>
-          </div>
+    <div className="cockpit-card-secondary overflow-hidden h-full">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <h3 className="cockpit-title flex items-center gap-2">
+          <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
+          Plan vs Actual
+        </h3>
+        <div className="text-right cockpit-num">
+          <p className="cockpit-body font-medium">{todayActual} / {todayPlan}</p>
+          <p className={`cockpit-label ${variance >= 0 ? "cockpit-status-ok" : "cockpit-status-blocking"}`}>
+            {variance >= 0 ? "+" : ""}{variancePercent}%
+          </p>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div className="p-3">
         <div className="h-[180px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
@@ -67,7 +62,7 @@ export function PlanActualWidget({ data }: PlanActualWidgetProps) {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

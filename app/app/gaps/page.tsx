@@ -207,7 +207,7 @@ export default function GapsPage() {
 
   const summary = useMemo(() => computeSummary(gaps), [gaps]);
 
-  // Load lines from stations table and get active_org_id
+  // Load lines from API (canonical: public.stations) and get active_org_id for generate
   useEffect(() => {
     async function loadLines() {
       try {
@@ -225,41 +225,21 @@ export default function GapsPage() {
           .single();
 
         if (profileError || !profile?.active_org_id) {
-          console.error("Failed to load active organization:", profileError);
           setLines([]);
           setActiveOrgId(null);
           return;
         }
 
-        const orgId = profile.active_org_id as string;
-        setActiveOrgId(orgId);
+        setActiveOrgId(profile.active_org_id as string);
 
-        let res = await supabase
-          .from("stations")
-          .select("line")
-          .eq("org_id", orgId)
-          .eq("is_active", true)
-          .not("line", "is", null);
-
-        if (res.error && String(res.error.message || "").toLowerCase().includes("is_active") && String(res.error.message || "").toLowerCase().includes("does not exist")) {
-          res = await supabase
-            .from("stations")
-            .select("line")
-            .eq("org_id", orgId)
-            .not("line", "is", null);
-        }
-
-        if (res.error) {
-          console.error("Failed to load lines from stations:", res.error);
+        const res = await fetch("/api/lines", { credentials: "include" });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && Array.isArray(json.lines)) {
+          setLines(json.lines);
+          if (json.source) console.debug("[gaps lines] source:", json.source);
+        } else {
           setLines([]);
-          return;
         }
-
-        const unique = Array.from(
-          new Set((res.data || []).map((s: { line?: string }) => s.line).filter(Boolean))
-        ).sort() as string[];
-
-        setLines(unique);
       } catch (error) {
         console.error("Error loading lines:", error);
         setLines([]);

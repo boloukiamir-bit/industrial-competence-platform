@@ -63,6 +63,29 @@
   --surface: 0 0% 100%;
   --surface-2: 220 14% 97%;
   --surface-3: 220 14% 94%;
+
+  /* Design system */
+  --ds-space-1: 0.25rem;
+  --ds-space-2: 0.5rem;
+  --ds-space-3: 0.75rem;
+  --ds-space-4: 1rem;
+  --ds-space-5: 1.25rem;
+  --ds-space-6: 1.5rem;
+  --ds-space-8: 2rem;
+  --ds-space-10: 2.5rem;
+  --ds-space-12: 3rem;
+  --ds-radius-card: 0.5rem;
+  --ds-shadow-card: 0 1px 3px rgba(0,0,0,.06);
+  --ds-card-padding: 1.25rem;
+  --ds-table-header-bg: 220 14% 97%;
+  --ds-table-row-hover: 220 14% 97%;
+  --ds-table-cell-py: 0.625rem;
+  --ds-status-blocking-bg: 0 72% 96%;
+  --ds-status-blocking-text: 0 72% 28%;
+  --ds-status-at-risk-bg: 38 92% 94%;
+  --ds-status-at-risk-text: 38 92% 22%;
+  --ds-status-ok-bg: 142 36% 96%;
+  --ds-status-ok-text: 142 36% 24%;
 }
 
 .dark {
@@ -116,6 +139,92 @@
   --surface: 222 15% 8%;
   --surface-2: 222 15% 12%;
   --surface-3: 222 15% 16%;
+
+  /* Design system (dark) */
+  --ds-shadow-card: 0 1px 3px rgba(0,0,0,.2);
+  --ds-table-header-bg: 222 15% 12%;
+  --ds-table-row-hover: 222 15% 14%;
+  --ds-status-blocking-bg: 0 50% 14%;
+  --ds-status-blocking-text: 0 72% 82%;
+  --ds-status-at-risk-bg: 38 40% 14%;
+  --ds-status-at-risk-text: 38 92% 78%;
+  --ds-status-ok-bg: 142 20% 14%;
+  --ds-status-ok-text: 142 50% 78%;
+}
+
+/* Operational Readiness Platform – Cockpit UI Rulebook */
+.cockpit-card {
+  border-radius: 4px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: none;
+}
+
+/* Primary surfaces: higher border contrast */
+.cockpit-card-primary {
+  border-radius: 4px;
+  border: 2px solid hsl(var(--foreground) / 0.15);
+  background: hsl(var(--card));
+  box-shadow: none;
+}
+
+/* Secondary surfaces: recede */
+.cockpit-card-secondary {
+  border-radius: 4px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: none;
+}
+
+.cockpit-title {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+
+.cockpit-body {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: hsl(var(--foreground));
+}
+
+.cockpit-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: hsl(var(--muted-foreground) / 0.9);
+}
+
+.cockpit-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status: text only, no pills */
+.cockpit-status-blocking { color: hsl(var(--ds-status-blocking-text)); }
+.cockpit-status-at-risk { color: hsl(var(--ds-status-at-risk-text)); }
+.cockpit-status-ok { color: hsl(var(--ds-status-ok-text)); }
+
+/* Table: tight rows, strong headers */
+.cockpit-table th {
+  padding: 6px 12px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: hsl(var(--muted-foreground) / 0.95);
+  background: hsl(var(--muted) / 0.5);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.cockpit-table td {
+  padding: 5px 12px;
+  font-size: 0.8125rem;
+}
+
+.cockpit-table tbody tr:nth-child(even) {
+  background: transparent;
 }
 
 @layer base {
@@ -125,6 +234,18 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+}
+
+@layer components {
+  .ds-h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; line-height: 1.3; color: hsl(var(--foreground)); }
+  .ds-h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.35; color: hsl(var(--foreground)); }
+  .ds-h3 { font-size: 1.0625rem; font-weight: 600; line-height: 1.4; color: hsl(var(--foreground)); }
+  .ds-body { font-size: 0.875rem; line-height: 1.5; color: hsl(var(--foreground)); }
+  .ds-meta { font-size: 0.8125rem; line-height: 1.4; color: hsl(var(--muted-foreground)); }
+  .ds-card { border-radius: var(--ds-radius-card); box-shadow: var(--ds-shadow-card); padding: var(--ds-card-padding); background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); }
+  .ds-table-header { background: hsl(var(--ds-table-header-bg)); font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: hsl(var(--muted-foreground)); }
+  .ds-table-row:hover { background: hsl(var(--ds-table-row-hover)); }
+  .ds-table-cell { padding-top: var(--ds-table-cell-py); padding-bottom: var(--ds-table-cell-py); }
 }
 
 @layer utilities {
@@ -151,6 +272,85 @@
   .active-elevate-2:active:not(.no-default-active-elevate)::after {
     background-color: var(--elevate-2);
   }
+}
+
+/* BCLEDGE Ledger Aesthetic */
+.ledger-bg {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 23px,
+    hsl(var(--border) / 0.4) 23px,
+    hsl(var(--border) / 0.4) 24px
+  );
+}
+
+.ledger-bg-subtle {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 31px,
+    hsl(var(--border) / 0.25) 31px,
+    hsl(var(--border) / 0.25) 32px
+  );
+}
+
+.section-notch {
+  position: relative;
+}
+
+.section-notch::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 8px,
+    hsl(var(--foreground) / 0.12) 8px,
+    hsl(var(--foreground) / 0.12) 10px
+  );
+}
+
+.ledger-hover {
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ledger-hover:hover {
+  transform: translateY(-1px);
+  border-color: hsl(var(--foreground) / 0.18);
+  box-shadow: 0 2px 8px hsl(var(--foreground) / 0.06);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* BCLEDGE Warm editorial (marketing) */
+.warm-bg {
+  background-color: #f7f5f2;
+}
+.warm-bg-soft {
+  background-color: #faf8f5;
+}
+.warm-dot-grid {
+  background-image: radial-gradient(circle, hsl(220 10% 70% / 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.marketing-accent {
+  background-color: #1e3a5f;
+  color: #f8fafc;
+}
+.marketing-accent:hover {
+  background-color: #16304d;
+  color: #f8fafc;
 }
 
 /* Apple-inspired HR Styles */

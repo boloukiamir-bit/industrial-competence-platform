@@ -27,6 +27,7 @@ import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
 import { ComplianceDrawer } from "@/components/compliance/ComplianceDrawer";
 import { cn } from "@/lib/utils";
+import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 
 type SummaryResponse = {
   ok: boolean;
@@ -292,7 +293,7 @@ export default function ComplianceSummaryPage() {
   };
   const topRiskItems = data?.topRiskItems ?? [];
   const upcoming = data?.upcomingExpirations ?? [];
-  const lines = data?.lines ?? [];
+  const lines = (data?.lines ?? []).filter((l) => !isLegacyLine(l));
 
   return (
     <OrgGuard>

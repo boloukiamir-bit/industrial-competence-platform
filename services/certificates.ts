@@ -13,7 +13,7 @@ export async function getCertificates(filters?: {
       employee_id,
       skill_id,
       level,
-      employees!inner(id, name, line, team),
+      employees!inner(id, name, line, line_code, team),
       skills!inner(id, name, code, category)
     `)
     .eq("employees.is_active", true)
@@ -22,7 +22,7 @@ export async function getCertificates(filters?: {
     .in("skills.category", ["safety", "certificate"]);
 
   if (filters?.line) {
-    query = query.eq("employees.line", filters.line);
+    query = query.eq("employees.line_code", filters.line);
   }
 
   const { data: skillsData, error: skillsError } = await query;

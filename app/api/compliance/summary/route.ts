@@ -10,6 +10,7 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
 import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
+import { getActiveLines } from "@/lib/server/getActiveLines";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -114,11 +115,11 @@ export async function GET(request: NextRequest) {
     // 1) Employees in scope
     let empQ = supabaseAdmin
       .from("employees")
-      .select("id, name, first_name, last_name, employee_number, line, site_id")
+      .select("id, name, first_name, last_name, employee_number, line, line_code, site_id")
       .eq("org_id", orgId)
       .eq("is_active", true);
     if (activeSiteId) empQ = empQ.eq("site_id", activeSiteId);
-    if (line) empQ = empQ.eq("line", line);
+    if (line) empQ = empQ.eq("line_code", line);
     const { data: empRows, error: empErr } = await empQ.order("name");
 
     if (empErr) {
@@ -328,7 +329,7 @@ export async function GET(request: NextRequest) {
         created_at: a.created_at,
       }));
 
-    const linesList = [...new Set(employeesInScope.map((e) => e.line).filter((v): v is string => Boolean(v)))].sort();
+    const linesList = await getActiveLines(org.activeOrgId);
 
     const res = NextResponse.json({
       ok: true,
@@ -340,6 +341,7 @@ export async function GET(request: NextRequest) {
         category: categoryParam,
       },
       lines: linesList,
+      source: "stations",
       kpis: {
         employeesWithMissing: employeesWithMissing.size,
         employeesWithOverdue: employeesWithOverdue.size,

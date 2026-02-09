@@ -1,7 +1,7 @@
 /**
  * Unit tests for getActiveSiteName fallback logic.
- * - When activeSiteId not found and only one org_unit exists => returns that name.
- * - When multiple org_units exist => returns null.
+ * - When activeSiteId not found and only one site exists => returns that name.
+ * - When multiple sites exist => returns null.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 function mockSupabase(primary: { name: string } | null, fallbackUnits: Array<{ name: string }>): SupabaseClient {
   const from = (table: string) => {
-    if (table !== "org_units") throw new Error("unexpected table");
+    if (table !== "sites") throw new Error("unexpected table");
     return {
       select: (_cols: string) => ({
         eq: (col: string, _val: unknown) => {

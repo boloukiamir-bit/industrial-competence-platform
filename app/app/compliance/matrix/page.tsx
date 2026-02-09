@@ -14,6 +14,7 @@ import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
 import { ComplianceDrawer } from "@/components/compliance/ComplianceDrawer";
 import { cn } from "@/lib/utils";
+import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 
 type CategoryTab = "all" | "license" | "medical" | "contract";
 type MatrixEmployee = { id: string; name: string; employee_number: string; line: string | null };
@@ -166,8 +167,8 @@ export default function ComplianceMatrixPage() {
   }, [cells]);
   const lines = useMemo(() => {
     const fromApi = data?.lines ?? [];
-    if (fromApi.length > 0) return fromApi;
-    return [...new Set(employees.map((e) => e.line).filter(Boolean))].sort() as string[];
+    const raw = fromApi.length > 0 ? fromApi : [...new Set(employees.map((e) => e.line).filter(Boolean))].sort() as string[];
+    return raw.filter((l) => !isLegacyLine(l));
   }, [data?.lines, employees]);
 
   const handleCellClick = useCallback((employeeId: string, name: string, number: string) => {

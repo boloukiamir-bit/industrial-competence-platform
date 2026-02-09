@@ -86,7 +86,7 @@ async function getEmployeesForLine(
     .from("employees")
     .select("id, name, employee_number")
     .eq("org_id", orgId)
-    .eq("line", lineCode)
+    .eq("line_code", lineCode)
     .eq("is_active", true);
 
   if (error) {

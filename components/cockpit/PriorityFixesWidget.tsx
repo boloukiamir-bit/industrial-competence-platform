@@ -1,8 +1,7 @@
 "use client";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { AlertTriangle, Users, Shield, FileWarning, ChevronRight, ExternalLink, Calendar } from "lucide-react";
 import type { PriorityItem } from "@/types/cockpit";
@@ -35,19 +34,11 @@ const typeConfig = {
 export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading, summaryError, date, shiftType }: PriorityFixesWidgetProps) {
   if (items.length > 0) {
     return (
-      <Card className="border-red-200 dark:border-red-900/50 bg-gradient-to-br from-red-50/80 to-orange-50/50 dark:from-red-950/20 dark:to-orange-950/10">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
-              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-foreground">What to Fix Now</h2>
-              <p className="text-xs text-muted-foreground">{items.length} priority issue{items.length !== 1 ? 's' : ''}</p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <div className="cockpit-card-secondary overflow-hidden">
+        <div className="px-3 py-2 border-b border-border">
+          <h2 className="cockpit-title">Interventions</h2>
+        </div>
+        <div className="divide-y divide-border">
           {items.slice(0, 5).map((item) => {
             const config = typeConfig[item.type];
             const Icon = config.icon;
@@ -55,24 +46,24 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
             return (
               <div
                 key={item.id}
-                className="group flex items-center justify-between p-3 rounded-lg bg-card border hover-elevate transition-all"
+                className={cn(
+                  "flex items-center justify-between px-3 py-2",
+                  item.severity === "critical" && "border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]"
+                )}
                 data-testid={`priority-item-${item.id}`}
               >
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div className={`mt-0.5 ${config.color}`}>
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-3.5 w-3.5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm truncate">{item.title}</span>
-                      {item.severity === 'critical' && (
-                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Critical</Badge>
-                      )}
+                      <span className="cockpit-body font-medium truncate">{item.title}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{item.impact}</p>
+                    <p className="cockpit-label mt-0.5 line-clamp-1">{item.impact}</p>
                     {item.linkedEntity && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {item.linkedEntity.type === 'station' ? 'Station:' : 'Employee:'} {item.linkedEntity.name}
+                      <p className="cockpit-label mt-0.5">
+                        {item.linkedEntity.type === "station" ? "Station:" : "Employee:"} {item.linkedEntity.name}
                       </p>
                     )}
                   </div>
@@ -80,7 +71,7 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="ml-2 shrink-0 opacity-70 group-hover:opacity-100"
+                  className="h-7 text-[13px] shrink-0"
                   onClick={() => onResolve(item)}
                   data-testid={`button-resolve-${item.id}`}
                 >
@@ -90,46 +81,36 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
               </div>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   if (summaryLoading) {
     return (
-      <Card className="border-border bg-muted/30">
-        <CardContent className="flex items-center justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-        </CardContent>
-      </Card>
+      <div className="cockpit-card-secondary flex items-center justify-center py-6">
+        <span className="cockpit-body text-muted-foreground/70">—</span>
+      </div>
     );
   }
 
   if (summaryError) {
     return (
-      <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
-        <CardContent className="flex items-center justify-center py-8">
-          <p className="text-sm text-amber-700 dark:text-amber-300">Unable to load summary.</p>
-        </CardContent>
-      </Card>
+      <div className="cockpit-card-secondary flex items-center justify-center py-6 border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]">
+        <p className="cockpit-body cockpit-status-at-risk">Unable to load.</p>
+      </div>
     );
   }
 
   if (summary && summary.active_total > 0) {
     return (
-      <Card className="border-red-200 dark:border-red-900/50 bg-gradient-to-br from-red-50/80 to-orange-50/50 dark:from-red-950/20 dark:to-orange-950/10">
-        <CardContent className="flex items-center justify-center py-8">
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-3">
-              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
-            </div>
-            <p className="font-medium text-red-700 dark:text-red-300">
-              {summary.active_blocking} NO-GO, {summary.active_nonblocking} WARNING
-            </p>
-            <p className="text-sm text-muted-foreground">{summary.active_total} active decision(s)</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="cockpit-card-secondary overflow-hidden border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]">
+        <div className="flex flex-col items-center justify-center py-5 px-4">
+          <p className="cockpit-body cockpit-status-blocking font-medium">
+            {summary.active_blocking} blocking, {summary.active_nonblocking} at risk
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -137,36 +118,28 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
   const dateLabel = date ?? "";
 
   return (
-    <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10">
-      <CardContent className="flex flex-col items-center justify-center py-8">
-        <div className="text-center mb-4">
-          <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
-            <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
-          </div>
-          <p className="font-medium text-green-700 dark:text-green-300">
-            All clear — no active risks for {dateLabel} {shiftLabel}.
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">No critical issues right now</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
+    <div className="cockpit-card-secondary overflow-hidden border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]">
+      <div className="flex flex-col items-center justify-center py-5 px-4">
+        <p className="cockpit-body cockpit-status-ok font-medium">Clear · {dateLabel} {shiftLabel}</p>
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
           <Link
             href={date && shiftType ? `/app/tomorrows-gaps?date=${date}&shift=${toQueryShiftType(shiftType as "Day" | "Evening" | "Night")}` : "/app/tomorrows-gaps"}
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex items-center justify-center h-8 rounded border border-input bg-background px-3 cockpit-body hover:bg-accent"
             data-testid="cockpit-empty-cta-tomorrows-gaps"
           >
-            <Calendar className="h-4 w-4 mr-1.5" />
-            View Tomorrow&apos;s Gaps
+            <Calendar className="h-3.5 w-3.5 mr-1.5" />
+            Tomorrow&apos;s Gaps
           </Link>
           <Link
             href={date && shiftType ? `/app/line-overview?date=${date}&shift=${toQueryShiftType(shiftType as "Day" | "Evening" | "Night")}` : "/app/line-overview"}
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex items-center justify-center h-8 rounded border border-input bg-background px-3 cockpit-body hover:bg-accent"
             data-testid="cockpit-empty-cta-line-overview"
           >
-            <ExternalLink className="h-4 w-4 mr-1.5" />
-            Go to Line Overview
+            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+            Line Overview
           </Link>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

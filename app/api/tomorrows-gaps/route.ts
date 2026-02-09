@@ -5,8 +5,12 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { normalizeShift } from "@/lib/shift";
 import { getEligibilityByLine } from "@/services/eligibilityService";
 import { segmentGrossHours } from "@/lib/lineOverviewNet";
-import { lineShiftTargetId } from "@/lib/tomorrowsGapsDecisions";
+import { lineShiftTargetId } from "@/lib/shared/decisionIds";
 import { getLineName } from "@/lib/lineOverviewLineNames";
+import { isPlaceholderStation } from "@/lib/server/lineToStation";
+
+/** Max eligible operators in response list; eligibleOperatorsCount is always the full set size. */
+export const ELIGIBLE_OPERATORS_LIST_LIMIT_DEFAULT = 20;
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,7 +97,7 @@ export async function GET(request: NextRequest) {
     }
 
     type StationRow = { id: string; name: string | null; code: string | null; line: string | null };
-    const allStations = (stationsRows || []) as StationRow[];
+    const allStations = ((stationsRows || []) as StationRow[]).filter((s) => !isPlaceholderStation(s));
     let stationLines = [...new Set(allStations.map((s) => s.line).filter((v): v is string => Boolean(v)))].sort();
     if (lineFilter) {
       stationLines = stationLines.filter((l) => l === lineFilter);
@@ -192,10 +196,11 @@ export async function GET(request: NextRequest) {
         console.error("tomorrows-gaps: getEligibilityByLine failed for", lineCode, err);
       }
 
-      const eligibleEmployees = (eligibility?.employees || []).filter((e) => e.eligible);
-      const eligibleOperatorsCount = eligibleEmployees.length;
+      const fullEligible = (eligibility?.employees || []).filter((e) => e.eligible);
+      const totalEligible = fullEligible.length;
+      const eligibleOperatorsCount = totalEligible;
       const eligibleSet = new Set(
-        eligibleEmployees.map((e) => e.employee_number ?? "")
+        fullEligible.map((e) => e.employee_number ?? "")
       );
       const hasIneligibleAssigned = [...assignedEmployeeCodes].some((code) => !eligibleSet.has(code));
 
@@ -212,8 +217,8 @@ export async function GET(request: NextRequest) {
 
       const requiredSkills = eligibility?.required_skills ?? [];
       const requiredSkillCodes = (eligibility as { required_skill_codes?: string[] })?.required_skill_codes ?? requiredSkills.map((s) => s.code);
-      const eligibleOperators = eligibleEmployees
-        .slice(0, 5)
+      const eligibleOperators = fullEligible
+        .slice(0, ELIGIBLE_OPERATORS_LIST_LIMIT_DEFAULT)
         .map((e) => ({ employee_number: e.employee_number ?? "", name: e.name ?? "" }));
 
       const causes: RootCauseType[] = [];

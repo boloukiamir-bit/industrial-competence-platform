@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { NextResponse } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
 
 export type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -58,8 +58,13 @@ function normalizeSupabaseAuthCookie(name: string, value: string): string | null
  * Reads auth from request cookies and collects any cookies Supabase wants to set
  * (e.g. on token refresh) into pendingCookies. The route must call
  * applySupabaseCookies(response, pendingCookies) before returning.
+ *
+ * When request is provided, cookies are read from request.cookies (recommended for
+ * route handlers; ensures curl Cookie header is used). Otherwise uses next/headers cookies().
  */
-export async function createSupabaseServerClient(): Promise<{
+export async function createSupabaseServerClient(
+  request?: NextRequest
+): Promise<{
   supabase: ReturnType<typeof createServerClient>;
   pendingCookies: CookieToSet[];
 }> {
@@ -70,17 +75,23 @@ export async function createSupabaseServerClient(): Promise<{
     throw new Error("Supabase URL and anon key are required");
   }
 
-  const cookieStore = await cookies();
   const pendingCookies: CookieToSet[] = [];
 
-  // DEV-ONLY: Log cookie diagnostics
+  // Use request.cookies when available (explicit for curl/route handlers); else next/headers cookies().
+  const cookieSource = request
+    ? { getAll: () => request.cookies.getAll().map((c) => ({ name: c.name, value: c.value })) }
+    : await cookies().then((store) => ({
+        getAll: () => store.getAll().map((c) => ({ name: c.name, value: c.value })),
+      }));
+
+  const allCookies = cookieSource.getAll();
+
   if (process.env.NODE_ENV !== "production") {
-    const cookieNames = cookieStore.getAll().map((c) => c.name);
     const projectRef = url?.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] || "unknown";
-    const projectAuthCookie = cookieStore.get(`sb-${projectRef}-auth-token`);
-    console.log("[DEV createSupabaseServerClient] Cookie names from cookies():", cookieNames);
-    console.log("[DEV createSupabaseServerClient] Project ref:", projectRef);
-    console.log("[DEV createSupabaseServerClient] Project auth cookie exists:", !!projectAuthCookie);
+    const authCookie = allCookies.find((c) => c.name === `sb-${projectRef}-auth-token`);
+    const authChunks = allCookies.filter((c) => c.name.startsWith(`sb-${projectRef}-auth-token`));
+    console.log("[DEV createSupabaseServerClient] Cookie names:", allCookies.map((c) => c.name));
+    console.log("[DEV createSupabaseServerClient] Project ref:", projectRef, "auth:", !!authCookie, "chunks:", authChunks.length);
   }
 
   const makeOptions = (getAllFn: () => { name: string; value: string }[]) => ({
@@ -93,9 +104,8 @@ export async function createSupabaseServerClient(): Promise<{
   });
 
   const getAllWithAuth = (): { name: string; value: string }[] => {
-    const all = cookieStore.getAll();
     const out: { name: string; value: string }[] = [];
-    for (const c of all) {
+    for (const c of allCookies) {
       if (SB_AUTH_COOKIE_RE.test(c.name)) {
         const normalized = normalizeSupabaseAuthCookie(c.name, c.value);
         if (normalized == null) {
@@ -113,9 +123,8 @@ export async function createSupabaseServerClient(): Promise<{
   };
 
   const getAllWithoutAuth = (): { name: string; value: string }[] => {
-    const all = cookieStore.getAll();
     const out: { name: string; value: string }[] = [];
-    for (const c of all) {
+    for (const c of allCookies) {
       if (SB_AUTH_COOKIE_RE.test(c.name)) continue;
       out.push({ name: c.name, value: c.value });
     }
@@ -130,6 +139,13 @@ export async function createSupabaseServerClient(): Promise<{
   }
 
   return { supabase, pendingCookies };
+}
+
+/** Expected auth cookie name for current Supabase project. */
+export function getExpectedAuthCookieName(): string {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const projectRef = url?.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] || "unknown";
+  return `sb-${projectRef}-auth-token`;
 }
 
 /**

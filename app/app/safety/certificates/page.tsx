@@ -37,7 +37,10 @@ export default function SafetyCertificatesPage() {
           `)
           .eq("employees.org_id", currentOrg.id)
           .in("skills.category", ["safety", "certificate"]),
-        supabase.from("employees").select("line").eq("org_id", currentOrg.id).eq("is_active", true),
+        fetch("/api/lines", { credentials: "include" }).then(async (r) => {
+          const j = await r.json().catch(() => ({}));
+          return r.ok && Array.isArray(j.lines) ? j : { lines: [] };
+        }),
         supabase.from("skills").select("id, name").in("category", ["safety", "certificate"]),
       ]);
 
@@ -101,7 +104,9 @@ export default function SafetyCertificatesPage() {
         });
 
       setCertificates(mappedCerts);
-      setLines([...new Set((linesRes.data || []).map((r) => r.line).filter(Boolean))].sort());
+      const lineList = Array.isArray(linesRes.lines) ? linesRes.lines : [];
+      setLines(lineList);
+      if ("source" in linesRes && linesRes.source) console.debug("[certificates lines] source:", linesRes.source);
       setSkills((skillsRes.data || []).map((s) => ({ id: s.id, name: s.name })));
       setLoading(false);
     }

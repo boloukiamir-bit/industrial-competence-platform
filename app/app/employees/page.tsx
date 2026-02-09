@@ -31,13 +31,17 @@ export default function EmployeesPage() {
   const [menuRowId, setMenuRowId] = useState<string | null>(null);
   const [deactivateEmployee, setDeactivateEmployee] = useState<Employee | null>(null);
   const [deactivating, setDeactivating] = useState(false);
+  const [lines, setLines] = useState<string[]>([]);
   const { toast } = useToast();
 
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/employees", {
+      const url = lineFilter
+        ? `/api/employees?lineCode=${encodeURIComponent(lineFilter)}`
+        : "/api/employees";
+      const res = await fetch(url, {
         credentials: "include",
         headers: withDevBearer(),
       });
@@ -74,6 +78,7 @@ export default function EmployeesPage() {
           dateOfBirth: row.dateOfBirth as string | undefined,
           role: String(row.role ?? ""),
           line: String(row.line ?? ""),
+          lineCode: String((row as { lineCode?: string }).lineCode ?? row.line ?? ""),
           team: String(row.team ?? ""),
           employmentType: (row.employmentType as string) ?? "permanent",
           startDate: row.startDate as string | undefined,
@@ -90,11 +95,29 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, lineFilter]);
 
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
+
+  useEffect(() => {
+    async function loadLines() {
+      try {
+        const res = await fetch("/api/lines", { credentials: "include", headers: withDevBearer() });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && Array.isArray(json.lines)) {
+          setLines(json.lines);
+          if (json.source) console.debug("[lines] source:", json.source);
+        } else {
+          setLines([]);
+        }
+      } catch {
+        setLines([]);
+      }
+    }
+    loadLines();
+  }, []);
 
   useEffect(() => {
     if (!menuRowId) return;
@@ -103,14 +126,12 @@ export default function EmployeesPage() {
     return () => document.removeEventListener("click", close);
   }, [menuRowId]);
 
-  const lines = [...new Set(employees.map((e) => e.line).filter(Boolean))].sort();
-
   const filteredEmployees = employees.filter((e) => {
     const matchesSearch =
       !searchTerm ||
       e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       e.employeeNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesLine = !lineFilter || e.line === lineFilter;
+    const matchesLine = !lineFilter || (e as { lineCode?: string }).lineCode === lineFilter || e.line === lineFilter;
     return matchesSearch && matchesLine;
   });
 

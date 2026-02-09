@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { 
   Select,
@@ -12,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CalendarDays } from "lucide-react";
 import { PriorityFixesWidget } from "@/components/cockpit/PriorityFixesWidget";
 import { ActionsWidget } from "@/components/cockpit/ActionsWidget";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
@@ -25,6 +25,10 @@ import { HandoverWidget } from "@/components/cockpit/HandoverWidget";
 import { ActionDrawer } from "@/components/cockpit/ActionDrawer";
 import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal";
 import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
+import { IssueTable } from "@/components/cockpit/IssueTable";
+import { IssueDrawer } from "@/components/cockpit/IssueDrawer";
+import { InterventionQueue } from "@/components/cockpit/InterventionQueue";
+import type { CockpitIssueRow } from "@/app/api/cockpit/issues/route";
 import { isDemoMode } from "@/lib/demoRuntime";
 import {
   DEMO_ACTIONS,
@@ -57,6 +61,12 @@ import type {
 } from "@/types/cockpit";
 import { useToast } from "@/hooks/use-toast";
 import { fetchJson } from "@/lib/coreFetch";
+import { cockpitSummaryParams, dateDaysAgo } from "@/lib/client/cockpitUrl";
+import { isLegacyLine } from "@/lib/shared/isLegacyLine";
+import { PageFrame } from "@/components/layout/PageFrame";
+import { aggregateRanges, formatSekRange, formatHoursRange, FRAGILITY_PTS } from "@/lib/cockpitCostEngine";
+import { SectionHeader } from "@/components/ui/section-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import Link from "next/link";
 
 type GapsLineRow = {
@@ -73,20 +83,22 @@ type GapsLineRow = {
 
 function CockpitSkeleton() {
   return (
-    <div className="p-6 max-w-[1600px] mx-auto animate-pulse">
-      <div className="h-8 w-48 bg-muted rounded mb-2" />
-      <div className="h-4 w-32 bg-muted rounded mb-6" />
-      <div className="h-32 bg-muted rounded-lg mb-6" />
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="h-24 bg-muted rounded-lg" />
-        ))}
+    <PageFrame>
+      <div className="animate-pulse">
+        <div className="h-8 w-48 bg-muted rounded mb-2 ds-h1" />
+        <div className="h-4 w-32 bg-muted rounded mb-6 ds-meta" />
+        <div className="h-32 bg-muted rounded-[var(--ds-radius-card)] mb-6" />
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 bg-muted rounded-[var(--ds-radius-card)]" />
+          ))}
+        </div>
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-4 h-64 bg-muted rounded-[var(--ds-radius-card)]" />
+          <div className="col-span-8 h-64 bg-muted rounded-[var(--ds-radius-card)]" />
+        </div>
       </div>
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-4 h-64 bg-muted rounded-lg" />
-        <div className="col-span-8 h-64 bg-muted rounded-lg" />
-      </div>
-    </div>
+    </PageFrame>
   );
 }
 
@@ -94,8 +106,16 @@ const SHIFT_OPTIONS = ["Day", "Evening", "Night"] as const;
 
 export default function CockpitPage() {
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { date, shiftType, line, setDate, setShiftType, setLine } = useCockpitFilters();
   const [isDemo, setIsDemo] = useState(false);
+  const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null);
+  const [fallbackSearchDone, setFallbackSearchDone] = useState(false);
+  const [fallbackSearching, setFallbackSearching] = useState(false);
+  const [fallbackRetryKey, setFallbackRetryKey] = useState(0);
+  const [lastFallbackDate, setLastFallbackDate] = useState<string | null>(null);
+  const urlSyncedRef = useRef(false);
   
   const [actions, setActions] = useState<Action[]>([]);
   const [staffingCards, setStaffingCards] = useState<StationStaffingCard[]>([]);
@@ -126,18 +146,92 @@ export default function CockpitPage() {
   const [gapsLoading, setGapsLoading] = useState(false);
   const [rootCauseDrawerLine, setRootCauseDrawerLine] = useState<GapsLineRow | null>(null);
 
-  // Load cockpit summary from execution_decisions (respects date/shift/line filters)
+  const [issues, setIssues] = useState<CockpitIssueRow[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+  const [issuesError, setIssuesError] = useState<string | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<CockpitIssueRow | null>(null);
+  const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
+  const [issuesRefreshKey, setIssuesRefreshKey] = useState(0);
+  const [showResolved, setShowResolved] = useState(false);
+  const [lastResolvedIssue, setLastResolvedIssue] = useState<CockpitIssueRow | null>(null);
+  const [undoUntil, setUndoUntil] = useState<number>(0);
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
+  const [markedPlannedIds, setMarkedPlannedIds] = useState<Set<string>>(new Set());
+
+  // Only query params: date, shift_code, optional line, optional show_resolved=1. Default show_resolved OFF.
+  const summaryParams = (() => {
+    const p = new URLSearchParams();
+    if (date) p.set("date", date);
+    p.set("shift_code", shiftType);
+    if (line && line !== "all") p.set("line", line);
+    if (showResolved) p.set("show_resolved", "1");
+    return p;
+  })();
+  const issuesParams = (() => {
+    const p = new URLSearchParams();
+    if (date) p.set("date", date);
+    p.set("shift_code", shiftType);
+    if (line && line !== "all") p.set("line", line);
+    if (showResolved) p.set("show_resolved", "1");
+    return p;
+  })();
+  const summaryUrl = `/api/cockpit/summary?${summaryParams.toString()}`;
+  const issuesUrl = `/api/cockpit/issues?${issuesParams.toString()}`;
+
+  // URL sync: read date, shift_code, line from URL on mount
+  useEffect(() => {
+    if (urlSyncedRef.current) return;
+    const qDate = searchParams.get("date")?.trim();
+    const qShift = searchParams.get("shift_code")?.trim();
+    const qLine = searchParams.get("line")?.trim();
+    if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) setDate(qDate);
+    if (qShift === "Day" || qShift === "Evening" || qShift === "Night") setShiftType(qShift);
+    if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
+    urlSyncedRef.current = true;
+  }, [searchParams, setDate, setShiftType, setLine]);
+
+  // URL sync: push date, shift_code, line to URL when they change
+  useEffect(() => {
+    if (!urlSyncedRef.current) return;
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("date", date);
+    p.set("shift_code", shiftType);
+    p.set("line", line);
+    const next = p.toString();
+    const current = searchParams.toString();
+    if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
+  }, [date, shiftType, line, router, searchParams]);
+
+  // Clear auto-selected label and fallback date when user changes date
+  useEffect(() => {
+    if (autoSelectedDate != null && date !== autoSelectedDate) setAutoSelectedDate(null);
+    if (lastFallbackDate != null && date !== lastFallbackDate) setLastFallbackDate(null);
+  }, [date, autoSelectedDate, lastFallbackDate]);
+
+  // P1.3: Undo countdown (30s)
+  useEffect(() => {
+    if (!lastResolvedIssue || undoUntil <= 0) return;
+    const tick = () => {
+      const now = Date.now();
+      if (now >= undoUntil) {
+        setLastResolvedIssue(null);
+        setUndoUntil(0);
+        setUndoSecondsLeft(0);
+        return;
+      }
+      setUndoSecondsLeft(Math.ceil((undoUntil - now) / 1000));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lastResolvedIssue, undoUntil]);
+
+  // Load cockpit summary (date, shift_code, optional line)
   useEffect(() => {
     let cancelled = false;
     setSummaryLoading(true);
     setSummaryError(null);
-    const params = new URLSearchParams();
-    if (date) params.set("date", date);
-    if (shiftType) params.set("shift", shiftType);
-    if (line && line !== "all") params.set("line", line);
-    const qs = params.toString();
-    const url = `/api/cockpit/summary${qs ? `?${qs}` : ""}`;
-    fetchJson<CockpitSummaryResponse>(url)
+    fetchJson<CockpitSummaryResponse>(summaryUrl)
       .then((res) => {
         if (!res.ok) {
           const friendly = res.status === 401 ? "Invalid or expired session" : res.error;
@@ -168,7 +262,51 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, line, toast]);
+  }, [summaryUrl, toast]);
+
+  // P1.1: If current date has no issues, search backward up to 14 days for most recent date with data
+  const fallbackKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isDemoMode() || summaryLoading || summary == null) return;
+    if (summary.active_total > 0) {
+      setFallbackSearchDone(false);
+      return;
+    }
+    if (date === lastFallbackDate) return;
+    const key = `${date}-${shiftType}-${line}`;
+    if (fallbackKeyRef.current === key) return;
+    fallbackKeyRef.current = key;
+    setFallbackSearching(true);
+    let cancelled = false;
+    const searchBack = async (fromDate: string, daysLeft: number): Promise<string | null> => {
+      for (let i = 1; i <= daysLeft; i++) {
+        if (cancelled) return null;
+        const d = dateDaysAgo(fromDate, i);
+        const res = await fetchJson<CockpitSummaryResponse>(
+          `/api/cockpit/summary?${cockpitSummaryParams({
+            date: d,
+            shift_code: shiftType,
+            line: line === "all" ? undefined : line,
+            show_resolved: showResolved,
+          }).toString()}`
+        );
+        if (!cancelled && res.ok && res.data && res.data.active_total > 0) return d;
+      }
+      return null;
+    };
+    searchBack(date, 14).then((found) => {
+      if (cancelled) return;
+      setFallbackSearching(false);
+      if (found != null) {
+        setDate(found);
+        setAutoSelectedDate(found);
+        setLastFallbackDate(found);
+      } else {
+        setFallbackSearchDone(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [date, shiftType, line, showResolved, summary, summaryLoading, setDate, fallbackRetryKey, lastFallbackDate]);
 
   // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
   useEffect(() => {
@@ -202,6 +340,38 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [date, shiftType, toast]);
 
+  // Load Issue Inbox (date, shift_code, optional line)
+  useEffect(() => {
+    if (isDemoMode()) return;
+    let cancelled = false;
+    setIssuesLoading(true);
+    setIssuesError(null);
+    fetchJson<{ ok: boolean; issues?: CockpitIssueRow[] }>(issuesUrl)
+      .then((res) => {
+        if (!res.ok) {
+          const friendly = res.status === 401 ? "Invalid or expired session" : res.error;
+          toast({ title: friendly, variant: "destructive" });
+          setIssuesError(friendly);
+          throw new Error(friendly);
+        }
+        return res.data;
+      })
+      .then((data) => {
+        if (!cancelled) setIssues(data.issues ?? []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setIssuesError(err instanceof Error ? err.message : "Unable to load issues");
+          setIssues([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIssuesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [issuesUrl, toast, issuesRefreshKey]);
+
+
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
     .sort((a, b) => {
@@ -210,28 +380,19 @@ export default function CockpitPage() {
     })
     .slice(0, 5);
 
-  // Load lines from DB
+  // Load line options from v_cockpit_station_summary.area for selected date+shift (no legacy codes)
   useEffect(() => {
-    async function loadLines() {
-      try {
-        const response = await fetchJson<{ lines?: string[] }>("/api/cockpit/lines");
-        if (!response.ok) {
-          const friendly = response.status === 401 ? "Invalid or expired session" : response.error;
-          const toastMessage =
-            response.status === 401
-              ? "Request failed (401) — Session expired. Please reload/login."
-              : `Request failed (${response.status}) — ${response.error}`;
-          toast({ title: toastMessage, variant: "destructive" });
-          setPageError(friendly);
-          throw new Error(friendly);
-        }
-        setAvailableLines(response.data.lines || []);
-      } catch (error) {
-        console.error("Failed to load lines:", error);
-      }
-    }
-    loadLines();
-  }, [toast]);
+    if (isDemoMode()) return;
+    const p = new URLSearchParams({ date, shift_code: shiftType });
+    const url = `/api/cockpit/lines?${p.toString()}`;
+    fetchJson<{ lines?: string[] }>(url)
+      .then((res) => {
+        if (!res.ok) return;
+        setAvailableLines(res.data.lines ?? []);
+        if ("source" in res.data && res.data.source) console.debug("[cockpit lines] source:", res.data.source);
+      })
+      .catch((err) => console.error("[cockpit lines]", err));
+  }, [date, shiftType]);
 
   useEffect(() => {
     const demo = isDemoMode();
@@ -355,27 +516,87 @@ export default function CockpitPage() {
     toast({ title: "Handover report generated", description: "PDF ready for download" });
   };
 
+  const handleIssueRowClick = (row: CockpitIssueRow) => {
+    setSelectedIssue(row);
+    setIssueDrawerOpen(true);
+  };
+
+  const handleIssueDecision = async (action: "acknowledged" | "plan_training" | "swap" | "escalate") => {
+    if (!selectedIssue?.station_id) return;
+    const snapshot = selectedIssue;
+    setIssues((prev) => prev.filter((i) => i.issue_id !== snapshot.issue_id));
+    setIssueDrawerOpen(false);
+    setSelectedIssue(null);
+    const until = Date.now() + 30_000;
+    setLastResolvedIssue(snapshot);
+    setUndoUntil(until);
+    setUndoSecondsLeft(30);
+    const issueType = snapshot.issue_type ?? (snapshot.severity === "BLOCKING" ? "NO_GO" : "WARNING");
+    const res = await fetchJson<{ ok: boolean }>("/api/cockpit/issues/decisions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date,
+        shift_code: snapshot.shift_code,
+        station_id: snapshot.station_id,
+        issue_type: issueType,
+        action,
+      }),
+    });
+    if (!res.ok) {
+      setIssues((prev) => [...prev, snapshot].sort((a, b) => (a.issue_id < b.issue_id ? -1 : 1)));
+      setLastResolvedIssue(null);
+      setUndoUntil(0);
+      toast({ title: res.error ?? "Failed to save decision", variant: "destructive" });
+      return;
+    }
+  };
+
+  const handleResolveUndo = () => {
+    if (!lastResolvedIssue) return;
+    setIssues((prev) => [...prev, lastResolvedIssue].sort((a, b) => (a.issue_id < b.issue_id ? -1 : 1)));
+    setLastResolvedIssue(null);
+    setUndoUntil(0);
+    setUndoSecondsLeft(0);
+    toast({ title: "Undo restored in UI; refresh to confirm." });
+  };
+
   const dateLabel = format(new Date(date + "T12:00:00"), "EEEE, MMMM d, yyyy");
+
+  // Fragility Index 0–100 from severity (BLOCKING = 25 pts, WARNING = 8 pts). UI-only, no backend.
+  const blockingCount = summary?.active_blocking ?? issues.filter((i) => !i.resolved && i.severity === "BLOCKING").length;
+  const warningCount = summary?.active_nonblocking ?? issues.filter((i) => !i.resolved && i.severity === "WARNING").length;
+  const fragilityBlockingPts = blockingCount * 25;
+  const fragilityWarningPts = warningCount * 8;
+  const fragilityIndex = Math.min(100, fragilityBlockingPts + fragilityWarningPts);
+
+  // Management Brief (current view only; UI-only heuristics, range aggregation)
+  const resolvedIssues = issues.filter((i) => i.resolved);
+  const openIssues = issues.filter((i) => !i.resolved);
+  const mitigatedIssues = resolvedIssues.filter((i) => !i.decision_actions?.includes?.("acknowledged"));
+  const acceptedRiskIssues = resolvedIssues.filter((i) => i.decision_actions?.includes?.("acknowledged"));
+  const hasClosed = resolvedIssues.length > 0;
+  const hasOpen = openIssues.length > 0;
+  const showManagementBrief = issues.length >= 1;
+
+  const openRanges = aggregateRanges(openIssues.map((i) => i.severity));
+  const openFragilityExposure = openIssues.reduce((s, i) => s + FRAGILITY_PTS[i.severity], 0);
+  const avoidedRanges = aggregateRanges(mitigatedIssues.map((i) => i.severity));
+  const deferredRanges = aggregateRanges(acceptedRiskIssues.map((i) => i.severity));
+  const netFragilityDelta = resolvedIssues.reduce((s, i) => s + FRAGILITY_PTS[i.severity], 0);
 
   const filteredStaffingCards = line === "all"
     ? staffingCards
     : staffingCards.filter((c) => c.station.line === line);
 
-  // Use lines from DB if available, otherwise fallback to lines from staffingCards
-  const lines = availableLines.length > 0
-    ? availableLines
-    : [...new Set(staffingCards.map((c) => c.station.line).filter(Boolean))];
+  // Line options from /api/cockpit/lines only; exclude any legacy display names
+  const lineOptions = availableLines.filter((l) => !isLegacyLine(l));
 
   if (pageError) {
     return (
-      <div className="p-6 max-w-[1600px] mx-auto">
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground mb-4">{pageError}</p>
-            <Button onClick={() => window.location.reload()}>Reload</Button>
-          </CardContent>
-        </Card>
-      </div>
+      <PageFrame>
+        <EmptyState headline="Something went wrong" description={pageError} action={<Button onClick={() => window.location.reload()}>Reload</Button>} />
+      </PageFrame>
     );
   }
 
@@ -383,57 +604,198 @@ export default function CockpitPage() {
     return <CockpitSkeleton />;
   }
 
-  return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto">
-      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="heading-cockpit">
-            Today
-          </h1>
-          <p className="text-muted-foreground flex items-center gap-2 mt-1 text-sm">
-            <CalendarDays className="h-4 w-4" />
-            {dateLabel}
-          </p>
-        </div>
-
+  const filterBar = (
+    <>
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+            className="h-8 px-2 rounded-sm border border-input bg-background cockpit-body"
             data-testid="input-date"
           />
           <Select value={shiftType} onValueChange={(v) => setShiftType(v as typeof shiftType)}>
-            <SelectTrigger className="w-[130px]" data-testid="select-shift">
+            <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-shift">
               <SelectValue placeholder="Shift" />
             </SelectTrigger>
             <SelectContent>
               {SHIFT_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
+                <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-
           <Select value={line} onValueChange={setLine}>
-            <SelectTrigger className="w-[130px]" data-testid="select-line">
+            <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-line">
               <SelectValue placeholder="Line" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Lines</SelectItem>
-              {lines.filter((l) => l !== "Assembly").map((l) => (
-                <SelectItem key={l} value={l as string}>
-                  {l}
-                </SelectItem>
+              {lineOptions.map((l) => (
+                <SelectItem key={l} value={l}>{l}</SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <label className="flex items-center gap-1.5 cockpit-body cursor-pointer ml-2">
+            <input
+              type="checkbox"
+              checked={showResolved}
+              onChange={(e) => setShowResolved(e.target.checked)}
+              className="rounded-sm border-input"
+              data-testid="cockpit-show-resolved"
+            />
+            Show resolved
+          </label>
+        </div>
+        <div className="flex items-center gap-3">
+          {!summaryLoading && summary != null && (
+            <span className="cockpit-label cockpit-num" data-testid="cockpit-active-count">
+              Open decisions: {summary.active_total}
+            </span>
+          )}
+          {!isDemoMode() && (
+            <div
+              className="cockpit-card-primary flex items-baseline gap-2 px-3 py-2"
+              title={`Blocking: ${blockingCount} × 25 = ${fragilityBlockingPts} · Warnings: ${warningCount} × 8 = ${fragilityWarningPts}`}
+              data-testid="fragility-index"
+            >
+              <span className="cockpit-label">Fragility Index</span>
+              <span className="cockpit-num text-[1.75rem] font-semibold" style={{ color: "hsl(var(--foreground))" }}>{fragilityIndex}</span>
+            </div>
+          )}
         </div>
       </header>
+    </>
+  );
 
-      <div className="mb-6">
+  const debugPanel = (
+    <div data-testid="cockpit-debug-panel">
+      <p className="font-semibold text-muted-foreground mb-1">Debug (dev only)</p>
+      <p><span className="text-muted-foreground">Summary:</span> {typeof window !== "undefined" ? `${window.location.origin}${summaryUrl}` : summaryUrl}</p>
+      <p><span className="text-muted-foreground">Decisions API:</span> {typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl}</p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="mt-2"
+        onClick={() => {
+          const full = typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl;
+          void navigator.clipboard.writeText(full);
+          toast({ title: "Copied decisions API URL" });
+        }}
+      >
+        Copy decisions API URL
+      </Button>
+    </div>
+  );
+
+  return (
+    <PageFrame filterBar={filterBar} debugPanel={debugPanel}>
+      {summary && summary.active_total === 0 && !summaryLoading && !fallbackSearching && fallbackSearchDone && (
+        <div className="cockpit-card-secondary mb-4 px-3 py-2 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
+          <span className="cockpit-body text-muted-foreground">No decisions</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {SHIFT_OPTIONS.map((s) => (
+              <Button key={s} variant="outline" size="sm" className="h-7 text-[13px]" onClick={() => setShiftType(s)} data-testid={`empty-shift-${s}`}>
+                {s}
+              </Button>
+            ))}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 text-[13px]"
+              onClick={() => {
+                setFallbackSearchDone(false);
+                fallbackKeyRef.current = null;
+                setFallbackRetryKey((k) => k + 1);
+              }}
+              data-testid="empty-jump-latest"
+            >
+              Jump to latest
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {lastResolvedIssue != null && undoUntil > 0 && (() => {
+        const pts = lastResolvedIssue.severity === "BLOCKING" ? 25 : 8;
+        return (
+          <div className="cockpit-card mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]" data-testid="cockpit-resolve-undo-bar">
+            <div className="flex flex-wrap items-center gap-3 cockpit-body">
+              <span className="cockpit-status-ok font-medium">Decision recorded.</span>
+              <span className="cockpit-num">Fragility Δ −{pts}</span>
+              <span className="cockpit-num">Undo ({undoSecondsLeft}s)</span>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-[13px]" onClick={handleResolveUndo} data-testid="cockpit-resolve-undo-btn">
+              Undo
+            </Button>
+          </div>
+        );
+      })()}
+
+      {!isDemoMode() && showManagementBrief && (
+        <div className="cockpit-card-primary mb-4 p-5" data-testid="management-brief">
+          <p className="cockpit-title font-semibold mb-4">Management Brief</p>
+          {!hasClosed && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="cockpit-num text-[1.125rem] font-semibold">{formatSekRange(openRanges.costMin, openRanges.costMax)}</p>
+                <p className="cockpit-label mt-0.5">Cost</p>
+              </div>
+              <div>
+                <p className="cockpit-num text-[1.125rem] font-semibold">{formatHoursRange(openRanges.hoursMin, openRanges.hoursMax)}</p>
+                <p className="cockpit-label mt-0.5">Time</p>
+              </div>
+              <div>
+                <p className="cockpit-num text-[1.125rem] font-semibold">{openFragilityExposure}</p>
+                <p className="cockpit-label mt-0.5">Fragility</p>
+              </div>
+            </div>
+          )}
+          {hasClosed && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-ok">
+                    {formatSekRange(avoidedRanges.costMin, avoidedRanges.costMax)}
+                  </p>
+                  <p className="cockpit-label mt-0.5">Cost avoided</p>
+                </div>
+                <div>
+                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-at-risk">
+                    {formatSekRange(deferredRanges.costMin, deferredRanges.costMax)}
+                  </p>
+                  <p className="cockpit-label mt-0.5">Cost deferred</p>
+                </div>
+                <div>
+                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-ok">
+                    {formatHoursRange(avoidedRanges.hoursMin, avoidedRanges.hoursMax)}
+                  </p>
+                  <p className="cockpit-label mt-0.5">Time saved</p>
+                </div>
+                <div>
+                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-at-risk">
+                    {formatHoursRange(deferredRanges.hoursMin, deferredRanges.hoursMax)}
+                  </p>
+                  <p className="cockpit-label mt-0.5">Time deferred</p>
+                </div>
+              </div>
+              {hasOpen && (
+                <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-baseline gap-4 cockpit-body cockpit-num">
+                  <span>{formatSekRange(openRanges.costMin, openRanges.costMax)}</span>
+                  <span>{formatHoursRange(openRanges.hoursMin, openRanges.hoursMax)}</span>
+                  <span>Fragility {openFragilityExposure}</span>
+                </div>
+              )}
+              <div className="flex flex-wrap items-baseline gap-4 mt-4 pt-4 border-t border-border cockpit-body cockpit-num text-muted-foreground">
+                <span>Accepted: <span className="font-medium text-foreground">{acceptedRiskIssues.length}</span></span>
+                <span>Net Δ <span className="font-medium cockpit-status-ok">−{netFragilityDelta}</span></span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="mb-5">
         <PriorityFixesWidget
           items={priorityItems}
           onResolve={handleResolvePriority}
@@ -445,46 +807,69 @@ export default function CockpitPage() {
         />
       </div>
 
+      {!isDemoMode() && (
+        <div className="mb-5">
+          <InterventionQueue
+            issues={issues}
+            markedPlannedIds={markedPlannedIds}
+            currentFragility={fragilityIndex}
+            onMarkPlanned={(issueId) => setMarkedPlannedIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(issueId)) next.delete(issueId);
+              else next.add(issueId);
+              return next;
+            })}
+            onViewDecision={(issue) => {
+              setSelectedIssue(issue);
+              setIssueDrawerOpen(true);
+            }}
+          />
+          <SectionHeader title="Decision queue" description={issues.length > 0 ? String(issues.length) : undefined} className="mb-2 mt-1" />
+          <IssueTable
+            issues={issues}
+            loading={issuesLoading}
+            error={issuesError}
+            onRowClick={handleIssueRowClick}
+          />
+        </div>
+      )}
+
       {metrics && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Open Actions</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-2xl font-bold tabular-nums">{metrics.openActions}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 mt-6 pt-4 border-t border-border">
+          <div className="cockpit-card-secondary px-3 py-2">
+            <p className="cockpit-label">Open actions</p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <p className="cockpit-title cockpit-num">{metrics.openActions}</p>
               {metrics.criticalActions > 0 && (
-                <Badge variant="destructive" className="text-[10px]">
-                  {metrics.criticalActions} critical
-                </Badge>
+                <span className="cockpit-label cockpit-status-blocking">{metrics.criticalActions} critical</span>
               )}
             </div>
           </div>
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Staffing</p>
-            <div className="flex items-baseline gap-1 mt-1">
-              <p className="text-2xl font-bold tabular-nums">{metrics.staffedStations}</p>
-              <p className="text-lg text-muted-foreground">/ {metrics.totalStations}</p>
+          <div className="cockpit-card-secondary px-3 py-2">
+            <p className="cockpit-label">Staffing</p>
+            <div className="flex items-baseline gap-1 mt-0.5 cockpit-num">
+              <p className="cockpit-title">{metrics.staffedStations}</p>
+              <p className="cockpit-body text-muted-foreground">/ {metrics.totalStations}</p>
             </div>
           </div>
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Compliance</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-2xl font-bold tabular-nums text-orange-500">{metrics.expiringCompliance + metrics.overdueCompliance}</p>
-              <span className="text-xs text-muted-foreground">
-                {metrics.overdueCompliance} overdue
-              </span>
+          <div className="cockpit-card-secondary px-3 py-2">
+            <p className="cockpit-label">Compliance</p>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <p className="cockpit-title cockpit-num cockpit-status-at-risk">{metrics.expiringCompliance + metrics.overdueCompliance}</p>
+              <span className="cockpit-label">{metrics.overdueCompliance} overdue</span>
             </div>
           </div>
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Safety</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-2xl font-bold tabular-nums">{metrics.safetyObservationsThisWeek}</p>
-              <span className="text-xs text-muted-foreground">this week</span>
+          <div className="cockpit-card-secondary px-3 py-2">
+            <p className="cockpit-label">Safety</p>
+            <div className="flex items-baseline gap-2 mt-0.5 cockpit-num">
+              <p className="cockpit-title">{metrics.safetyObservationsThisWeek}</p>
+              <span className="cockpit-label">this week</span>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-4 mt-2">
         <div className="lg:col-span-4 space-y-4 lg:space-y-6">
           <ActionsWidget
             actions={actions}
@@ -549,6 +934,17 @@ export default function CockpitPage() {
         date={date}
         shift={shiftType}
       />
-    </div>
+
+      <IssueDrawer
+        open={issueDrawerOpen}
+        onOpenChange={setIssueDrawerOpen}
+        issue={selectedIssue}
+        onAcknowledge={() => handleIssueDecision("acknowledged")}
+        onPlanTraining={() => handleIssueDecision("plan_training")}
+        onSwap={() => handleIssueDecision("swap")}
+        onEscalate={() => handleIssueDecision("escalate")}
+        isAcknowledged={selectedIssue?.resolved ?? false}
+      />
+    </PageFrame>
   );
 }

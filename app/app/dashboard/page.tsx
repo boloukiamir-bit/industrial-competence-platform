@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { HrDashboard } from "@/components/dashboard/HrDashboard";
 import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
 import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
 import { useOrg } from "@/hooks/useOrg";
 import { isHrAdmin } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
 
 export default function DashboardPage() {
   const { currentRole } = useOrg();
@@ -57,13 +59,18 @@ export default function DashboardPage() {
 
   return (
     <div className="p-8" data-testid="dashboard-page">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {getGreeting()}
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">
-          {getRoleLabel()} Dashboard
-        </p>
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {getGreeting()}
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            {getRoleLabel()} Dashboard
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/app/onboarding">Get started</Link>
+        </Button>
       </div>
 
       {isHrAdmin(currentRole) && <HrDashboard />}

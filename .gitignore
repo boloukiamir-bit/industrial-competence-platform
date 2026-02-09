@@ -27,3 +27,15 @@ scripts/test-db-conn.js
 # SSL certs / bundles (never commit)
 cert-*.pem
 supabase_pooler_ca_bundle.pem
+
+# local cookies / auth artifacts
+.dev-cockpit-cookies
+project_context.txt
+
+# local env
+.env
+.env.local
+.env.*.local
+
+# vercel local
+.vercel

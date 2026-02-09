@@ -193,12 +193,13 @@ export async function GET(request: NextRequest) {
       last_name?: string;
       employee_number?: string;
       line?: string;
+      line_code?: string;
       site_id?: string;
     }> = [];
     if (employeeIds.length > 0) {
       let empQ = supabaseAdmin
         .from("employees")
-        .select("id, name, first_name, last_name, employee_number, line, site_id")
+        .select("id, name, first_name, last_name, employee_number, line, line_code, site_id")
         .eq("org_id", orgId)
         .in("id", employeeIds);
       if (activeSiteId) empQ = empQ.eq("site_id", activeSiteId);
@@ -213,6 +214,7 @@ export async function GET(request: NextRequest) {
           name: e.name || [e.first_name, e.last_name].filter(Boolean).join(" ") || "—",
           employee_number: e.employee_number ?? "",
           line: e.line ?? null,
+          line_code: e.line_code ?? e.line ?? null,
           site_id: e.site_id ?? null,
         },
       ])
@@ -263,7 +265,10 @@ export async function GET(request: NextRequest) {
       });
     }
     if (line) {
-      filtered = filtered.filter((a: { employee_id: string }) => empMap.get(a.employee_id)?.line === line);
+      filtered = filtered.filter((a: { employee_id: string }) => {
+        const emp = empMap.get(a.employee_id);
+        return emp?.line_code === line || emp?.line === line;
+      });
     }
     if (categoryParam !== "all") {
       filtered = filtered.filter(

@@ -92,7 +92,7 @@ export default function RequirementsPage() {
   const { toast, toasts } = useToast();
   const { isAdminOrHr } = useOrg();
 
-  const [line, setLine] = useState(initialLine || "BEA");
+  const [line, setLine] = useState(initialLine || "");
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
   const [data, setData] = useState<ApiResponse | null>(null);

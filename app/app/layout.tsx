@@ -28,7 +28,8 @@ import {
   Factory,
   Target,
   ClipboardCheck,
-  Inbox
+  Inbox,
+  Lightbulb
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser, isHrAdmin } from "@/lib/auth";
 import { useOrg } from "@/hooks/useOrg";
@@ -70,11 +71,11 @@ const hrNavItems: NavItem[] = [
   { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
   { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
-  { name: "HR Workflows", href: "/app/workflows/templates", icon: Workflow, hrAdminOnly: true },
-  { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
-  { name: "Compliance Templates", href: "/app/hr/templates/compliance-actions", icon: FileText, hrAdminOnly: true },
-  { name: "Action packs", href: "/app/hr/templates/action-packs", icon: ClipboardCheck, hrAdminOnly: false },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
+];
+
+const strategicPlanningNavItems: NavItem[] = [
+  { name: "Scenario Builder", href: "/app/strategic-planning/scenario-builder", icon: Lightbulb },
 ];
 
 const moreNavItems: NavItem[] = [
@@ -104,7 +105,6 @@ const pilotModeHrNavItems: NavItem[] = [
   { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
   { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
   { name: "HR Inbox", href: "/app/hr", icon: Clipboard, hrAdminOnly: true },
-  { name: "HR Workflows", href: "/app/hr/templates", icon: Workflow, hrAdminOnly: true },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -243,6 +243,7 @@ function AppLayoutContent({
 
   const visibleCoreItems = isPilotMode ? filterItems(pilotModeCoreNavItems, roleForNav) : filterItems(coreNavItems, roleForNav);
   const visibleHrItems = isPilotMode ? filterItems(pilotModeHrNavItems, roleForNav) : filterItems(hrNavItems, roleForNav);
+  const visibleStrategicPlanningItems = isPilotMode ? [] : strategicPlanningNavItems;
   const visibleMoreItems = isPilotMode ? [] : moreNavItems;
   const visibleSpaljistenItems = isPilotMode ? [] : showSpaljistenNav ? spaljistenNavItems : [];
   const visibleSettingsItems = isPilotMode ? [] : filterItems(settingsNavItems, roleForNav).filter((item) => (isProduction && item.name === "Debug") ? false : true);
@@ -293,6 +294,17 @@ function AppLayoutContent({
                       {visibleHrItems.map(renderNavItem)}
                     </ul>
                   )}
+                </div>
+              )}
+
+              {visibleStrategicPlanningItems.length > 0 && (
+                <div className="mb-4">
+                  <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    Strategic Planning
+                  </p>
+                  <ul className="space-y-1">
+                    {visibleStrategicPlanningItems.map(renderNavItem)}
+                  </ul>
                 </div>
               )}
 
