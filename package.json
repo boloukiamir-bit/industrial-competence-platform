@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "next dev -p 5001 -H 0.0.0.0",
+    "dev": "next dev --webpack -H 0.0.0.0 -p 5001",
     "build": "next build",
     "start": "next start -p 5001 -H 0.0.0.0",
     "test": "bash -lc 'node --test --import tsx --test-reporter spec $(find tests/unit -type f -name \"*.test.ts\" -print)'",
