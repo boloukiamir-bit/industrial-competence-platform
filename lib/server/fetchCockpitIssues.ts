@@ -31,7 +31,7 @@ export type CockpitIssueRaw = {
   warning_count: number;
   go_count: number;
   roster_headcount: number;
-  station_shift_status: "NO_GO" | "WARNING" | "GO";
+  station_shift_status: "NO_GO" | "WARNING" | "GO" | "UNSTAFFED" | "ILLEGAL";
   severity_rank: number;
   leader_name: string | null;
 };
@@ -40,7 +40,7 @@ export type CockpitIssue = {
   issue_id: string;
   type: string;
   severity: "BLOCKING" | "WARNING";
-  issue_type: "NO_GO" | "WARNING" | "GO";
+  issue_type: "NO_GO" | "WARNING" | "GO" | "UNSTAFFED" | "ILLEGAL";
   line: string;
   shift_code: string;
   date: string;
@@ -164,11 +164,12 @@ export async function fetchCockpitIssues(
   const allRows = (rows || []) as CockpitIssueRaw[];
   const rawCountBeforeStatus = allRows.length;
 
-  // Include rows where station_shift_status IN ('NO_GO','WARNING') OR no_go_count>0 OR warning_count>0.
-  // (View derives station_shift_status from counts, so these are equivalent; include both for robustness.)
+  // Include rows that are blocking (NO_GO, UNSTAFFED, ILLEGAL), warning (WARNING), or have counts; exclude GO unless include_go.
   const statusMatch = (r: CockpitIssueRaw) =>
     r.station_shift_status === "NO_GO" ||
     r.station_shift_status === "WARNING" ||
+    r.station_shift_status === "UNSTAFFED" ||
+    r.station_shift_status === "ILLEGAL" ||
     (r.no_go_count ?? 0) > 0 ||
     (r.warning_count ?? 0) > 0;
 
@@ -232,9 +233,10 @@ export async function fetchCockpitIssues(
     }
   }
 
+  const BLOCKING_STATUSES = new Set<string>(["NO_GO", "UNSTAFFED", "ILLEGAL"]);
   const issues: CockpitIssue[] = [];
   for (const r of rawList) {
-    const severity = r.station_shift_status === "NO_GO" ? "BLOCKING" : "WARNING";
+    const severity = BLOCKING_STATUSES.has(r.station_shift_status) ? "BLOCKING" : "WARNING";
     const lineVal = r.area ?? "";
     const issueType = r.station_shift_status;
 
@@ -245,20 +247,32 @@ export async function fetchCockpitIssues(
 
     if (!show_resolved && dec?.resolved) continue;
 
+    const primaryLabel =
+      r.station_shift_status === "NO_GO"
+        ? "NO-GO: competence gap"
+        : r.station_shift_status === "WARNING"
+          ? "WARNING: competence gap"
+          : r.station_shift_status === "UNSTAFFED"
+            ? "UNSTAFFED: no roster"
+            : r.station_shift_status === "ILLEGAL"
+              ? "ILLEGAL: roster violation"
+              : "WARNING: competence gap";
     const rootCause = {
       type: "station_issue",
-      primary: r.station_shift_status === "NO_GO" ? "NO-GO: competence gap" : "WARNING: competence gap",
+      primary: primaryLabel,
       causes: [] as string[],
       no_go_count: r.no_go_count,
       warning_count: r.warning_count,
     };
 
     const recommendedAction =
-      r.station_shift_status === "NO_GO"
+      r.station_shift_status === "NO_GO" || r.station_shift_status === "UNSTAFFED"
         ? "assign"
         : r.station_shift_status === "WARNING"
           ? "swap"
-          : "";
+          : r.station_shift_status === "ILLEGAL"
+            ? "review"
+            : "";
 
     issues.push({
       issue_id: issueId,
@@ -287,12 +301,21 @@ export async function fetchCockpitIssues(
   return debug ? { issues, debug: debugInfo } : { issues };
 }
 
-/** Normalize shift param: accept shift_code or shift, return Day|Evening|Night or null */
+const COCKPIT_SHIFT_MAP: Record<string, string> = {
+  day: "Day",
+  evening: "Evening",
+  night: "Night",
+  s1: "S1",
+  s2: "S2",
+};
+
+/** Normalize shift param for cockpit: accept shift_code or shift; return S1|S2|Day|Evening|Night or null. */
 export function normalizeShiftParam(
   shiftCode?: string | null,
   shift?: string | null
 ): string | null {
-  const raw = shiftCode?.trim() || shift?.trim();
+  const raw = (shiftCode ?? shift ?? "").trim();
   if (!raw) return null;
-  return normalizeShift(raw);
+  const key = raw.toLowerCase();
+  return COCKPIT_SHIFT_MAP[key] ?? normalizeShift(raw);
 }
