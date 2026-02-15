@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import {
-  fetchCockpitIssues,
-  normalizeShiftParam,
-  type CockpitIssue,
-} from "@/lib/server/fetchCockpitIssues";
+import { fetchCockpitIssues, type CockpitIssue } from "@/lib/server/fetchCockpitIssues";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 
 export type CockpitIssueRow = CockpitIssue;
 
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const date = (url.searchParams.get("date") ?? "").trim();
+  const shift_code =
+    (url.searchParams.get("shift_code") ?? url.searchParams.get("shift") ?? "").trim();
+  if (!date || !shift_code) {
+    return NextResponse.json(
+      { ok: false, error: "date and shift are required" },
+      { status: 400 }
+    );
+  }
+
   try {
     const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const org = await getActiveOrgFromSession(request, supabase);
@@ -22,39 +30,27 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const date = searchParams.get("date")?.trim() || undefined;
-    const shiftCode = searchParams.get("shift_code") || searchParams.get("shift") || undefined;
-    const shift = normalizeShiftParam(shiftCode, searchParams.get("shift"));
-    const line = searchParams.get("line")?.trim();
+    const normalized = normalizeShiftParam(shift_code);
+    if (!normalized) {
+      const res = NextResponse.json(
+        { ok: false, error: "Invalid shift parameter" },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const line = (url.searchParams.get("line") ?? "").trim();
     const lineFilter = line && line !== "all" ? line : undefined;
-    const includeGo = searchParams.get("includeGo") === "1";
-    const showResolved = searchParams.get("show_resolved") === "1";
-    const debug = searchParams.get("debug") === "1";
-
-    if (!date || !shift) {
-      const res = NextResponse.json(
-        { ok: false, error: "date and shift are required (same as Summary)" },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    if (shiftCode && !shift) {
-      const res = NextResponse.json(
-        { ok: false, error: "Invalid shift parameter", details: { shift: shiftCode } },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
+    const includeGo = url.searchParams.get("includeGo") === "1";
+    const showResolved = url.searchParams.get("show_resolved") === "1";
+    const debug = url.searchParams.get("debug") === "1";
 
     const { issues, debug: debugInfo } = await fetchCockpitIssues({
       org_id: org.activeOrgId,
       site_id: org.activeSiteId,
       date,
-      shift_code: shift,
+      shift_code: normalized,
       line: lineFilter,
       include_go: includeGo,
       show_resolved: showResolved,

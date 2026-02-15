@@ -102,8 +102,6 @@ function CockpitSkeleton() {
   );
 }
 
-const SHIFT_OPTIONS = ["Day", "Evening", "Night"] as const;
-
 export default function CockpitPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -116,7 +114,8 @@ export default function CockpitPage() {
   const [fallbackRetryKey, setFallbackRetryKey] = useState(0);
   const [lastFallbackDate, setLastFallbackDate] = useState<string | null>(null);
   const urlSyncedRef = useRef(false);
-  
+  const [availableShiftCodes, setAvailableShiftCodes] = useState<string[]>([]);
+
   const [actions, setActions] = useState<Action[]>([]);
   const [staffingCards, setStaffingCards] = useState<StationStaffingCard[]>([]);
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>([]);
@@ -185,7 +184,7 @@ export default function CockpitPage() {
     const qShift = searchParams.get("shift_code")?.trim();
     const qLine = searchParams.get("line")?.trim();
     if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) setDate(qDate);
-    if (qShift === "Day" || qShift === "Evening" || qShift === "Night") setShiftType(qShift);
+    if (qShift) setShiftType(qShift);
     if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
     urlSyncedRef.current = true;
   }, [searchParams, setDate, setShiftType, setLine]);
@@ -379,6 +378,39 @@ export default function CockpitPage() {
       return b.gapHours - a.gapHours;
     })
     .slice(0, 5);
+
+  // Load shift codes for selected date (DB-driven; S1, S2, Day, etc.)
+  useEffect(() => {
+    if (isDemoMode()) return;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setAvailableShiftCodes([]);
+      return;
+    }
+    const url = `/api/cockpit/shift-codes?date=${encodeURIComponent(date)}`;
+    fetchJson<{ ok?: boolean; shift_codes?: string[] }>(url)
+      .then((res) => {
+        if (!res.ok || !res.data?.shift_codes) {
+          setAvailableShiftCodes([]);
+          return;
+        }
+        const codes = res.data.shift_codes;
+        setAvailableShiftCodes(codes);
+        const inList = codes.length > 0 && codes.includes(shiftType);
+        if (!inList && codes.length > 0) {
+          const first = codes.includes("S1") ? "S1" : codes[0];
+          setShiftType(first);
+        }
+      })
+      .catch(() => setAvailableShiftCodes([]));
+  }, [date]);
+
+  // When shift_codes loaded, ensure current shift is in list; otherwise pick first (prefer S1)
+  useEffect(() => {
+    if (availableShiftCodes.length === 0) return;
+    if (availableShiftCodes.includes(shiftType)) return;
+    const first = availableShiftCodes.includes("S1") ? "S1" : availableShiftCodes[0];
+    setShiftType(first);
+  }, [availableShiftCodes, shiftType, setShiftType]);
 
   // Load line options from v_cockpit_station_summary.area for selected date+shift (no legacy codes)
   useEffect(() => {
@@ -615,12 +647,12 @@ export default function CockpitPage() {
             className="h-8 px-2 rounded-sm border border-input bg-background cockpit-body"
             data-testid="input-date"
           />
-          <Select value={shiftType} onValueChange={(v) => setShiftType(v as typeof shiftType)}>
+          <Select value={shiftType} onValueChange={(v) => setShiftType(v)}>
             <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-shift">
               <SelectValue placeholder="Shift" />
             </SelectTrigger>
             <SelectContent>
-              {SHIFT_OPTIONS.map((s) => (
+              {(availableShiftCodes.length ? availableShiftCodes : shiftType ? [shiftType] : []).map((s) => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>
@@ -694,7 +726,7 @@ export default function CockpitPage() {
         <div className="cockpit-card-secondary mb-4 px-3 py-2 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body text-muted-foreground">No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
-            {SHIFT_OPTIONS.map((s) => (
+            {(availableShiftCodes.length ? availableShiftCodes : ["Day", "Evening", "Night"]).map((s) => (
               <Button key={s} variant="outline" size="sm" className="h-7 text-[13px]" onClick={() => setShiftType(s)} data-testid={`empty-shift-${s}`}>
                 {s}
               </Button>

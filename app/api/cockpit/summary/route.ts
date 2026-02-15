@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import {
-  fetchCockpitIssues,
-  normalizeShiftParam,
-} from "@/lib/server/fetchCockpitIssues";
+import { fetchCockpitIssues } from "@/lib/server/fetchCockpitIssues";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+
+const DATA_SOURCE_VIEW = "v_cockpit_station_summary";
 
 export type CockpitSummaryResponse = {
   active_total: number;
@@ -15,6 +15,17 @@ export type CockpitSummaryResponse = {
 };
 
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const date = (url.searchParams.get("date") ?? "").trim();
+  const shift_code =
+    (url.searchParams.get("shift_code") ?? url.searchParams.get("shift") ?? "").trim();
+  if (!date || !shift_code) {
+    return NextResponse.json(
+      { error: "date and shift are required" },
+      { status: 400 }
+    );
+  }
+
   try {
     const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const org = await getActiveOrgFromSession(request, supabase);
@@ -27,38 +38,26 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const date = searchParams.get("date")?.trim() || undefined;
-    const shiftCode = searchParams.get("shift_code") || searchParams.get("shift") || undefined;
-    const shift = normalizeShiftParam(shiftCode, searchParams.get("shift"));
-    const line = searchParams.get("line")?.trim();
+    const normalized = normalizeShiftParam(shift_code);
+    if (!normalized) {
+      const res = NextResponse.json(
+        { error: "Invalid shift parameter" },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const line = (url.searchParams.get("line") ?? "").trim();
     const lineFilter = line && line !== "all" ? line : undefined;
-    const showResolved = searchParams.get("show_resolved") === "1";
-    const debug = searchParams.get("debug") === "1";
-
-    if (!date || !shift) {
-      const res = NextResponse.json(
-        { error: "date and shift are required" },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    if (shiftCode && !shift) {
-      const res = NextResponse.json(
-        { ok: false, error: "Invalid shift parameter", details: { shift: shiftCode } },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
+    const showResolved = url.searchParams.get("show_resolved") === "1";
+    const debug = url.searchParams.get("debug") === "1";
 
     const { issues, debug: debugInfo } = await fetchCockpitIssues({
       org_id: org.activeOrgId,
       site_id: org.activeSiteId,
       date,
-      shift_code: shift,
+      shift_code: normalized,
       line: lineFilter,
       include_go: false,
       show_resolved: showResolved,
@@ -98,7 +97,7 @@ export async function GET(request: NextRequest) {
       count,
     }));
 
-    const body: CockpitSummaryResponse & { _debug?: unknown } = {
+    const body: CockpitSummaryResponse & { _debug?: unknown; _debug_error?: { message: string; code?: string } } = {
       active_total: issues.length,
       active_blocking,
       active_nonblocking,
@@ -107,14 +106,75 @@ export async function GET(request: NextRequest) {
     };
     if (debugInfo) body._debug = debugInfo;
 
+    const wantDebug = url.searchParams.get("_debug") === "1";
+    if (wantDebug) {
+      let raw_rows_count: number = 0;
+      let raw_sample: Array<{ station_id: string; station_code: string | null; station_shift_status: string }> = [];
+      try {
+        let q = supabase
+          .from(DATA_SOURCE_VIEW)
+          .select("station_id, station_code, station_shift_status", { count: "exact", head: false })
+          .eq("org_id", org.activeOrgId)
+          .eq("shift_date", date)
+          .eq("shift_code", normalized);
+        if (org.activeSiteId) {
+          q = q.or(`site_id.is.null,site_id.eq.${org.activeSiteId}`);
+        }
+        if (lineFilter) {
+          q = q.eq("area", lineFilter);
+        }
+        const { count, data, error } = await q
+          .order("severity_rank", { ascending: true })
+          .order("area", { ascending: true, nullsFirst: false })
+          .order("station_code", { ascending: true, nullsFirst: false })
+          .limit(3);
+        if (error) {
+          body._debug_error = { message: error.message ?? "Debug query failed", code: error.code };
+        } else {
+          const sampleRows = data ?? null;
+          raw_rows_count = count ?? 0;
+          raw_sample = (sampleRows ?? []).map((r: { station_id: string; station_code: string | null; station_shift_status: string }) => ({
+            station_id: r.station_id,
+            station_code: r.station_code ?? null,
+            station_shift_status: r.station_shift_status,
+          }));
+        }
+      } catch (e) {
+        const err = e as { message?: string; code?: string };
+        body._debug_error = { message: typeof err?.message === "string" ? err.message : "Debug query failed", code: err?.code };
+      }
+      body._debug = {
+        ...(typeof body._debug === "object" && body._debug !== null ? body._debug : {}),
+        org_id: org.activeOrgId,
+        site_id: org.activeSiteId,
+        date,
+        shift_code: normalized,
+        line: lineFilter ?? "all",
+        data_source: DATA_SOURCE_VIEW,
+        raw_rows_count,
+        raw_sample,
+      };
+    }
+
     const res = NextResponse.json(body);
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
     console.error("cockpit/summary error:", err);
-    return NextResponse.json(
-      { error: "Failed to load summary" },
-      { status: 500 }
-    );
+    const isProd =
+      process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+    const payload: { error: string; _dev_error?: { message: string; name: string | null; code: string | null; hint: string | null } } = {
+      error: "Failed to load summary",
+    };
+    if (!isProd) {
+      const e = err as { message?: string; name?: string; code?: string; hint?: string } | undefined;
+      payload._dev_error = {
+        message: e?.message ?? String(err),
+        name: e?.name ?? null,
+        code: e?.code ?? null,
+        hint: e?.hint ?? null,
+      };
+    }
+    return NextResponse.json(payload, { status: 500 });
   }
 }

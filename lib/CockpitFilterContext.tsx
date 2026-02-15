@@ -6,16 +6,16 @@ const defaultDate = () => new Date().toISOString().slice(0, 10);
 
 const CockpitFilterContext = createContext<{
   date: string;
-  shiftType: "Day" | "Evening" | "Night";
+  shiftType: string;
   line: string;
   setDate: (d: string) => void;
-  setShiftType: (s: "Day" | "Evening" | "Night") => void;
+  setShiftType: (s: string) => void;
   setLine: (l: string) => void;
 } | null>(null);
 
 export function CockpitFilterProvider({ children }: { children: ReactNode }) {
   const [date, setDate] = useState<string>(defaultDate);
-  const [shiftType, setShiftType] = useState<"Day" | "Evening" | "Night">("Day");
+  const [shiftType, setShiftType] = useState<string>("Day");
   const [line, setLine] = useState<string>("all");
 
   return (

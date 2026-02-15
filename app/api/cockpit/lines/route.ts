@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
-import { normalizeShiftParam } from "@/lib/server/fetchCockpitIssues";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 
 const supabaseAdmin = createClient(
@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date")?.trim();
-    const shiftCode = searchParams.get("shift_code") || searchParams.get("shift") || undefined;
-    const shift = normalizeShiftParam(shiftCode, searchParams.get("shift"));
+    const shiftRaw = (searchParams.get("shift_code") ?? searchParams.get("shift") ?? "").trim();
+    const shift = normalizeShiftParam(shiftRaw);
 
     if (!date || !shift) {
       const res = NextResponse.json({ lines: [], source: "v_cockpit_station_summary" });

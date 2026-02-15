@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { normalizeShift } from "@/lib/shift";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { lineShiftTargetId } from "@/lib/shared/decisionIds";
+import { resolveAuthFromRequest } from "@/lib/server/auth";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,7 +25,7 @@ function severity(
 ): "NO-GO" | "WARNING" | "RESOLVED" {
   if (!decision) return "RESOLVED";
   const rc = decision.root_cause;
-  if (rc == null || typeof rc !== "object") return "NO-GO";
+  if (rc == null || typeof rc !== "object") return "RESOLVED";
   const b = (rc as Record<string, unknown>).blocking;
   if (b === false || b === "false") return "WARNING";
   return "NO-GO";
@@ -33,18 +33,18 @@ function severity(
 
 export async function GET(request: NextRequest) {
   try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
-    const session = await getOrgIdFromSession(request, supabase);
-    if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+    const auth = await resolveAuthFromRequest(request, { supabase, pendingCookies });
+    if (!auth.ok) {
+      const res = NextResponse.json({ ok: false, error: auth.error }, { status: auth.status ?? 401 });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date");
-    const shiftRaw = searchParams.get("shift");
-    const shift = normalizeShift(shiftRaw);
+    const shiftRaw = (searchParams.get("shift_code") ?? searchParams.get("shift") ?? "").trim();
+    const shift = normalizeShiftParam(shiftRaw);
     const line = searchParams.get("line") || "all";
 
     if (!date) {
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     
     if (!shift) {
       const res = NextResponse.json(
-        { ok: false, error: "Invalid shift parameter", step: "validation", details: { shift: shiftRaw } },
+        { ok: false, error: "Invalid shift parameter", step: "validation" },
         { status: 400 }
       );
       applySupabaseCookies(res, pendingCookies);
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("active_org_id, active_site_id")
-      .eq("id", session.userId)
+      .eq("id", auth.user.id)
       .single();
 
     if (!profile?.active_org_id) {
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       .select("id")
       .eq("org_id", activeOrgId)
       .eq("shift_date", date)
-      .eq("shift_type", shift as string);
+      .eq("shift_type", shift);
 
     if (line !== "all") {
       shiftsQuery = shiftsQuery.eq("line", line);
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const lineShiftIds = [...new Set(assignments.map((a) => a.station?.line).filter((l): l is string => Boolean(l)).map((l) => lineShiftTargetId(date, shift as string, l)))];
+    const lineShiftIds = [...new Set(assignments.map((a) => a.station?.line).filter((l): l is string => Boolean(l)).map((l) => lineShiftTargetId(date, shift, l)))];
 
     let legacyEdQuery = supabaseAdmin
       .from("execution_decisions")
@@ -195,14 +195,29 @@ export async function GET(request: NextRequest) {
       const lineShiftId = a.station?.line ? lineShiftTargetId(date, shift, a.station.line) : null;
       const resolvedByLine = lineShiftId != null && lineShiftResolvedIds.has(lineShiftId);
       const dec = legacyDec ?? (resolvedByLine ? { id: null as string | null, root_cause: null } : null);
+      const hasDecision = Boolean(legacyDec || resolvedByLine);
+      const isUnstaffed = a.employee?.name == null;
+
+      let rootCause: unknown = legacyDec?.root_cause ?? null;
+      let sev: "NO-GO" | "WARNING" | "RESOLVED";
+      if (hasDecision) {
+        sev = severity(legacyDec ? { root_cause: legacyDec.root_cause } : { root_cause: null });
+      } else if (isUnstaffed) {
+        sev = "NO-GO";
+        rootCause = { primary: "UNSTAFFED: no roster", blocking: true };
+      } else {
+        sev = "WARNING";
+        rootCause = null;
+      }
+
       return {
         shift_assignment_id: a.id,
         station_name: (a.station?.name ?? "Station") as string,
         employee_name: (a.employee?.name ?? null) as string | null,
         decision_id: dec?.id ?? null,
-        status: legacyDec || resolvedByLine ? "active" : "none",
-        root_cause: legacyDec?.root_cause ?? null,
-        severity: severity(legacyDec ? { root_cause: legacyDec.root_cause } : resolvedByLine ? { root_cause: null } : null),
+        status: hasDecision ? "active" : "none",
+        root_cause: rootCause,
+        severity: sev,
       };
     });
 

@@ -7,7 +7,6 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
-import { normalizeShift } from "@/lib/shift";
 import { stationShiftTargetId } from "@/lib/shared/decisionIds";
 
 const supabaseAdmin = createClient(
@@ -299,23 +298,4 @@ export async function fetchCockpitIssues(
   }
 
   return debug ? { issues, debug: debugInfo } : { issues };
-}
-
-const COCKPIT_SHIFT_MAP: Record<string, string> = {
-  day: "Day",
-  evening: "Evening",
-  night: "Night",
-  s1: "S1",
-  s2: "S2",
-};
-
-/** Normalize shift param for cockpit: accept shift_code or shift; return S1|S2|Day|Evening|Night or null. */
-export function normalizeShiftParam(
-  shiftCode?: string | null,
-  shift?: string | null
-): string | null {
-  const raw = (shiftCode ?? shift ?? "").trim();
-  if (!raw) return null;
-  const key = raw.toLowerCase();
-  return COCKPIT_SHIFT_MAP[key] ?? normalizeShift(raw);
 }
