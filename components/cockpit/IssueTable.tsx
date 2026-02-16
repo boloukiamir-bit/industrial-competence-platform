@@ -1,6 +1,10 @@
 "use client";
 
-import { statusToPillVariant } from "@/components/ui/status-pill";
+import {
+  cockpitIssueTypeToVariant,
+  cockpitIssueTypeToLabel,
+  StatusPill,
+} from "@/components/ui/status-pill";
 import {
   Table,
   TableBody,
@@ -21,11 +25,18 @@ export type IssueTableProps = {
   onRowClick: (row: CockpitIssueRow) => void | Promise<void>;
 };
 
-function SeverityText({ severity }: { severity: string }) {
-  const variant = statusToPillVariant(severity);
-  const label = severity === "WARNING" ? "At risk" : severity === "BLOCKING" ? "Blocking" : severity;
-  const colorClass = variant === "BLOCKING" ? "cockpit-status-blocking" : variant === "AT_RISK" ? "cockpit-status-at-risk" : "cockpit-status-ok";
-  return <span className={cn("text-xs font-medium", colorClass)}>{label}</span>;
+/** Status cell: ILLEGAL red badge, UNSTAFFED distinct badge, NO_GO/WARNING as before. */
+function IssueStatusBadge({ row }: { row: CockpitIssueRow }) {
+  const variant = cockpitIssueTypeToVariant(row.issue_type);
+  const label = cockpitIssueTypeToLabel(row.issue_type);
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      <StatusPill variant={variant}>{label}</StatusPill>
+      {row.resolved && (
+        <span className="cockpit-label cockpit-status-ok">Closed</span>
+      )}
+    </div>
+  );
 }
 
 export function IssueTable({
@@ -81,8 +92,9 @@ export function IssueTable({
               key={row.issue_id}
               className={cn(
                 "cursor-pointer px-3 py-1.5",
-                !row.resolved && row.severity === "BLOCKING" && "border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]",
-                !row.resolved && row.severity === "WARNING" && "border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]",
+                !row.resolved && (row.severity === "BLOCKING" || (row as any).issue_type === "ILLEGAL") && "border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]",
+                !row.resolved && row.severity === "WARNING" && (row as any).issue_type !== "ILLEGAL" && "border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]",
+                !row.resolved && (row as any).issue_type === "UNSTAFFED" && "border-l-[3px] border-l-amber-500",
                 isAcceptedRisk && "border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]"
               )}
               onClick={() => onRowClick(row)}
@@ -90,13 +102,10 @@ export function IssueTable({
             >
               <TableCell className="px-3 py-1.5">
                 <div className="flex items-center gap-1 flex-wrap">
-                    <SeverityText severity={row.severity} />
-                    {row.resolved && (
-                      <span className="cockpit-label cockpit-status-ok">Closed</span>
-                    )}
-                    {isAcceptedRisk && (
-                      <span className="cockpit-label cockpit-status-at-risk">Accepted</span>
-                    )}
+                  <IssueStatusBadge row={row} />
+                  {isAcceptedRisk && (
+                    <span className="cockpit-label cockpit-status-at-risk">Accepted</span>
+                  )}
                 </div>
               </TableCell>
               <TableCell className="px-3 py-1.5 cockpit-body font-medium">

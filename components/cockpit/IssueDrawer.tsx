@@ -27,7 +27,7 @@ export type CockpitIssueRow = {
   issue_id: string;
   type: string;
   severity: "BLOCKING" | "WARNING";
-  issue_type?: "NO_GO" | "WARNING" | "GO";
+  issue_type?: "NO_GO" | "WARNING" | "GO" | "UNSTAFFED" | "ILLEGAL";
   line: string;
   shift_code: string;
   date: string;
@@ -76,15 +76,36 @@ export type IssueDrawerProps = {
 const statusVariant = (status: string) => {
   switch (status) {
     case "NO_GO":
+    case "ILLEGAL":
       return "destructive";
     case "WARNING":
       return "secondary";
+    case "UNSTAFFED":
+      return "outline";
     case "GO":
       return "outline";
     default:
       return "secondary";
   }
 };
+
+function issueTypeToBadgeVariant(issueType: string | undefined): "destructive" | "secondary" | "outline" {
+  const t = (issueType ?? "").toUpperCase().replace(/-/g, "_");
+  if (t === "ILLEGAL" || t === "NO_GO") return "destructive";
+  if (t === "UNSTAFFED") return "outline";
+  if (t === "WARNING") return "secondary";
+  return "secondary";
+}
+
+function issueTypeToLabel(issueType: string | undefined): string {
+  const t = (issueType ?? "").toUpperCase().replace(/-/g, "_");
+  if (t === "ILLEGAL") return "ILLEGAL";
+  if (t === "UNSTAFFED") return "UNSTAFFED";
+  if (t === "NO_GO") return "Blocking";
+  if (t === "WARNING") return "At risk";
+  if (t === "GO") return "OK";
+  return "At risk";
+}
 
 function rosterLabel(r: DrilldownRosterItem): string {
   const first = r.first_name?.trim();
@@ -297,8 +318,11 @@ export function IssueDrawer({
 
         <div className="mt-6 space-y-6">
           <div className="flex flex-wrap gap-2">
-            <Badge variant={issue.severity === "BLOCKING" ? "destructive" : "secondary"}>
-              {issue.severity}
+            <Badge
+              variant={issueTypeToBadgeVariant(issue.issue_type)}
+              className={issue.issue_type === "UNSTAFFED" ? "border-amber-500 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40" : undefined}
+            >
+              {issueTypeToLabel(issue.issue_type)}
             </Badge>
             <Badge variant="outline">{issue.type}</Badge>
             {issue.resolved && (
