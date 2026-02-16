@@ -32,8 +32,8 @@ import {
   Lightbulb
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser, isHrAdmin } from "@/lib/auth";
-import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminMe } from "@/hooks/useAdminMe";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
@@ -214,25 +214,10 @@ function AppLayoutContent({
   renderNavItem: (item: NavItem) => JSX.Element;
   children: React.ReactNode;
 }) {
-  const { currentRole } = useOrg();
-  const [membershipRoleFromApi, setMembershipRoleFromApi] = useState<string | null>(null);
-  const [roleLoadStatus, setRoleLoadStatus] = useState<"loading" | "done">("loading");
+  const { adminMe, loading: adminMeLoading } = useAdminMe();
   const isProduction = process.env.NODE_ENV === "production";
   const showVersionStrip = process.env.NEXT_PUBLIC_SHOW_VERSION_STRIP === "true";
-
-  useEffect(() => {
-    fetch("/api/admin/me", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json && typeof json.membership_role === "string") {
-          setMembershipRoleFromApi(json.membership_role.trim());
-        }
-      })
-      .catch(() => {})
-      .finally(() => setRoleLoadStatus("done"));
-  }, []);
-
-  const roleForNav = (membershipRoleFromApi ?? currentRole ?? "").trim();
+  const roleForNav = (adminMe?.membership_role ?? "").trim();
 
   const filterItems = (items: NavItem[], role: string) => {
     return items.filter((item) => {
@@ -248,7 +233,7 @@ function AppLayoutContent({
   const visibleSpaljistenItems = isPilotMode ? [] : showSpaljistenNav ? spaljistenNavItems : [];
   const visibleSettingsItems = isPilotMode ? [] : filterItems(settingsNavItems, roleForNav).filter((item) => (isProduction && item.name === "Debug") ? false : true);
 
-  const showHrToolsSection = roleLoadStatus === "loading" || visibleHrItems.length > 0;
+  const showHrToolsSection = adminMeLoading || visibleHrItems.length > 0;
 
   return (
     <>
@@ -281,7 +266,7 @@ function AppLayoutContent({
                   <p className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                     HR Tools
                   </p>
-                  {roleLoadStatus === "loading" ? (
+                  {adminMeLoading ? (
                     <ul className="space-y-1" aria-busy="true">
                       {[1, 2, 3, 4].map((i) => (
                         <li key={i}>
@@ -338,6 +323,11 @@ function AppLayoutContent({
                 </div>
               )}
             </nav>
+            {!isProduction && (
+              <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-[11px] text-gray-500 dark:text-gray-400">
+                role={roleForNav || "unknown"} auth={adminMe?.auth ?? "unknown"} org={adminMe?.active_org_id ?? "unknown"}
+              </div>
+            )}
           </aside>
 
           <div className="flex-1 flex flex-col overflow-hidden">
