@@ -12,6 +12,29 @@ export function lineShiftTargetId(date: string, shift: string, line: string): st
 }
 
 /**
+ * Deterministic UUID for execution_decisions target_id (shift_readiness).
+ * One decision per (org, site, shift). Key: org_id + site_id + shift_id + "SHIFT_READINESS".
+ */
+export function shiftReadinessTargetId(
+  orgId: string,
+  siteId: string | null,
+  shiftId: string
+): string {
+  const key = [
+    (orgId ?? "").toLowerCase(),
+    (siteId ?? "").toLowerCase(),
+    (shiftId ?? "").toLowerCase(),
+    "SHIFT_READINESS",
+  ].join("|");
+  const hash = createHash("sha256").update(key).digest();
+  const bytes = Array.from(hash.subarray(0, 16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
  * Deterministic UUID for execution_decisions target_id (station_shift).
  * sha256(org_id|site_id|shift_date|shift_code|station_id|issue_type), lowercase, delimiter '|'.
  * Returns UUID v4-ish format for DB compatibility (target_id UUID column).

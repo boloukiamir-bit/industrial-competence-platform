@@ -8,15 +8,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fetchJson } from "@/lib/coreFetch";
+import { useToast } from "@/hooks/use-toast";
 import type {
   ReadinessDrilldownResponse,
   ReadinessDrilldownStation,
 } from "@/app/api/cockpit/readiness/drilldown/route";
+import type { ReadinessDecisionGetResponse } from "@/app/api/cockpit/readiness/decision/route";
+
+export type ReadinessStatus = "GO" | "WARNING" | "NO_GO";
 
 export type ReadinessDrilldownModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   shiftId: string;
+  /** When WARNING or NO_GO, show Decision section. When GO, hide it. */
+  readinessStatus?: ReadinessStatus | null;
 };
 
 function formatPercent(ratio: number): string {
@@ -25,13 +31,32 @@ function formatPercent(ratio: number): string {
   return `${pct}%`;
 }
 
+const DECISION_OPTIONS: { value: "ACKNOWLEDGED" | "OVERRIDE" | "STOP"; label: string }[] = [
+  { value: "ACKNOWLEDGED", label: "Acknowledge" },
+  { value: "OVERRIDE", label: "Override" },
+  { value: "STOP", label: "Stop" },
+];
+
 export function ReadinessDrilldownModal({
   open,
   onOpenChange,
   shiftId,
+  readinessStatus = null,
 }: ReadinessDrilldownModalProps) {
+  const { toast } = useToast();
   const [stations, setStations] = useState<ReadinessDrilldownStation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savedDecision, setSavedDecision] = useState<{
+    decision: string;
+    note: string;
+    created_at: string;
+  } | null>(null);
+  const [selectedDecision, setSelectedDecision] = useState<"ACKNOWLEDGED" | "OVERRIDE" | "STOP">("ACKNOWLEDGED");
+  const [note, setNote] = useState("");
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const showDecisionSection = readinessStatus === "WARNING" || readinessStatus === "NO_GO";
 
   useEffect(() => {
     if (!open || !shiftId) {
@@ -62,12 +87,138 @@ export function ReadinessDrilldownModal({
     };
   }, [open, shiftId]);
 
+  useEffect(() => {
+    if (!open || !shiftId || !showDecisionSection) {
+      setSavedDecision(null);
+      return;
+    }
+    let cancelled = false;
+    setDecisionLoading(true);
+    fetchJson<ReadinessDecisionGetResponse>(
+      `/api/cockpit/readiness/decision?shift_id=${encodeURIComponent(shiftId)}`
+    )
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data?.decision) {
+          setSavedDecision(res.data.decision);
+        } else {
+          setSavedDecision(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSavedDecision(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDecisionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, shiftId, showDecisionSection]);
+
+  const handleLogDecision = async () => {
+    if (!shiftId) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/cockpit/readiness/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shift_id: shiftId,
+          decision: selectedDecision,
+          note: note.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? "Failed to log decision", variant: "destructive" });
+        return;
+      }
+      if (data.ok && data.decision) {
+        setSavedDecision(data.decision);
+        toast({ title: "Decision logged" });
+      }
+    } catch {
+      toast({ title: "Failed to log decision", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatDecisionTime = (iso: string) => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+    } catch {
+      return iso;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-base">Station readiness breakdown</DialogTitle>
         </DialogHeader>
+        {showDecisionSection && (
+          <div className="border-b border-border pb-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Decision</p>
+            {decisionLoading ? (
+              <div className="h-16 bg-muted/50 rounded animate-pulse" aria-hidden />
+            ) : savedDecision ? (
+              <div className="text-sm">
+                <p className="font-medium text-foreground">
+                  {savedDecision.decision}
+                  {savedDecision.created_at && (
+                    <span className="text-muted-foreground font-normal ml-2">
+                      {formatDecisionTime(savedDecision.created_at)}
+                    </span>
+                  )}
+                </p>
+                {savedDecision.note && (
+                  <p className="text-muted-foreground mt-1">{savedDecision.note}</p>
+                )}
+              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-2 items-center">
+              {DECISION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSelectedDecision(opt.value)}
+                  className={`rounded border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                    selectedDecision === opt.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label htmlFor="readiness-decision-note" className="sr-only">Note</label>
+              <textarea
+                id="readiness-decision-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Note (optional, max 500 chars)"
+                maxLength={500}
+                rows={2}
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm resize-y min-h-[60px] focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleLogDecision}
+              disabled={submitting}
+              className="rounded bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+            >
+              {submitting ? "Logging…" : "Log decision"}
+            </button>
+          </div>
+        )}
         <div className="overflow-auto flex-1 min-h-0 -mx-1 px-1">
           {loading ? (
             <div className="space-y-2" data-testid="drilldown-loading">

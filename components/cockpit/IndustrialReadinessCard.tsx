@@ -182,6 +182,7 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
           open={drilldownOpen}
           onOpenChange={setDrilldownOpen}
           shiftId={shiftId}
+          readinessStatus={status}
         />
       )}
     </section>
