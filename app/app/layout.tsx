@@ -58,6 +58,7 @@ const coreNavItems: NavItem[] = [
   { name: "Employees", href: "/app/employees", icon: Users },
   { name: "Organization", href: "/app/org/overview", icon: Building2 },
   { name: "Competence Matrix", href: "/app/competence-matrix", icon: Grid3X3 },
+  { name: "Competence Matrix 2.0", href: "/app/competence/matrix", icon: Grid3X3 },
   { name: "Compliance", href: "/app/compliance", icon: ClipboardCheck },
   { name: "Compliance Matrix", href: "/app/compliance/matrix", icon: Grid3X3 },
   { name: "Tomorrow's Gaps", href: "/app/tomorrows-gaps", icon: TrendingUp },
@@ -70,6 +71,8 @@ const hrNavItems: NavItem[] = [
   { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
   { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
   { name: "HR Tasks", href: "/app/hr/tasks", icon: Clipboard, hrAdminOnly: true },
+  { name: "HR Template Jobs", href: "/app/hr/template-jobs", icon: FileText, hrAdminOnly: true },
+  { name: "Workflows", href: "/app/hr/workflow-engine", icon: Workflow, hrAdminOnly: true },
   { name: "HR Analytics", href: "/app/hr/analytics", icon: BarChart3, hrAdminOnly: true },
   { name: "Import Employees", href: "/app/import-employees", icon: Upload, hrAdminOnly: true },
 ];

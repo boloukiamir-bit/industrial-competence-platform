@@ -24,15 +24,14 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date")?.trim() || undefined;
-    const shiftCode = searchParams.get("shift_code") || searchParams.get("shift") || undefined;
-    const shift = normalizeShiftParam(shiftCode, searchParams.get("shift"));
-    const line = searchParams.get("line")?.trim();
-    const lineFilter = line && line !== "all" ? line : undefined;
+    const rawShift = searchParams.get("shift_code") ?? searchParams.get("shift");
+    const lineParam = (searchParams.get("line") ?? searchParams.get("area"))?.trim();
+    const lineFilter = lineParam && lineParam !== "all" ? lineParam : undefined;
     const includeGo = searchParams.get("includeGo") === "1";
     const showResolved = searchParams.get("show_resolved") === "1";
     const debug = searchParams.get("debug") === "1";
 
-    if (!date || !shift) {
+    if (!date || !rawShift) {
       const res = NextResponse.json(
         { ok: false, error: "date and shift are required (same as Summary)" },
         { status: 400 }
@@ -41,9 +40,10 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    if (shiftCode && !shift) {
+    const shift = normalizeShiftParam(rawShift);
+    if (!shift) {
       const res = NextResponse.json(
-        { ok: false, error: "Invalid shift parameter", details: { shift: shiftCode } },
+        { ok: false, error: "Invalid shift parameter", details: { shift: rawShift } },
         { status: 400 }
       );
       applySupabaseCookies(res, pendingCookies);

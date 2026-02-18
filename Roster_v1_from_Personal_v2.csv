@@ -1,0 +1,90 @@
+anst_id,name,role,area,station_name,station_code,legacy_line_id,shift_raw,shift_code,leader_name
+730,Håkan Blad,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+729,Mariana Micu,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+764,Ahmad Chalil,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+821,Michal Suszynski,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+289,Kenneth Sjöblom,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+575,Mari Nilsson,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+712,Hagos Hidru,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+787,Dennis Nåtling,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+286,Ulf Johansson,Operatör,Ommantling,Combi-HGL,COMBI_HGL,101.2,1,1,Micael Stübner
+121,Robert Johansson,Operatör,Ommantling,Folieskärare,FOLIESKARARE,210,1,1,Micael Stübner
+164,Tom Aukas,Operatör,Ommantling,HGL 2,HGL_2,105,1,1,Micael Stübner
+830,Tim Masseck,Operatör,Ommantling,HGL 2,HGL_2,105,1,1,Micael Stübner
+831,Julian Götze,Operatör,Ommantling,HGL 2,HGL_2,105,2,2,Micael Stübner
+211,Johan Augustsson,Operatör,Ommantling,HGL 2,HGL_2,105,1,1,Micael Stübner
+73,Ylva Johansson,Operatör,Ommantling,HGL 2,HGL_2,105,1,1,Micael Stübner
+785,Christoffer Gustavsson,Operatör,Ommantling,HGL 2,HGL_2,105,1,1,Micael Stübner
+104,Per Eklund,Operatör,Ommantling,HGL 2,HGL_2,105,2,2,Micael Stübner
+224,Emelie Bloom,Operatör,Ommantling,HGL 2,HGL_2,105,2,2,Micael Stübner
+756,Hindorff Maria Lönn,Operatör,Ommantling,HGL 2,HGL_2,105,2,2,Micael Stübner
+141,Per Lindgren,Operatör,Ommantling,HGL 2,HGL_2,105,2,2,Micael Stübner
+587,Daniel Danhall,Operatör,Ommantling,Schelling 1,SCHELLING_1,207,1,1,Micael Stübner
+676,Patrik Fredriksson,Operatör,Ommantling,Schelling 1,SCHELLING_1,207,2,2,Micael Stübner
+775,Thom Isbrandr,Operatör,Ommantling,Schelling 3,SCHELLING_3,212,1,1,Micael Stübner
+708,Richard Andersson,Operatör,Ommantling,Schelling 3,SCHELLING_3,212,2,2,Micael Stübner
+61,Mats Hedgårds,Operatör,Bearbetning,Homag 7,HOMAG_7,206,1,1,Johan Löfstedt
+235,Sara Lindgren,Operatör,Bearbetning,Homag 7,HOMAG_7,206,2,2,Johan Löfstedt
+568,Kristoffer Höglander,Operatör,Bearbetning,Homag 7,HOMAG_7,206,2,2,Johan Löfstedt
+804,Tobias Heinlin,Operatör,Bearbetning,Homag 7,HOMAG_7,206,2,2,Johan Löfstedt
+842,Alexander Andersson,Operatör,Bearbetning,Homag 7,HOMAG_7,206,1,1,Johan Löfstedt
+103,Zvonko Basic,Operatör,Bearbetning,Homag 8,HOMAG_8,213,2,2,Johan Löfstedt
+798,Samuel Gebremicheal,Operatör,Bearbetning,Homag 8,HOMAG_8,213,1,1,Johan Löfstedt
+214,Emil Olofsson,Operatör,Bearbetning,IMA 2,IMA_2,201,FM,FM,Johan Löfstedt
+283,Razmus Bloom,Operatör,Bearbetning,IMA 2,IMA_2,201,Night,Night,Johan Löfstedt
+561,Fredrik Öhrman,Operatör,Bearbetning,IMA 2,IMA_2,201,EM,EM,Johan Löfstedt
+630,Klas Nilsson,Operatör,Bearbetning,IMA 2,IMA_2,201,Night,Night,Johan Löfstedt
+829,Camilla Hearn,Operatör,Bearbetning,IMA 2,IMA_2,201,FM,FM,Johan Löfstedt
+838,Wendela Gunnarsson,Operatör,Bearbetning,IMA 2,IMA_2,201,EM,EM,Johan Löfstedt
+726,John Eriksson,Operatör,Bearbetning,IMA 2,IMA_2,201,Night,Night,Johan Löfstedt
+850,Andreas Weiderberg,Operatör,Bearbetning,IMA 2,IMA_2,201,EM,EM,Johan Löfstedt
+184,Johan Axelsson,Operatör,Bearbetning,Schelling 2,SCHELLING_2,205,Day,Day,Johan Löfstedt
+591,Haben Issak,Operatör,Bearbetning,Schelling 2,SCHELLING_2,205,Day,Day,Johan Löfstedt
+189,Samira Djogic,Operatör,Bearbetning,Weeke,WEEKE,204,2,2,Johan Löfstedt
+776,Poulsen Isabelle Stübner,Operatör,Bearbetning,Weeke,WEEKE,204,Night,Night,Johan Löfstedt
+844,Linus Svensson,Operatör,Bearbetning,Weeke,WEEKE,204,1,1,Johan Löfstedt
+681,Zier Simon Ahnstedt,Operatör,Packen,Flexline,FLEXLINE,306,2,2,Hanna Svensson
+549,Miguel Patron,Operatör,Packen,Flexline,FLEXLINE,306,2,2,Hanna Svensson
+827,Pontus Bång ,Operatör,Packen,Flexline,FLEXLINE,306,2,2,Hanna Svensson
+753,Mohammed Domiatte,Operatör,Packen,Frontpack,FRONTPACK,304,1,1,Hanna Svensson
+29,Petra Abrahamsson,Operatör,Packen,Frontpack,FRONTPACK,304,Night,Night,Hanna Svensson
+91,Lena Holgersson,Operatör,Packen,Frontpack,FRONTPACK,304,2,2,Hanna Svensson
+50,Malin Rosenholm,Operatör,Packen,Gladpack,GLADPACK,315,1,1,Hanna Svensson
+140,Anneli Nåtling,Operatör,Packen,Gladpack,GLADPACK,315,2,2,Hanna Svensson
+767,Ellen Johansson,Operatör,Packen,Gladpack,GLADPACK,315,Night,Night,Hanna Svensson
+713,Merhawi Eyob,Operatör,Packen,Handpack,HANDPACK,308,2,2,Hanna Svensson
+147,Susanne Rydén,Operatör,Packen,Handpack,HANDPACK,308,2,2,Hanna Svensson
+41,Helena Thelander,Operatör,Packen,Handpack,HANDPACK,308,2,2,Hanna Svensson
+683,Björn Gustafsson,Operatör,Packen,Handpack,HANDPACK,308,2,2,Hanna Svensson
+223,Adam Abrahamsson,Operatör,Packen,Handpack,HANDPACK,308,2,2,Hanna Svensson
+773,Iselin Silfverberg,Operatör,Packen,Handpack,HANDPACK,308,1,1,Hanna Svensson
+701,Benjamin Karlsson,Operatör,Packen,Handpack,HANDPACK,308,2,2,Hanna Svensson
+820,Tuva Sjöblom,Operatör,Packen,Handpack,HANDPACK,308,1,1,Hanna Svensson
+162,Sara Rålin,Operatör,Packen,MGA packen,MGA_PACKEN,308,1,1,Hanna Svensson
+742,Helena Eriksson,Operatör,Packen,MGA packen,MGA_PACKEN,308,2,2,Hanna Svensson
+686,Pär-Ola Ersrud,Operatör,Packen,Semipack,SEMIPACK,309,Night,Night,Hanna Svensson
+737,Ahmad Barhoum,Operatör,Packen,Semipack,SEMIPACK,309,2,2,Hanna Svensson
+67,Pia Flystam,Operatör,Packen,Semipack,SEMIPACK,309,1,1,Hanna Svensson
+843,Magdalena Wremer,Operatör,Packen,Semipack,SEMIPACK,309,1,1,Hanna Svensson
+13,Mats Karlsson,Operatör,Logistik,Godsmottagning,GODSMOTTAGNING,349.2,Day,Day,Klas Nilsson
+204,Peter Johansson,Operatör,Logistik,Godsmottagning,GODSMOTTAGNING,349.2,Day,Day,Klas Nilsson
+86,Jennifer Strand,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,2,2,Klas Nilsson
+96,Marie Karlsson,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,1,1,Klas Nilsson
+130,Anneli Suomela,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,2,2,Klas Nilsson
+819,Isac Axelsson,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,2,2,Klas Nilsson
+79,Torbjörn Carlman,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,Night,Night,Klas Nilsson
+702,Mohamed Osman,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,2,2,Klas Nilsson
+52,Jens Strömkvist,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,1,1,Klas Nilsson
+796,Barbara Malsh,Operatör,Logistik,Logistik/Well,LOGISTIK_WELL,349.1,1,1,Klas Nilsson
+51,Peter Nilsson,Operatör,Logistik,Utlastning,UTLASTNING,349.3,Day,Day,Klas Nilsson
+837,Piort Stankiewicz,Operatör,Logistik,Utlastning,UTLASTNING,349.3,Day,Day,Klas Nilsson
+802,Elwin Nyden,Automationselektriker,Underhåll,Underhåll,UNDERHALL,14.5,EM,EM,Christoffer Bonell
+834,Peter Haraldsson,Fastighetstekniker,Underhåll,Fastighet,FASTIGHET,14.2,Day,Day,Christoffer Bonell
+112,Morgan Emanuelsson,Mekaniker,Underhåll,Underhåll,UNDERHALL,14.4,Night,Night,Christoffer Bonell
+751,Oliver Carlqvist,Mekaniker,Underhåll,Underhåll,UNDERHALL,14.4,Night,Night,Christoffer Bonell
+825,Isac Andersson,Mekaniker,Underhåll,Underhåll,UNDERHALL,14.4,1,1,Christoffer Bonell
+823,Mathias Dahlström,Fastighetsskötare,Underhåll,Fastighet,FASTIGHET,14.1,Day,Day,Christoffer Bonell
+858,Erik Gustafsson,Underhållstekniker,Underhåll,Underhåll,UNDERHALL,14.3,Day,Day,Christoffer Bonell
+849,Joakim Paulonen,Underhållstekniker,Underhåll,Underhåll,UNDERHALL,14.3,FM,FM,Christoffer Bonell
+817,Axel Johansson,Underhållstekniker,Underhåll,Underhåll,UNDERHALL,14.3,Day,Day,Christoffer Bonell
+853,Rasmus Jonsson,Underhållstekniker,Underhåll,Underhåll,UNDERHALL,14.3,Day,Day,Christoffer Bonell

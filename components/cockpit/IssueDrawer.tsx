@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Sheet,
   SheetContent,
@@ -18,10 +19,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle } from "lucide-react";
+import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle, ShieldAlert } from "lucide-react";
 import { fetchJson } from "@/lib/coreFetch";
 import type { DrilldownRosterItem } from "@/app/api/cockpit/issues/drilldown/route";
 import { COST_ENGINE, formatSekRange } from "@/lib/cockpitCostEngine";
+
+type ComplianceBlockerItem = { code: string; name: string; status: "MISSING" | "EXPIRED"; valid_to: string | null; days_left: number | null };
+type ComplianceBlocker = { employee_id: string; employee_number: string | null; employee_name: string; items: ComplianceBlockerItem[] };
 
 export type CockpitIssueRow = {
   issue_id: string;
@@ -198,6 +202,30 @@ export function IssueDrawer({
   const [drilldown, setDrilldown] = useState<DrilldownState>(null);
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [drilldownError, setDrilldownError] = useState<string | null>(null);
+  const [complianceBlockers, setComplianceBlockers] = useState<ComplianceBlocker[]>([]);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+
+  const fetchComplianceDrilldown = useCallback(async () => {
+    if (!issue?.station_id || !issue?.date || !issue?.shift_code) {
+      setComplianceBlockers([]);
+      return;
+    }
+    setComplianceLoading(true);
+    const params = new URLSearchParams({
+      date: issue.date,
+      shift_code: issue.shift_code,
+      station_id: issue.station_id,
+    });
+    const res = await fetchJson<{ ok?: boolean; blockers?: ComplianceBlocker[] }>(
+      `/api/cockpit/issues/compliance-drilldown?${params.toString()}`
+    );
+    if (res.ok && Array.isArray(res.data?.blockers)) {
+      setComplianceBlockers(res.data.blockers);
+    } else {
+      setComplianceBlockers([]);
+    }
+    setComplianceLoading(false);
+  }, [issue?.station_id, issue?.date, issue?.shift_code]);
 
   const fetchDrilldown = useCallback(async () => {
     if (!issue?.station_id || !issue?.date || !issue?.shift_code) {
@@ -248,12 +276,14 @@ export function IssueDrawer({
   useEffect(() => {
     if (open && issue?.station_id && issue?.date && issue?.shift_code) {
       fetchDrilldown();
+      fetchComplianceDrilldown();
     } else {
       setDrilldown(null);
       setDrilldownError(null);
       setDrilldownLoading(false);
+      setComplianceBlockers([]);
     }
-  }, [open, issue?.station_id, issue?.date, issue?.shift_code, fetchDrilldown]);
+  }, [open, issue?.station_id, issue?.date, issue?.shift_code, fetchDrilldown, fetchComplianceDrilldown]);
 
   const rosterHeadcount = drilldown?.kpis?.headcount ?? 0;
   const noGoCount = drilldown?.kpis?.no_go ?? 0;
@@ -460,6 +490,33 @@ export function IssueDrawer({
             </div>
           )}
 
+          {(complianceBlockers.length > 0 || complianceLoading) && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 dark:bg-slate-900/50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Compliance gating
+              </p>
+              {complianceLoading ? (
+                <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading…
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {complianceBlockers.map((b) => (
+                    <li key={b.employee_id} className="text-sm">
+                      <span className="font-medium text-foreground">{b.employee_name}</span>
+                      <span className="text-muted-foreground"> — missing or expired: </span>
+                      <span className="font-medium">
+                        {b.items.map((i) => i.name || i.code).filter(Boolean).join(", ") || "—"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           {primary && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
@@ -480,20 +537,29 @@ export function IssueDrawer({
 
           {showActions && (
             <div className="flex flex-col gap-2 pt-4 border-t">
-              <Button
-                onClick={handleAcknowledge}
-                disabled={!!submitting}
-                variant="outline"
-                className="w-full"
-                data-testid="btn-acknowledge"
-              >
-                {submitting === "ack" ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                )}
-                Record decision
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={handleAcknowledge}
+                  disabled={!!submitting}
+                  className="rounded-full bg-slate-900 text-slate-100 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 font-semibold px-4"
+                  data-testid="btn-acknowledge"
+                >
+                  {submitting === "ack" ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                  )}
+                  Confirm resolution
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full border-slate-700 text-slate-700 dark:border-slate-400 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  asChild
+                >
+                  <Link href="/app/compliance/matrix?tab=expired">Fix compliance</Link>
+                </Button>
+              </div>
               <Button
                 onClick={handlePlanTraining}
                 disabled={!!submitting}

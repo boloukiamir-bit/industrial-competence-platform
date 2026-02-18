@@ -44,7 +44,7 @@ import type {
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
 
-type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "compliance" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
+type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "compliance" | "profile" | "one-to-ones" | "documents" | "events" | "equipment" | "workflows";
 
 export type EmployeeProfileRow = {
   photoUrl: string | null;
@@ -124,6 +124,9 @@ export default function EmployeeDetailPage() {
   type ComplianceItem = { category: string; name: string; status: string; valid_to: string | null; days_left: number | null };
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>([]);
   const [complianceLoading, setComplianceLoading] = useState(false);
+  type EmployeeWorkflowItem = { id: string; workflow_name: string | null; status: string; progress_percent: number; overdue_count: number; blocked_count: number };
+  const [workflowItems, setWorkflowItems] = useState<EmployeeWorkflowItem[]>([]);
+  const [workflowsLoading, setWorkflowsLoading] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -234,6 +237,26 @@ export default function EmployeeDetailPage() {
     if (id) loadData();
   }, [id]);
 
+  useEffect(() => {
+    if (activeTab !== "workflows" || !id) return;
+    setWorkflowsLoading(true);
+    fetch(`/api/hr/employee/${id}/workflows`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((list) => {
+        if (Array.isArray(list)) {
+          setWorkflowItems(list.map((w: { id: string; workflow_name: string | null; status: string; progress_percent: number; overdue_count: number; blocked_count: number }) => ({
+            id: w.id,
+            workflow_name: w.workflow_name,
+            status: w.status,
+            progress_percent: w.progress_percent,
+            overdue_count: w.overdue_count,
+            blocked_count: w.blocked_count,
+          })));
+        }
+      })
+      .finally(() => setWorkflowsLoading(false));
+  }, [activeTab, id]);
+
   const loadCompliance = useCallback(async () => {
     if (!id) return;
     setComplianceLoading(true);
@@ -324,6 +347,7 @@ export default function EmployeeDetailPage() {
     { id: "documents", label: "Documents", icon: FileText, count: documents.length },
     { id: "events", label: "People Risk & Tasks", icon: AlertTriangle, count: events.filter((e) => e.status !== "completed").length },
     { id: "equipment", label: "Equipment", icon: Package, count: equipment.length },
+    { id: "workflows", label: "Workflows", icon: ClipboardCheck },
   ];
 
   const levelLabels = ["Not trained", "In training", "Can assist", "Trained", "Can train others"];
@@ -904,6 +928,37 @@ export default function EmployeeDetailPage() {
                         <p className="text-xs text-muted-foreground mt-1">
                           Assigned: {new Date(eq.assignedDate).toLocaleDateString("sv-SE")}
                         </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "workflows" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Active workflows</CardTitle>
+              <p className="text-sm text-muted-foreground">Progress and status for assigned workflows</p>
+            </CardHeader>
+            <CardContent>
+              {workflowsLoading ? (
+                <p className="text-sm text-muted-foreground py-4">Loading...</p>
+              ) : workflowItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No workflows assigned</p>
+              ) : (
+                <div className="space-y-3">
+                  {workflowItems.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between p-3 border rounded-md">
+                      <div>
+                        <p className="font-medium">{w.workflow_name ?? "Workflow"}</p>
+                        <p className="text-sm text-muted-foreground">{w.status} · {w.progress_percent}% complete</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {w.overdue_count > 0 && <Badge variant="destructive">Overdue {w.overdue_count}</Badge>}
+                        {w.blocked_count > 0 && <Badge variant="secondary">Blocked {w.blocked_count}</Badge>}
                       </div>
                     </div>
                   ))}

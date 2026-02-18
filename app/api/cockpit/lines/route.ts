@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date")?.trim();
-    const shiftCode = searchParams.get("shift_code") || searchParams.get("shift") || undefined;
-    const shift = normalizeShiftParam(shiftCode, searchParams.get("shift"));
+    const rawShift = searchParams.get("shift_code") ?? searchParams.get("shift");
+    const shift = normalizeShiftParam(rawShift);
 
     if (!date || !shift) {
       const res = NextResponse.json({ lines: [], source: "v_cockpit_station_summary" });

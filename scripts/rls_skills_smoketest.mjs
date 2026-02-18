@@ -1,3 +1,4 @@
+/* global process, console */
 import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 
@@ -14,7 +15,7 @@ if (!email || !password) throw new Error("Set TEST_EMAIL and TEST_PASSWORD env v
 
 const supabase = createClient(url, anon);
 
-const { data: auth, error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
 if (authErr) throw authErr;
 
 const { data, error } = await supabase.from("skills").select("id", { count: "exact", head: true });

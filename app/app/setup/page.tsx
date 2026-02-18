@@ -5,17 +5,18 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  CheckCircle2, 
-  Circle, 
-  Building2, 
-  Users, 
-  BookOpen, 
-  Briefcase, 
+import {
+  CheckCircle2,
+  Circle,
+  Building2,
+  Users,
+  BookOpen,
+  Briefcase,
   TrendingUp,
-  ArrowRight 
+  ArrowRight,
 } from "lucide-react";
 import { COPY } from "@/lib/copy";
+import { isDemoMode, DEMO_EMPLOYEES, DEMO_SKILLS, DEMO_POSITIONS, DEMO_ORG_UNITS } from "@/lib/demoData";
 
 interface SetupStep {
   id: string;
@@ -28,6 +29,23 @@ interface SetupStep {
   secondaryButtonLabel?: string;
 }
 
+const SETUP_STORAGE_KEY = "nadiplan_setup_progress";
+
+function getStoredProgress(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = localStorage.getItem(SETUP_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveProgress(progress: Record<string, boolean>) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SETUP_STORAGE_KEY, JSON.stringify(progress));
+}
+
 export default function SetupPage() {
   const router = useRouter();
   const [progress, setProgress] = useState<Record<string, boolean>>({
@@ -38,28 +56,28 @@ export default function SetupPage() {
     gaps: false,
   });
   const [loading, setLoading] = useState(true);
-  const [hasActiveOrg, setHasActiveOrg] = useState(false);
 
   useEffect(() => {
-    async function checkSetupProgress() {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/setup/progress", { credentials: "include" });
-        const json = await res.json().catch(() => ({}));
-        setHasActiveOrg(Boolean(json.hasActiveOrg));
-        setProgress({
-          orgUnit: Boolean(json.progress?.orgUnit),
-          employees: Boolean(json.progress?.employees),
-          skills: Boolean(json.progress?.skills),
-          positions: Boolean(json.progress?.positions),
-          gaps: Boolean(json.progress?.gaps),
-        });
-      } finally {
-        setLoading(false);
-      }
+    const stored = getStoredProgress();
+    if (isDemoMode()) {
+      setProgress({
+        orgUnit: DEMO_ORG_UNITS.length >= 1,
+        employees: DEMO_EMPLOYEES.length >= 1,
+        skills: DEMO_SKILLS.length >= 3,
+        positions: DEMO_POSITIONS.length >= 1,
+        gaps: false,
+      });
+    } else {
+      setProgress(stored);
     }
-    checkSetupProgress();
+    setLoading(false);
   }, []);
+
+  const markComplete = (stepId: string) => {
+    const newProgress = { ...progress, [stepId]: true };
+    setProgress(newProgress);
+    saveProgress(newProgress);
+  };
 
   const steps: SetupStep[] = [
     {
@@ -85,7 +103,7 @@ export default function SetupPage() {
       title: COPY.setup.steps.skills.title,
       completed: progress.skills ?? false,
       icon: BookOpen,
-      action: () => router.push("/admin/competence"),
+      action: () => router.push("/app/competence-matrix"),
       buttonLabel: COPY.setup.steps.skills.button,
     },
     {
@@ -93,7 +111,7 @@ export default function SetupPage() {
       title: COPY.setup.steps.positions.title,
       completed: progress.positions ?? false,
       icon: Briefcase,
-      action: () => router.push("/admin/positions"),
+      action: () => router.push("/app/admin/positions"),
       buttonLabel: COPY.setup.steps.positions.button,
     },
     {
@@ -102,6 +120,7 @@ export default function SetupPage() {
       completed: progress.gaps ?? false,
       icon: TrendingUp,
       action: () => {
+        markComplete("gaps");
         router.push("/app/tomorrows-gaps");
       },
       buttonLabel: COPY.setup.steps.gaps.button,
@@ -113,8 +132,8 @@ export default function SetupPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
+      <div className="p-6 warm-bg min-h-screen">
+        <div className="max-w-3xl mx-auto animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48" />
           <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
         </div>
@@ -122,30 +141,8 @@ export default function SetupPage() {
     );
   }
 
-  // Show empty state if no active organization
-  if (!loading && !hasActiveOrg) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto" data-testid="setup-page">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Building2 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              Select organization
-            </h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
-              Please select an organization to view setup progress.
-            </p>
-            <Button onClick={() => router.push("/app/org/select")}>
-              Select Organization
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6 max-w-3xl mx-auto" data-testid="setup-page">
+    <div className="p-6 max-w-3xl mx-auto warm-bg min-h-screen" data-testid="setup-page">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white" data-testid="heading-setup">
           {COPY.setup.title}
@@ -170,7 +167,7 @@ export default function SetupPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>Setup Checklist</CardTitle>
             <Badge variant={allComplete ? "default" : "secondary"}>
               {completedCount} / {steps.length} completed
@@ -199,12 +196,10 @@ export default function SetupPage() {
                 )}
               </div>
               <step.icon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <span
                   className={`font-medium ${
-                    step.completed
-                      ? "text-green-700 dark:text-green-300"
-                      : "text-gray-900 dark:text-white"
+                    step.completed ? "text-green-700 dark:text-green-300" : "text-gray-900 dark:text-white"
                   }`}
                 >
                   {step.title}
@@ -222,11 +217,7 @@ export default function SetupPage() {
                   </Button>
                 )}
                 {!step.completed && (
-                  <Button
-                    size="sm"
-                    onClick={step.action}
-                    data-testid={`button-${step.id}`}
-                  >
+                  <Button size="sm" onClick={step.action} data-testid={`button-${step.id}`}>
                     {step.buttonLabel}
                     <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>

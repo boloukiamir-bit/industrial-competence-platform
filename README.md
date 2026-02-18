@@ -57,6 +57,18 @@ npm run dev
 
 This starts both the Express backend and Vite frontend on **port 5001**.
 
+## Local API Verification
+
+Use the dev-only bearer token to verify cockpit APIs locally (non-production only).
+
+```bash
+TOKEN=$(rg -m1 '^DEV_BEARER_TOKEN=' .env.local | sed 's/^DEV_BEARER_TOKEN=//')
+curl -sS -4 -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:5001/api/debug/auth"
+curl -sS -4 -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:5001/api/cockpit/summary?date=2026-02-17&shift_code=Day&line=all"
+curl -sS -4 -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:5001/api/cockpit/issues?date=2026-02-17&shift_code=Day&line=all"
+curl -sS -4 -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:5001/api/cockpit/compliance-summary?date=2026-02-17&shift_code=Day&line=all"
+```
+
 ## Environment Variables
 
 Create environment variables in the Replit Secrets tab:
@@ -84,6 +96,37 @@ Create environment variables in the Replit Secrets tab:
 | PATCH | `/api/training-programs/:id` | Update a training program |
 | DELETE | `/api/training-programs/:id` | Delete a training program |
 | GET | `/api/health` | Health check |
+
+## Development Protocol
+
+### END OF SESSION RULE (MANDATORY)
+
+Before stopping work:
+
+1. `npm run build`
+2. `npm run git:safety`
+3. `git push`
+
+If branch is ahead or working tree dirty: **work is NOT complete.**
+
+No exceptions.
+
+**One command to finish a session:** `npm run ship` (runs build, git:safety, then push; fails if repo is dirty or ahead).
+
+### End of session checklist
+
+- Always run: **`npm run ship`**
+- Never stop without a green ship (build + clean + synced + pushed).
+
+Optional: install the terminal reminder so new shells warn when unpushed or dirty:
+
+```bash
+bash scripts/install_git_prompt_guard.sh
+```
+
+Then open a new terminal; you’ll see a red warning if the repo is dirty or the branch is ahead. Uninstall by removing the `git prompt guard` block from `~/.bashrc` (see comments in the script).
+
+---
 
 ## Key Features (Planned)
 

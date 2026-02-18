@@ -29,9 +29,9 @@ export type CockpitFiltersResponse = {
 
 export async function GET(request: NextRequest) {
   try {
-    const ctx = await getAuthedContext(request);
+    const ctx = await getAuthedContext(request, { routeLabel: "cockpit/filters" });
     if (!ctx.ok) {
-      const res = NextResponse.json({ error: ctx.error }, { status: ctx.status });
+      const res = NextResponse.json({ ok: false, error: ctx.error }, { status: ctx.status });
       return res;
     }
 

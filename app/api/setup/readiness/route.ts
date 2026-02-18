@@ -41,9 +41,9 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const date = normalizeDate(searchParams.get("date"));
-  const shiftCodeParam = searchParams.get("shift_code")?.trim() || undefined;
-  const shiftParam = searchParams.get("shift")?.trim() || undefined;
-  const normalizedShift = normalizeShiftParam(shiftCodeParam, shiftParam);
+  const shiftCodeParam = searchParams.get("shift_code")?.trim();
+  const shiftParam = searchParams.get("shift")?.trim();
+  const normalizedShift = normalizeShiftParam(shiftCodeParam ?? shiftParam);
   const shiftCode = normalizedShift ?? "all";
   const lineParam = searchParams.get("line")?.trim() || undefined;
   const lineFilter = lineParam && lineParam !== "all" ? lineParam : undefined;

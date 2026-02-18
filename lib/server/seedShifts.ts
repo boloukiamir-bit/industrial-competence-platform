@@ -1,5 +1,6 @@
 /**
  * Shared deterministic shift seed: create shifts and shift_assignments for site/date/shift_code.
+ * Optional line filter limits to a single area (code or name).
  * Used by POST /api/shifts/seed and POST /api/onboarding/bootstrap.
  * Caller must ensure org_id and site_id are tenant-scoped; this module does not enforce auth.
  */
@@ -31,6 +32,10 @@ export type SeedShiftsValidationError = {
 
 export type SeedShiftsResult = SeedShiftsSuccess | SeedShiftsValidationError;
 
+export type SeedShiftsOptions = {
+  line?: string | null;
+};
+
 /**
  * Load shift_pattern, areas, and stations; validate; then create shifts and shift_assignments.
  * Returns validation error (no DB writes) or success with counts.
@@ -40,7 +45,8 @@ export async function runSeedShifts(
   orgId: string,
   siteId: string,
   date: string,
-  shiftCode: string
+  shiftCode: string,
+  options?: SeedShiftsOptions
 ): Promise<SeedShiftsResult> {
   const { data: pattern, error: patternErr } = await supabase
     .from("shift_patterns")
@@ -63,12 +69,17 @@ export async function runSeedShifts(
     };
   }
 
-  const { data: areasData, error: areasErr } = await supabase
+  const lineFilter = options?.line?.trim();
+  let areasQuery = supabase
     .from("areas")
     .select("id, code, name")
     .eq("org_id", orgId)
     .eq("site_id", siteId)
     .eq("is_active", true);
+  if (lineFilter) {
+    areasQuery = areasQuery.or(`code.ilike.${lineFilter},name.ilike.${lineFilter}`);
+  }
+  const { data: areasData, error: areasErr } = await areasQuery;
 
   if (areasErr) {
     console.error("[seedShifts] areas query error:", areasErr);
@@ -155,15 +166,26 @@ export async function runSeedShifts(
         .select("id")
         .single();
 
-      if (insertShiftErr) {
-        console.error("[seedShifts] shift insert error:", insertShiftErr);
-        throw new Error(`Failed to create shift: ${insertShiftErr.message}`);
+      if (insertShiftErr || !newShift?.id) {
+        const { data: fallbackShift, error: fallbackErr } = await supabase
+          .from("shifts")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("shift_date", date)
+          .eq("shift_code", shiftCode)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (fallbackErr || !fallbackShift?.id) {
+          console.error("[seedShifts] shift insert error:", insertShiftErr);
+          throw new Error(`Failed to create shift: ${insertShiftErr?.message ?? "Unknown error"}`);
+        }
+        shiftId = fallbackShift.id;
+        shiftsExisting += 1;
+      } else {
+        shiftId = newShift.id;
+        shiftsCreated += 1;
       }
-      if (!newShift?.id) {
-        throw new Error("Shift insert returned no id");
-      }
-      shiftId = newShift.id;
-      shiftsCreated += 1;
     }
 
     const { data: stations } = await supabase
@@ -188,14 +210,19 @@ export async function runSeedShifts(
         continue;
       }
 
-      const { error: insertSaErr } = await supabase.from("shift_assignments").insert({
-        org_id: orgId,
-        shift_id: shiftId,
-        station_id: station.id,
-        assignment_date: date,
-        employee_id: null,
-        status: "unassigned",
-      });
+      const { error: insertSaErr } = await supabase
+        .from("shift_assignments")
+        .upsert(
+          {
+            org_id: orgId,
+            shift_id: shiftId,
+            station_id: station.id,
+            assignment_date: date,
+            employee_id: null,
+            status: "unassigned",
+          },
+          { onConflict: "org_id,shift_id,station_id", ignoreDuplicates: true }
+        );
 
       if (insertSaErr) {
         console.error("[seedShifts] shift_assignment insert error:", insertSaErr);

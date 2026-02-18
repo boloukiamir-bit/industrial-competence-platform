@@ -1,5 +1,7 @@
 /**
- * GET /api/compliance/actions?employeeId=... — list open + done actions for that employee. Org/site scoped.
+ * POST /api/compliance/actions — record a compliance action (HR task, reminder, etc.) into execution_decisions.
+ * Body: { employee_id: string, action_type: string, payload?: object }
+ * Returns { ok: true } or { ok: false, error, step }.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -11,12 +13,12 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-function errorPayload(step: string, error: unknown, details?: string) {
+function errorPayload(step: string, error: unknown) {
   const msg = error instanceof Error ? error.message : String(error);
-  return { ok: false as const, step, error: msg, ...(details != null && { details }) };
+  return { ok: false as const, step, error: msg };
 }
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const { supabase, pendingCookies } = await createSupabaseServerClient();
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
@@ -25,103 +27,69 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const { searchParams } = new URL(request.url);
-  const employeeId = searchParams.get("employeeId")?.trim() || null;
-  if (!employeeId) {
-    const res = NextResponse.json(errorPayload("validation", "employeeId is required"), { status: 400 });
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("role")
+    .eq("user_id", org.userId)
+    .eq("org_id", org.activeOrgId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!membership) {
+    const res = NextResponse.json(errorPayload("forbidden", "Not an org member"), { status: 403 });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
 
+  let body: { employee_id?: string; action_type?: string; payload?: Record<string, unknown> };
   try {
-    let query = supabaseAdmin
-      .from("compliance_actions")
-      .select(
-        "id, employee_id, compliance_id, action_type, status, due_date, notes, created_at, evidence_url, evidence_notes, evidence_added_at, evidence_added_by"
-      )
-      .eq("org_id", org.activeOrgId)
-      .eq("employee_id", employeeId)
-      .in("status", ["open", "done"])
-      .order("created_at", { ascending: false });
-
-    if (org.activeSiteId) {
-      query = query.eq("site_id", org.activeSiteId);
-    }
-
-    const { data: rows, error } = await query;
-
-    if (error) {
-      console.error("compliance/actions list", error);
-      const res = NextResponse.json(errorPayload("list", error.message), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const catalogIds = [...new Set((rows ?? []).map((r: { compliance_id: string }) => r.compliance_id))];
-    const { data: catalogRows } = catalogIds.length
-      ? await supabaseAdmin
-          .from("compliance_catalog")
-          .select("id, code, name")
-          .in("id", catalogIds)
-      : { data: [] as { id: string; code: string; name: string }[] };
-    const catalogMap = new Map(
-      (catalogRows ?? []).map((c) => [c.id, { code: c.code, name: c.name }])
-    );
-
-    const rowList = rows ?? [];
-    const ids = rowList.map((r: { id: string }) => r.id);
-    const latestDraftByAction = new Map<
-      string,
-      { last_drafted_at: string; last_drafted_channel: string | null }
-    >();
-    if (ids.length > 0) {
-      const { data: eventRows } = await supabaseAdmin
-        .from("compliance_action_events")
-        .select("action_id, created_at, channel")
-        .eq("org_id", org.activeOrgId)
-        .eq("event_type", "draft_copied")
-        .in("action_id", ids)
-        .order("created_at", { ascending: false });
-      for (const e of eventRows ?? []) {
-        if (!latestDraftByAction.has(e.action_id)) {
-          latestDraftByAction.set(e.action_id, {
-            last_drafted_at: e.created_at,
-            last_drafted_channel: e.channel ?? null,
-          });
-        }
-      }
-    }
-
-    const actions = rowList.map((r: Record<string, unknown>) => {
-      const cat = catalogMap.get(r.compliance_id as string);
-      const draftMeta = latestDraftByAction.get(r.id as string);
-      return {
-        id: r.id,
-        employee_id: r.employee_id,
-        compliance_id: r.compliance_id,
-        action_type: r.action_type,
-        status: r.status,
-        due_date: r.due_date ?? null,
-        notes: r.notes ?? null,
-        created_at: r.created_at,
-        compliance_code: cat?.code ?? null,
-        compliance_name: cat?.name ?? null,
-        last_drafted_at: draftMeta?.last_drafted_at ?? null,
-        last_drafted_channel: draftMeta?.last_drafted_channel ?? null,
-        evidence_url: r.evidence_url ?? null,
-        evidence_notes: r.evidence_notes ?? null,
-        evidence_added_at: r.evidence_added_at ?? null,
-        evidence_added_by: r.evidence_added_by ?? null,
-      };
-    });
-
-    const res = NextResponse.json({ ok: true, actions });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (err) {
-    console.error("GET /api/compliance/actions failed:", err);
-    const res = NextResponse.json(errorPayload("unexpected", err), { status: 500 });
+    body = await request.json();
+  } catch {
+    const res = NextResponse.json(errorPayload("body", "Invalid JSON"), { status: 400 });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
+
+  const employee_id = typeof body.employee_id === "string" ? body.employee_id.trim() : "";
+  const action_type = typeof body.action_type === "string" ? body.action_type.trim() : "";
+  if (!employee_id || !action_type) {
+    const res = NextResponse.json(
+      errorPayload("validation", "employee_id and action_type are required"),
+      { status: 400 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const target_id = crypto.randomUUID();
+  const root_cause = {
+    type: "compliance_action",
+    employee_id,
+    action_type,
+    payload: body.payload ?? {},
+  };
+  const actions = { action_type, payload: body.payload ?? {} };
+
+  const { error } = await supabaseAdmin.from("execution_decisions").insert({
+    org_id: org.activeOrgId,
+    site_id: org.activeSiteId ?? null,
+    decision_type: "compliance_action",
+    target_type: "employee",
+    target_id,
+    reason: action_type,
+    root_cause,
+    actions,
+    status: "active",
+    created_by: org.userId,
+  });
+
+  if (error) {
+    console.error("POST /api/compliance/actions insert error:", error);
+    const res = NextResponse.json(errorPayload("insert", error.message), { status: 500 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const res = NextResponse.json({ ok: true });
+  applySupabaseCookies(res, pendingCookies);
+  return res;
 }

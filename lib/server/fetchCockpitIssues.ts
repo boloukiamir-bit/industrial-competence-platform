@@ -63,7 +63,7 @@ export type FetchCockpitIssuesParams = {
   org_id: string;
   site_id: string | null;
   date: string;
-  shift_code: string; // normalized to Day|Evening|Night
+  shift_code: string; // normalized to Day|Evening|Night or seeded S1/S2/S3
   line?: string;
   include_go?: boolean;
   show_resolved?: boolean;
@@ -114,8 +114,8 @@ export async function fetchCockpitIssues(
   const dateString = toShiftDateString(date) ?? date;
   const dateFormatValid = toShiftDateString(date) !== null;
 
-  // View stores shift_code as textual Day|Evening|Night (from pl_assignment_segments.shift_type).
-  // Do NOT use numeric aliases (1,2,EM,FM) - filter exactly on canonical value.
+  // View stores shift_code as textual Day|Evening|Night (from pl_assignment_segments.shift_type)
+  // or seeded shift codes (S1/S2/S3). Filter exactly on canonical value.
   const shiftFilter = shift_code;
 
   // Filter by shift_date (YYYY-MM-DD text in view), shift_code (textual).
@@ -287,12 +287,17 @@ export async function fetchCockpitIssues(
   return debug ? { issues, debug: debugInfo } : { issues };
 }
 
-/** Normalize shift param: accept shift_code or shift, return Day|Evening|Night or null */
-export function normalizeShiftParam(
-  shiftCode?: string | null,
-  shift?: string | null
-): string | null {
-  const raw = shiftCode?.trim() || shift?.trim();
+/** Normalize shift param: accept S1/S2/S3 or Day/Evening/Night, return canonical or null */
+export function normalizeShiftParam(input?: string | null): string | null {
+  const raw = input?.trim();
   if (!raw) return null;
+  if (/^s[1-3]$/i.test(raw)) return raw.toUpperCase();
   return normalizeShift(raw);
 }
+
+// Dev-only inline tests (manual checks; do not run in production)
+// console.assert(normalizeShiftParam("Day") === "Day", "Normalize Day casing");
+// console.assert(normalizeShiftParam("night") === "Night", "Normalize Night casing");
+// console.assert(normalizeShiftParam("S1") === "S1", "Pass through seeded S1");
+// console.assert(normalizeShiftParam("s2") === "S2", "Normalize seeded s2");
+// console.assert(normalizeShiftParam("invalid") === null, "Reject invalid shift");
