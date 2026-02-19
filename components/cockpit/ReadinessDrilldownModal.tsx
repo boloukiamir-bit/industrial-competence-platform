@@ -13,7 +13,10 @@ import type {
   ReadinessDrilldownResponse,
   ReadinessDrilldownStation,
 } from "@/app/api/cockpit/readiness/drilldown/route";
-import type { ReadinessDecisionGetResponse } from "@/app/api/cockpit/readiness/decision/route";
+import type {
+  ReadinessDecisionGetResponse,
+  ReadinessDecisionPayload,
+} from "@/app/api/cockpit/readiness/decision/route";
 
 export type ReadinessStatus = "GO" | "WARNING" | "NO_GO";
 
@@ -23,6 +26,8 @@ export type ReadinessDrilldownModalProps = {
   shiftId: string;
   /** When WARNING or NO_GO, show Decision section. When GO, hide it. */
   readinessStatus?: ReadinessStatus | null;
+  /** Called after a decision is successfully logged so the parent (e.g. card) can refresh. */
+  onDecisionSaved?: (decision: ReadinessDecisionPayload) => void;
 };
 
 function formatPercent(ratio: number): string {
@@ -42,6 +47,7 @@ export function ReadinessDrilldownModal({
   onOpenChange,
   shiftId,
   readinessStatus = null,
+  onDecisionSaved,
 }: ReadinessDrilldownModalProps) {
   const { toast } = useToast();
   const [stations, setStations] = useState<ReadinessDrilldownStation[]>([]);
@@ -137,6 +143,7 @@ export function ReadinessDrilldownModal({
       if (data.ok && data.decision) {
         setSavedDecision(data.decision);
         toast({ title: "Decision logged" });
+        onDecisionSaved?.(data.decision);
       }
     } catch {
       toast({ title: "Failed to log decision", variant: "destructive" });

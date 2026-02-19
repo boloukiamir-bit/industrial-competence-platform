@@ -3,9 +3,20 @@
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/coreFetch";
 import type { ReadinessResponse } from "@/app/api/cockpit/readiness/route";
+import type { ReadinessDecisionGetResponse } from "@/app/api/cockpit/readiness/decision/route";
 import { ReadinessDrilldownModal } from "./ReadinessDrilldownModal";
 
 const MAX_REASON_BADGES = 4;
+const MAX_NOTE_TOOLTIP = 60;
+
+function formatDecisionTime(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
 
 export type IndustrialReadinessCardProps = {
   shiftId: string | null;
@@ -16,6 +27,7 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [decision, setDecision] = useState<ReadinessDecisionGetResponse["decision"]>(null);
 
   useEffect(() => {
     if (!shiftId) {
@@ -57,6 +69,31 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
     };
   }, [shiftId]);
 
+  useEffect(() => {
+    if (!shiftId) {
+      setDecision(null);
+      return;
+    }
+    let cancelled = false;
+    fetchJson<ReadinessDecisionGetResponse>(
+      `/api/cockpit/readiness/decision?shift_id=${encodeURIComponent(shiftId)}`
+    )
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data?.decision) {
+          setDecision(res.data.decision);
+        } else {
+          setDecision(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDecision(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shiftId]);
+
   if (shiftId == null || shiftId === "") {
     return (
       <section
@@ -82,7 +119,7 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
     );
   }
 
-  if (error && !data) {
+  if (error || !data) {
     return (
       <section
         className="rounded-lg border border-border bg-card p-4"
@@ -94,7 +131,7 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
     );
   }
 
-  const readiness = data!;
+  const readiness = data;
   const score = Math.round(Number(readiness.readiness_score));
   const status = readiness.status === "GO" || readiness.status === "WARNING" || readiness.status === "NO_GO"
     ? readiness.status
@@ -152,6 +189,44 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
           )}
         </div>
       )}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        {decision ? (
+          <>
+            <span className="text-muted-foreground">
+              Decision: <span className="font-medium text-foreground">{decision.decision}</span>
+              {decision.created_at && (
+                <span className="text-muted-foreground"> · {formatDecisionTime(decision.created_at)}</span>
+              )}
+            </span>
+            {decision.note && (
+              <span
+                className="text-muted-foreground truncate max-w-[200px] inline-block align-bottom"
+                title={decision.note.length > MAX_NOTE_TOOLTIP ? decision.note.slice(0, MAX_NOTE_TOOLTIP) + "…" : decision.note}
+              >
+                {decision.note.length > MAX_NOTE_TOOLTIP ? decision.note.slice(0, MAX_NOTE_TOOLTIP) + "…" : decision.note}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setDrilldownOpen(true)}
+              className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+            >
+              View / Change
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-muted-foreground">No decision logged</span>
+            <button
+              type="button"
+              onClick={() => setDrilldownOpen(true)}
+              className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+            >
+              Log decision
+            </button>
+          </>
+        )}
+      </div>
       {status === "NO_GO" && blockingCount > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">
@@ -166,7 +241,7 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
           </button>
         </div>
       )}
-      {data && (status === "GO" || status === "WARNING") && (
+      {(status === "GO" || status === "WARNING") && (
         <div className="mt-3">
           <button
             type="button"
@@ -183,6 +258,7 @@ export function IndustrialReadinessCard({ shiftId }: IndustrialReadinessCardProp
           onOpenChange={setDrilldownOpen}
           shiftId={shiftId}
           readinessStatus={status}
+          onDecisionSaved={setDecision}
         />
       )}
     </section>

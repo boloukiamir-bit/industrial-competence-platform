@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchJson } from "@/lib/coreFetch";
 import { normalizeShift } from "@/lib/shift";
-import type { CockpitFiltersResponse } from "@/app/api/cockpit/filters/route";
 
 const defaultDate = () => new Date().toISOString().slice(0, 10);
 const DEFAULT_SHIFT_OPTIONS = ["Day", "Evening", "Night"];
@@ -71,32 +70,27 @@ export function CockpitFilterProvider({ children }: { children: ReactNode }) {
     if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
   }, [date, shiftType, line, router, searchParams]);
 
-  // Load shift options from /api/cockpit/filters; fallback to Day/Evening/Night
+  // Load shift options from /api/cockpit/shift-codes?date= (tenant-scoped, stable for date)
   useEffect(() => {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     let cancelled = false;
-    fetchJson<CockpitFiltersResponse>("/api/cockpit/filters")
+    fetchJson<{ ok: true; shift_codes: string[] }>(`/api/cockpit/shift-codes?date=${encodeURIComponent(date)}`)
       .then((res) => {
         if (cancelled || !res.ok) return;
-        const seeded = (res.data?.shift_codes ?? [])
-          .map((s) => normalizeShiftCode(s.code))
-          .filter((code): code is string => Boolean(code));
-        const unique = Array.from(new Set(seeded));
-        if (unique.length > 0) {
-          setShiftOptions(unique);
-          setShiftType((prev) => pickShiftOption(prev, unique));
-        } else {
-          setShiftOptions(DEFAULT_SHIFT_OPTIONS);
-          setShiftType((prev) => pickShiftOption(prev, DEFAULT_SHIFT_OPTIONS));
-        }
+        const list = res.data?.shift_codes ?? [];
+        const unique = list.length > 0 ? Array.from(new Set(list)) : DEFAULT_SHIFT_OPTIONS;
+        setShiftOptions(unique);
+        setShiftType((prev) => pickShiftOption(prev, unique));
       })
       .catch(() => {
         if (cancelled) return;
         setShiftOptions(DEFAULT_SHIFT_OPTIONS);
+        setShiftType((prev) => pickShiftOption(prev, DEFAULT_SHIFT_OPTIONS));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [date]);
 
   const handleShiftTypeChange = (value: string) => {
     const normalized = normalizeShiftCode(value);
