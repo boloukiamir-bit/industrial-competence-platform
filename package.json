@@ -12,7 +12,8 @@
     "smoke:gap": "npx tsx scripts/smoke-gap-engine.ts",
     "smoke:eligibility": "npx tsx scripts/smoke-eligibility-line.ts",
     "smoke:is-active": "npx tsx scripts/smoke-is-active-filter.ts",
-    "db:smoke": "npx tsx scripts/db_smoke.ts"
+    "db:smoke": "npx tsx scripts/db_smoke.ts",
+    "gov:audit": "npx tsx scripts/governance_audit.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.0",

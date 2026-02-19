@@ -1,9 +1,21 @@
+import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { lineShiftTargetId } from "@/lib/shared/decisionIds";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { resolveAuthFromRequest } from "@/lib/server/auth";
+import { withGovernanceGate } from "@/lib/server/governance/withGovernanceGate";
+import { verifyExecutionToken } from "@/lib/server/governance/executionToken";
+import { getGovernanceConfig } from "@/lib/server/governance/getGovernanceConfig";
+
+function getAdmin(): ReturnType<typeof createClient> | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -232,4 +244,328 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/** POST: create/update line_shift decision. Governance gate via withGovernanceGate; 412 when blocked. */
+export async function POST(request: NextRequest) {
+  const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+  const org = await getActiveOrgFromSession(request, supabase);
+  if (!org.ok) {
+    const res = NextResponse.json({ ok: false, error: org.error }, { status: org.status });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const admin = getAdmin();
+  if (!admin) {
+    const res = NextResponse.json(
+      { ok: false, error: "Governance not configured (service role required)" },
+      { status: 503 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const config = await getGovernanceConfig(
+    supabase,
+    org.activeOrgId,
+    org.activeSiteId ?? null
+  );
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    const res = NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const b = body as Record<string, unknown>;
+  const dateRaw = typeof b.date === "string" ? b.date.trim() : "";
+  const shiftCodeRaw = typeof b.shift_code === "string" ? b.shift_code.trim() : "";
+  const lineRaw = typeof b.line === "string" ? b.line.trim() : "all";
+  const decisionRaw = typeof b.decision === "string" ? b.decision.trim().toLowerCase() : "acknowledged";
+  const note = typeof b.note === "string" ? b.note.trim() || null : null;
+  const executionTokenRaw =
+    typeof b.execution_token === "string" ? b.execution_token.trim() || null : null;
+
+  if (config.require_execution_token_for_decisions && !executionTokenRaw) {
+    const res = NextResponse.json(
+      {
+        ok: false,
+        error: { kind: "RUNTIME" as const, code: "MISSING_EXECUTION_TOKEN" },
+      },
+      { status: 400 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  let verifiedTokenPayload: Awaited<ReturnType<typeof verifyExecutionToken>>["payload"] = undefined;
+  if (executionTokenRaw) {
+    const verification = verifyExecutionToken(executionTokenRaw);
+    if (!verification.valid) {
+      const code =
+        verification.error?.code === "TOKEN_EXPIRED"
+          ? ("EXECUTION_TOKEN_EXPIRED" as const)
+          : ("INVALID_EXECUTION_TOKEN" as const);
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: { kind: "RUNTIME" as const, code },
+        },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    verifiedTokenPayload = verification.payload;
+  }
+
+  if (
+    verifiedTokenPayload &&
+    Array.isArray(verifiedTokenPayload.allowed_actions) &&
+    !verifiedTokenPayload.allowed_actions.includes("COCKPIT_DECISION_CREATE")
+  ) {
+    const res = NextResponse.json(
+      {
+        ok: false,
+        error: {
+          kind: "RUNTIME" as const,
+          code: "TOKEN_ACTION_NOT_ALLOWED",
+        },
+      },
+      { status: 409 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  if (config.require_one_time_execution_token_for_decisions) {
+    if (
+      !verifiedTokenPayload ||
+      typeof verifiedTokenPayload.jti !== "string" ||
+      verifiedTokenPayload.jti.length === 0
+    ) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: { kind: "RUNTIME" as const, code: "MISSING_TOKEN_JTI" },
+        },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    if (!executionTokenRaw) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: { kind: "RUNTIME" as const, code: "MISSING_TOKEN_JTI" },
+        },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const token_hash = createHash("sha256")
+      .update(executionTokenRaw, "utf8")
+      .digest("hex");
+    const { error: insertError } = await admin
+      .from("execution_token_uses")
+      .insert({
+        org_id: org.activeOrgId,
+        site_id: org.activeSiteId ?? null,
+        jti: verifiedTokenPayload.jti,
+        token_hash,
+        action: "COCKPIT_DECISION_CREATE",
+      } as never);
+    if (insertError) {
+      const code = (insertError as { code?: string }).code;
+      if (code === "23505") {
+        const res = NextResponse.json(
+          {
+            ok: false,
+            error: { kind: "RUNTIME" as const, code: "TOKEN_REPLAY" },
+          },
+          { status: 409 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      console.error("[cockpit/decisions] execution_token_uses insert error:", insertError);
+      const res = NextResponse.json(
+        { ok: false, error: "Failed to record token use" },
+        { status: 500 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+  }
+
+  const dateMatch = dateRaw.match(/^\d{4}-\d{2}-\d{2}$/);
+  const date = dateMatch ? dateRaw : "";
+  const shift = normalizeShiftParam(shiftCodeRaw);
+  const line = lineRaw || "all";
+
+  if (!date) {
+    const res = NextResponse.json(
+      { ok: false, error: "date is required (YYYY-MM-DD)" },
+      { status: 400 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+  if (!shift) {
+    const res = NextResponse.json(
+      { ok: false, error: "Invalid shift_code", details: { shift_code: shiftCodeRaw } },
+      { status: 400 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const target_id = lineShiftTargetId(date, shift, line);
+
+  const result = await withGovernanceGate({
+    supabase,
+    admin,
+    orgId: org.activeOrgId,
+    siteId: org.activeSiteId,
+    context: {
+      action: "COCKPIT_DECISION_CREATE",
+      target_type: "line_shift",
+      target_id,
+      meta: {
+        route: "/api/cockpit/decisions",
+        date,
+        shift_code: shift,
+        line,
+        decision: decisionRaw,
+      },
+      date,
+      shift_code: shift,
+    },
+    handler: async (governance) => {
+      const root_cause = {
+        type: "cockpit",
+        message: "Line shift decision from Cockpit",
+        date,
+        shift,
+        line,
+        decision: decisionRaw,
+      };
+      const actions = { chosen: decisionRaw, note: note ?? undefined };
+
+      const baseRow = {
+        org_id: org.activeOrgId,
+        site_id: org.activeSiteId,
+        decision_type: "resolve_no_go",
+        target_type: "line_shift",
+        target_id,
+        reason: note,
+        root_cause,
+        actions,
+        status: "active",
+        created_by: org.userId,
+      };
+      const governanceFields = governance
+        ? {
+            snapshot_id: governance.snapshot_id,
+            policy_fingerprint: governance.policy_fingerprint,
+            readiness_status: governance.readiness_status,
+            readiness_score: governance.readiness_score,
+            governance_calculated_at: governance.calculated_at,
+          }
+        : {};
+      const row = { ...baseRow, ...governanceFields };
+
+      const { data, error } = await supabaseAdmin
+        .from("execution_decisions")
+        .upsert(row as Record<string, unknown>, { onConflict: "decision_type,target_type,target_id" })
+        .select("id, target_id, created_at")
+        .single();
+
+      if (error) {
+        console.error("[cockpit/decisions] POST execution_decisions upsert error:", error);
+        throw new Error(error.message);
+      }
+
+      return {
+        decision_id: data?.id,
+        target_id,
+        created_at: data?.created_at,
+      };
+    },
+  });
+
+  if (!result.ok) {
+    const res = NextResponse.json(
+      { ok: false, error: result.error },
+      { status: result.status }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  if (result.ok && result.governance && verifiedTokenPayload) {
+    if (
+      verifiedTokenPayload.policy_fingerprint !== result.governance.policy_fingerprint
+    ) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: {
+            kind: "RUNTIME" as const,
+            code: "RUNTIME_NO_GO",
+            readiness_status: verifiedTokenPayload.readiness_status,
+            reason_codes: [],
+          },
+        },
+        { status: 409 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    const tokenHasScope =
+      verifiedTokenPayload.shift_date != null &&
+      verifiedTokenPayload.shift_date !== "" &&
+      verifiedTokenPayload.shift_code != null &&
+      verifiedTokenPayload.shift_code !== "";
+    const requestHasScope = date !== "" && shift != null;
+    if (tokenHasScope && requestHasScope) {
+      const tokenDate =
+        typeof verifiedTokenPayload.shift_date === "string"
+          ? verifiedTokenPayload.shift_date
+          : null;
+      const tokenCode =
+        typeof verifiedTokenPayload.shift_code === "string"
+          ? verifiedTokenPayload.shift_code
+          : null;
+      if (tokenDate !== date || tokenCode !== shift) {
+        const res = NextResponse.json(
+          {
+            ok: false,
+            error: {
+              kind: "RUNTIME" as const,
+              code: "RUNTIME_NO_GO",
+              readiness_status: "NO_GO",
+              reason_codes: ["TOKEN_SCOPE_MISMATCH"],
+            },
+          },
+          { status: 409 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+    }
+  }
+
+  const res = NextResponse.json({
+    ok: true,
+    ...result.data,
+  });
+  applySupabaseCookies(res, pendingCookies);
+  return res;
 }

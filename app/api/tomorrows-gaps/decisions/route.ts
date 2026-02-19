@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getOrgIdFromSession } from "@/lib/orgSession";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import { withGovernanceGate } from "@/lib/server/governance/withGovernanceGate";
 import { pool } from "@/lib/db/pool";
 import { lineShiftTargetId } from "@/lib/shared/decisionIds";
 import { normalizeShiftTypeOrDefault } from "@/lib/shift";
+
+function getAdmin(): ReturnType<typeof createClient> | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,30 +29,23 @@ const ALLOWED_DECISION_TYPES = [
 
 export async function POST(request: NextRequest) {
   try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
-    const session = await getOrgIdFromSession(request, supabase);
-    if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+    const org = await getActiveOrgFromSession(request, supabase);
+    if (!org.ok) {
+      const res = NextResponse.json({ error: org.error }, { status: org.status });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("active_org_id, active_site_id")
-      .eq("id", session.userId)
-      .single();
-    if (profileError) {
-      throw profileError;
-    }
-    if (!profile?.active_org_id) {
-      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
+    const admin = getAdmin();
+    if (!admin) {
+      const res = NextResponse.json(
+        { error: "Governance not configured (service role required)" },
+        { status: 503 }
+      );
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
-    const activeOrgId = profile.active_org_id as string;
-    const activeSiteId = profile?.active_site_id as string | null | undefined;
-    const userId = session.userId;
 
     const body = await request.json().catch(() => ({}));
     const date = typeof body.date === "string" ? body.date.trim().slice(0, 10) : "";
@@ -70,55 +71,88 @@ export async function POST(request: NextRequest) {
 
     const target_id = lineShiftTargetId(date, shift, line);
 
-    const bodyRootCause = body.root_cause as { primary?: string; causes?: string[] } | undefined;
-    const root_cause = JSON.stringify({
-      type: bodyRootCause?.primary ?? "CAPACITY",
-      message: "Tomorrow's Gaps line resolution",
-      details: { date, shift, line },
-      causes: bodyRootCause?.causes ?? [],
-    });
-    const actions = JSON.stringify({ chosen: normalizedDecision });
-
-    const upsertQuery = `
-      INSERT INTO execution_decisions (
-        org_id,
-        site_id,
-        decision_type,
-        target_type,
+    const result = await withGovernanceGate({
+      supabase,
+      admin,
+      orgId: org.activeOrgId,
+      siteId: org.activeSiteId,
+      context: {
+        action: "TOMORROWS_GAPS_DECISION_CREATE",
+        target_type: "line_shift",
         target_id,
-        reason,
-        root_cause,
-        actions,
-        status,
-        created_by,
-        created_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, NOW())
-      ON CONFLICT (decision_type, target_type, target_id)
-      DO UPDATE SET
-        reason = EXCLUDED.reason,
-        root_cause = EXCLUDED.root_cause,
-        actions = EXCLUDED.actions
-      RETURNING id, org_id, decision_type, target_type, target_id, reason, created_at
-    `;
+        meta: {
+          route: "/api/tomorrows-gaps/decisions",
+          date,
+          shift_code: shift,
+          line,
+          decision: normalizedDecision,
+        },
+        date,
+        shift_code: shift,
+      },
+      handler: async () => {
+        const bodyRootCause = body.root_cause as { primary?: string; causes?: string[] } | undefined;
+        const root_cause = JSON.stringify({
+          type: bodyRootCause?.primary ?? "CAPACITY",
+          message: "Tomorrow's Gaps line resolution",
+          details: { date, shift, line },
+          causes: bodyRootCause?.causes ?? [],
+        });
+        const actions = JSON.stringify({ chosen: normalizedDecision });
 
-    const result = await pool.query(upsertQuery, [
-      activeOrgId,
-      activeSiteId || null,
-      "resolve_no_go",
-      "line_shift",
-      target_id,
-      note || null,
-      root_cause,
-      actions,
-      "active",
-      userId,
-    ]);
+        const upsertQuery = `
+          INSERT INTO execution_decisions (
+            org_id,
+            site_id,
+            decision_type,
+            target_type,
+            target_id,
+            reason,
+            root_cause,
+            actions,
+            status,
+            created_by,
+            created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, NOW())
+          ON CONFLICT (decision_type, target_type, target_id)
+          DO UPDATE SET
+            reason = EXCLUDED.reason,
+            root_cause = EXCLUDED.root_cause,
+            actions = EXCLUDED.actions
+          RETURNING id, org_id, decision_type, target_type, target_id, reason, created_at
+        `;
 
-    const res = NextResponse.json({
-      success: true,
-      resolution: result.rows[0],
+        const queryResult = await pool.query(upsertQuery, [
+          org.activeOrgId,
+          org.activeSiteId || null,
+          "resolve_no_go",
+          "line_shift",
+          target_id,
+          note || null,
+          root_cause,
+          actions,
+          "active",
+          org.userId,
+        ]);
+
+        return {
+          success: true,
+          resolution: queryResult.rows[0],
+        };
+      },
     });
+
+    if (!result.ok) {
+      const res = NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const res = NextResponse.json({ ok: true, ...result.data });
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (error) {

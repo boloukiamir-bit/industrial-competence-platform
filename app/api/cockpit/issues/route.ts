@@ -57,18 +57,10 @@ export async function GET(request: NextRequest) {
       debug,
     });
 
-    // Reconciliation: summary.active_total == issues.length (same params, same source)
-    const summaryCount = issues.length;
-    if (summaryCount !== issues.length) {
-      console.warn(
-        `[cockpit/issues] RECONCILIATION MISMATCH: summaryCount=${summaryCount} issuesLength=${issues.length}`
-      );
-    }
-
     const res = NextResponse.json({
       ok: true,
       issues,
-      _debug: debugInfo ?? { summaryCount, issuesLength: issues.length, reconciled: true },
+      _debug: debugInfo ?? { summaryCount: issues.length, issuesLength: issues.length, reconciled: true },
     });
     applySupabaseCookies(res, pendingCookies);
     return res;
