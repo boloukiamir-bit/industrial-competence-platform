@@ -39,3 +39,4 @@ project_context.txt
 
 # vercel local
 .vercel
+.cursor/
