@@ -27,7 +27,7 @@ export type CockpitIssueRow = {
   issue_id: string;
   type: string;
   severity: "BLOCKING" | "WARNING";
-  issue_type?: "NO_GO" | "WARNING" | "GO";
+  issue_type?: "NO_GO" | "WARNING" | "GO" | "UNSTAFFED" | "ILLEGAL";
   line: string;
   shift_code: string;
   date: string;

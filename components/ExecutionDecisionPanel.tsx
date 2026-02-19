@@ -196,7 +196,7 @@ export function ExecutionDecisionPanel() {
         employeeName={drawerRow?.employee_name ?? undefined}
         onResolved={handleResolved}
         cockpitDate={date}
-        cockpitShift={shiftType}
+        cockpitShift={shiftType as "Day" | "Evening" | "Night"}
         cockpitLine={line || "all"}
       />
     </>
