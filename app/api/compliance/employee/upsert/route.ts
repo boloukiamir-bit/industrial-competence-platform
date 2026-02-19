@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
-import { normalizeShiftParam } from "@/lib/server/fetchCockpitIssues";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { requireGovernedMutation } from "@/lib/server/governance/firewall";
 import { withGovernanceGate } from "@/lib/server/governance/withGovernanceGate";
 import { isHrAdmin } from "@/lib/auth";
