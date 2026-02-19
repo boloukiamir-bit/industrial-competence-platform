@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import {
@@ -6,6 +7,7 @@ import {
   normalizeShiftParam,
   type CockpitIssue,
 } from "@/lib/server/fetchCockpitIssues";
+import { getCockpitReadiness } from "@/lib/server/getCockpitReadiness";
 
 export type CockpitIssueRow = CockpitIssue;
 
@@ -50,28 +52,44 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const { issues, debug: debugInfo } = await fetchCockpitIssues({
-      org_id: org.activeOrgId,
-      site_id: org.activeSiteId,
-      date,
-      shift_code: shift,
-      line: lineFilter,
-      include_go: includeGo,
-      show_resolved: showResolved,
-      debug,
-    });
+    const admin =
+      process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+          )
+        : null;
 
-    // Reconciliation: summary.active_total == issues.length (same params, same source)
+    const [readiness, { issues, debug: debugInfo }] = await Promise.all([
+      getCockpitReadiness({
+        supabase,
+        admin,
+        orgId: org.activeOrgId,
+        siteId: org.activeSiteId,
+        date,
+        shift_code: shift,
+      }),
+      fetchCockpitIssues({
+        org_id: org.activeOrgId,
+        site_id: org.activeSiteId,
+        date,
+        shift_code: shift,
+        line: lineFilter,
+        include_go: includeGo,
+        show_resolved: showResolved,
+        debug,
+      }),
+    ]);
+
     const summaryCount = issues.length;
-    if (summaryCount !== issues.length) {
-      console.warn(
-        `[cockpit/issues] RECONCILIATION MISMATCH: summaryCount=${summaryCount} issuesLength=${issues.length}`
-      );
-    }
 
     const res = NextResponse.json({
       ok: true,
       issues,
+      readiness_status: readiness.readiness_status,
+      legitimacy_status: readiness.legitimacy_status,
+      reason_codes: readiness.reason_codes,
+      policy: readiness.policy,
       _debug: debugInfo ?? { summaryCount, issuesLength: issues.length, reconciled: true },
     });
     applySupabaseCookies(res, pendingCookies);

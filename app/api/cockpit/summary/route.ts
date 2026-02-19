@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import {
   fetchCockpitIssues,
   normalizeShiftParam,
 } from "@/lib/server/fetchCockpitIssues";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { getCockpitReadiness } from "@/lib/server/getCockpitReadiness";
 
 export type CockpitSummaryResponse = {
   active_total: number;
@@ -12,6 +14,10 @@ export type CockpitSummaryResponse = {
   active_nonblocking: number;
   top_actions: Array<{ action: string; count: number }>;
   by_type: Array<{ type: string; count: number }>;
+  readiness_status: "GO" | "WARNING" | "NO_GO";
+  legitimacy_status: "LEGAL_STOP" | "OK";
+  reason_codes: string[];
+  policy: Array<{ unit_id: string; industry_type: string; version: number }>;
 };
 
 export async function GET(request: NextRequest) {
@@ -54,16 +60,36 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const { issues, debug: debugInfo } = await fetchCockpitIssues({
-      org_id: org.activeOrgId,
-      site_id: org.activeSiteId,
-      date,
-      shift_code: shift,
-      line: lineFilter,
-      include_go: false,
-      show_resolved: showResolved,
-      debug,
-    });
+    const admin =
+      process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+          )
+        : null;
+
+    const [readiness, { issues, debug: debugInfo }] = await Promise.all([
+      getCockpitReadiness({
+        supabase,
+        admin,
+        orgId: org.activeOrgId,
+        siteId: org.activeSiteId,
+        date,
+        shift_code: shift,
+      }),
+      fetchCockpitIssues({
+        org_id: org.activeOrgId,
+        site_id: org.activeSiteId,
+        date,
+        shift_code: shift,
+        line: lineFilter,
+        include_go: false,
+        show_resolved: showResolved,
+        debug,
+      }),
+    ]);
+
+    const useZeroCounts = readiness.legitimacy_status === "LEGAL_STOP";
 
     let active_blocking = 0;
     let active_nonblocking = 0;
@@ -99,11 +125,15 @@ export async function GET(request: NextRequest) {
     }));
 
     const body: CockpitSummaryResponse & { _debug?: unknown } = {
-      active_total: issues.length,
-      active_blocking,
-      active_nonblocking,
-      top_actions,
-      by_type,
+      active_total: useZeroCounts ? 0 : issues.length,
+      active_blocking: useZeroCounts ? 0 : active_blocking,
+      active_nonblocking: useZeroCounts ? 0 : active_nonblocking,
+      top_actions: useZeroCounts ? [] : top_actions,
+      by_type: useZeroCounts ? [] : by_type,
+      readiness_status: readiness.readiness_status,
+      legitimacy_status: readiness.legitimacy_status,
+      reason_codes: readiness.reason_codes,
+      policy: readiness.policy,
     };
     if (debugInfo) body._debug = debugInfo;
 

@@ -57,7 +57,8 @@ export function CockpitFilterProvider({ children }: { children: ReactNode }) {
     urlSyncedRef.current = true;
   }, [searchParams]);
 
-  // URL sync: push date, shift_code, line to URL when they change
+  // URL sync: push date, shift_code, line to URL when they change.
+  // (Shift is only updated when invalid via the shift-codes effect, so we do not overwrite URL S1 with Day.)
   useEffect(() => {
     if (!urlSyncedRef.current) return;
     const p = new URLSearchParams(searchParams.toString());
@@ -71,6 +72,7 @@ export function CockpitFilterProvider({ children }: { children: ReactNode }) {
   }, [date, shiftType, line, router, searchParams]);
 
   // Load shift options from /api/cockpit/shift-codes?date= (tenant-scoped, stable for date)
+  // Rule: if current shift is already in the fetched list (canonical), do NOT change it (keeps URL shift_code authoritative).
   useEffect(() => {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     let cancelled = false;
@@ -78,14 +80,44 @@ export function CockpitFilterProvider({ children }: { children: ReactNode }) {
       .then((res) => {
         if (cancelled || !res.ok) return;
         const list = res.data?.shift_codes ?? [];
-        const unique = list.length > 0 ? Array.from(new Set(list)) : DEFAULT_SHIFT_OPTIONS;
-        setShiftOptions(unique);
-        setShiftType((prev) => pickShiftOption(prev, unique));
+        const shiftCodes = list.length > 0 ? Array.from(new Set(list)) : DEFAULT_SHIFT_OPTIONS;
+        setShiftOptions(shiftCodes);
+        setShiftType((prev) => {
+          const canonicalPrev = normalizeShiftCode(prev) ?? prev;
+          if (shiftCodes.includes(canonicalPrev)) return prev;
+          const next = pickShiftOption(prev, shiftCodes);
+          if (process.env.NODE_ENV !== "production") {
+            const reason =
+              !prev || prev.trim() === "" ? "empty_shift" : "invalid_url_shift";
+            console.debug("[cockpit] auto-shift", {
+              from: prev,
+              to: next,
+              reason,
+              date,
+              shiftCodes,
+            });
+          }
+          return next;
+        });
       })
       .catch(() => {
         if (cancelled) return;
         setShiftOptions(DEFAULT_SHIFT_OPTIONS);
-        setShiftType((prev) => pickShiftOption(prev, DEFAULT_SHIFT_OPTIONS));
+        setShiftType((prev) => {
+          const canonicalPrev = normalizeShiftCode(prev) ?? prev;
+          if (DEFAULT_SHIFT_OPTIONS.includes(canonicalPrev)) return prev;
+          const next = pickShiftOption(prev, DEFAULT_SHIFT_OPTIONS);
+          if (process.env.NODE_ENV !== "production") {
+            console.debug("[cockpit] auto-shift", {
+              from: prev,
+              to: next,
+              reason: "invalid_url_shift",
+              date,
+              shiftCodes: DEFAULT_SHIFT_OPTIONS,
+            });
+          }
+          return next;
+        });
       });
     return () => {
       cancelled = true;

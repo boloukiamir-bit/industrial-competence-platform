@@ -139,6 +139,33 @@ export async function resolveAuthFromRequest(
   request: NextRequest,
   options?: { supabase?: SupabaseClient; pendingCookies?: CookieToSet[] }
 ): Promise<ResolvedAuth> {
+  // A) Try cookie-based session first (current behavior)
+  if (options?.supabase) {
+    const { data, error } = await options.supabase.auth.getUser();
+    if (!error && data?.user) {
+      return {
+        ok: true,
+        user: data.user,
+        supabase: options.supabase,
+        pendingCookies: options.pendingCookies ?? [],
+        authType: "cookie",
+      };
+    }
+  } else {
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data?.user) {
+      return {
+        ok: true,
+        user: data.user,
+        supabase,
+        pendingCookies,
+        authType: "cookie",
+      };
+    }
+  }
+
+  // B) If cookie fails, try Authorization: Bearer <token> (curl-friendly)
   const devAuth = await tryDevBearer(request);
   if (devAuth !== null) return devAuth;
 
@@ -160,26 +187,5 @@ export async function resolveAuthFromRequest(
     }
   }
 
-  if (options?.supabase) {
-    const { data, error } = await options.supabase.auth.getUser();
-    if (error || !data.user) {
-      return { ok: false, error: "Invalid or expired session", status: 401 };
-    }
-
-    return {
-      ok: true,
-      user: data.user,
-      supabase: options.supabase,
-      pendingCookies: options.pendingCookies ?? [],
-      authType: "cookie",
-    };
-  }
-
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) {
-    return { ok: false, error: "Invalid or expired session", status: 401 };
-  }
-
-  return { ok: true, user: data.user, supabase, pendingCookies, authType: "cookie" };
+  return { ok: false, error: "Invalid or expired session", status: 401 };
 }

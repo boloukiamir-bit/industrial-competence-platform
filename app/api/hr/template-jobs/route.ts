@@ -3,12 +3,22 @@
  * POST /api/hr/template-jobs — create job. Body: template_code, employee_id, owner_user_id?, due_date?, notes?, filled_values?
  */
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { pool } from "@/lib/db/pool";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { requireGovernedMutation } from "@/lib/server/governance/firewall";
+import { withGovernanceGate } from "@/lib/server/governance/withGovernanceGate";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+
+function getAdmin(): ReturnType<typeof createClient> | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 function err(step: string, msg: string, status: number) {
   return NextResponse.json({ error: msg, step }, { status });
@@ -77,13 +87,26 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
+  const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
     const res = NextResponse.json({ error: org.error }, { status: org.status });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
+
+  const admin = getAdmin();
+  const fw = requireGovernedMutation({
+    admin,
+    governed: true,
+    context: { route: "/api/hr/template-jobs", action: "HR_TEMPLATE_JOB_CREATE" },
+  });
+  if (!fw.ok) {
+    const res = NextResponse.json(fw.body, { status: fw.status });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
   let body: {
     template_code?: string;
     employee_id?: string;
@@ -118,53 +141,83 @@ export async function POST(request: NextRequest) {
   const filledValues =
     body.filled_values != null && typeof body.filled_values === "object" ? body.filled_values : {};
 
+  const target_id = `template:${templateCode}:employee:${employeeId}`;
+
   try {
-    const ins = await pool.query(
-      `INSERT INTO hr_template_jobs (org_id, site_id, template_code, employee_id, owner_user_id, status, due_date, notes, filled_values, created_by)
-       VALUES ($1, $2, $3, $4, $5, 'OPEN', $6, $7, $8::jsonb, $9)
-       RETURNING id, template_code, employee_id, owner_user_id, status, due_date, notes, filled_values, created_at`,
-      [
-        org.activeOrgId,
-        org.activeSiteId ?? null,
-        templateCode,
-        employeeId,
-        ownerUserId ?? null,
-        dueDate,
-        notes,
-        JSON.stringify(filledValues),
-        org.userId,
-      ]
-    );
-    const row = ins.rows[0];
-    const supabaseAdmin = getSupabaseAdmin();
-    const root_cause = { type: "hr_template_job", template_code: templateCode, employee_id: employeeId };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabaseAdmin as any).from("execution_decisions")
-      .insert({
-      org_id: org.activeOrgId,
-      site_id: org.activeSiteId ?? null,
-      decision_type: "hr_template_job_created",
+    const result = await withGovernanceGate({
+    supabase,
+    admin: admin!,
+    orgId: org.activeOrgId,
+    siteId: org.activeSiteId,
+    context: {
+      action: "HR_TEMPLATE_JOB_CREATE",
       target_type: "hr_template_job",
-      target_id: row.id,
-    reason: `Job created: ${templateCode} for employee ${employeeId}`,
-    root_cause,
-    actions: { status: "OPEN" },
-      status: "active",
-      created_by: org.userId,
-    });
-    const res = NextResponse.json({
-      id: row.id,
-      templateCode: row.template_code,
-      employeeId: row.employee_id,
-      ownerUserId: row.owner_user_id ?? null,
-      status: row.status,
-      dueDate: row.due_date ?? null,
-      notes: row.notes ?? null,
-      filledValues: row.filled_values ?? {},
-      createdAt: row.created_at,
-    });
+      target_id,
+      meta: {
+        route: "/api/hr/template-jobs",
+        template_id: templateCode,
+        employee_id: employeeId,
+      },
+    },
+    handler: async () => {
+      const ins = await pool.query(
+        `INSERT INTO hr_template_jobs (org_id, site_id, template_code, employee_id, owner_user_id, status, due_date, notes, filled_values, created_by)
+         VALUES ($1, $2, $3, $4, $5, 'OPEN', $6, $7, $8::jsonb, $9)
+         RETURNING id, template_code, employee_id, owner_user_id, status, due_date, notes, filled_values, created_at`,
+        [
+          org.activeOrgId,
+          org.activeSiteId ?? null,
+          templateCode,
+          employeeId,
+          ownerUserId ?? null,
+          dueDate,
+          notes,
+          JSON.stringify(filledValues),
+          org.userId,
+        ]
+      );
+      const row = ins.rows[0];
+      const supabaseAdmin = getSupabaseAdmin();
+      const root_cause = { type: "hr_template_job", template_code: templateCode, employee_id: employeeId };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabaseAdmin as any).from("execution_decisions").insert({
+        org_id: org.activeOrgId,
+        site_id: org.activeSiteId ?? null,
+        decision_type: "hr_template_job_created",
+        target_type: "hr_template_job",
+        target_id: row.id,
+        reason: `Job created: ${templateCode} for employee ${employeeId}`,
+        root_cause,
+        actions: { status: "OPEN" },
+        status: "active",
+        created_by: org.userId,
+      });
+      return {
+        id: row.id,
+        templateCode: row.template_code,
+        employeeId: row.employee_id,
+        ownerUserId: row.owner_user_id ?? null,
+        status: row.status,
+        dueDate: row.due_date ?? null,
+        notes: row.notes ?? null,
+        filledValues: row.filled_values ?? {},
+        createdAt: row.created_at,
+      };
+    },
+  });
+
+  if (!result.ok) {
+    const res = NextResponse.json(
+      { ok: false, error: result.error },
+      { status: result.status }
+    );
     applySupabaseCookies(res, pendingCookies);
     return res;
+  }
+
+  const res = NextResponse.json({ ok: true, ...result.data });
+  applySupabaseCookies(res, pendingCookies);
+  return res;
   } catch (e) {
     console.error("[template-jobs] POST error", e);
     const res = NextResponse.json(

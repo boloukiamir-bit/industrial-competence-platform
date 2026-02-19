@@ -4,6 +4,16 @@ import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { normalizeShift } from "@/lib/shift";
 import { lineShiftTargetId } from "@/lib/shared/decisionIds";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { normalizeShiftParam } from "@/lib/server/fetchCockpitIssues";
+import { withGovernanceGate } from "@/lib/server/governance/withGovernanceGate";
+
+function getAdmin(): ReturnType<typeof createClient> | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -217,4 +227,144 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/** POST: create/update line_shift decision. Governance gate via withGovernanceGate; 412 when blocked. */
+export async function POST(request: NextRequest) {
+  const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+  const org = await getActiveOrgFromSession(request, supabase);
+  if (!org.ok) {
+    const res = NextResponse.json({ ok: false, error: org.error }, { status: org.status });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const admin = getAdmin();
+  if (!admin) {
+    const res = NextResponse.json(
+      { ok: false, error: "Governance not configured (service role required)" },
+      { status: 503 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    const res = NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const b = body as Record<string, unknown>;
+  const dateRaw = typeof b.date === "string" ? b.date.trim() : "";
+  const shiftCodeRaw = typeof b.shift_code === "string" ? b.shift_code.trim() : "";
+  const lineRaw = typeof b.line === "string" ? b.line.trim() : "all";
+  const decisionRaw = typeof b.decision === "string" ? b.decision.trim().toLowerCase() : "acknowledged";
+  const note = typeof b.note === "string" ? b.note.trim() || null : null;
+
+  const dateMatch = dateRaw.match(/^\d{4}-\d{2}-\d{2}$/);
+  const date = dateMatch ? dateRaw : "";
+  const shift = normalizeShiftParam(shiftCodeRaw);
+  const line = lineRaw || "all";
+
+  if (!date) {
+    const res = NextResponse.json(
+      { ok: false, error: "date is required (YYYY-MM-DD)" },
+      { status: 400 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+  if (!shift) {
+    const res = NextResponse.json(
+      { ok: false, error: "Invalid shift_code", details: { shift_code: shiftCodeRaw } },
+      { status: 400 }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const target_id = lineShiftTargetId(date, shift, line);
+
+  const result = await withGovernanceGate({
+    supabase,
+    admin,
+    orgId: org.activeOrgId,
+    siteId: org.activeSiteId,
+    context: {
+      action: "COCKPIT_DECISION_CREATE",
+      target_type: "line_shift",
+      target_id,
+      meta: {
+        route: "/api/cockpit/decisions",
+        date,
+        shift_code: shift,
+        line,
+        decision: decisionRaw,
+      },
+      date,
+      shift_code: shift,
+    },
+    handler: async () => {
+      const root_cause = {
+        type: "cockpit",
+        message: "Line shift decision from Cockpit",
+        date,
+        shift,
+        line,
+        decision: decisionRaw,
+      };
+      const actions = { chosen: decisionRaw, note: note ?? undefined };
+
+      const { data, error } = await supabaseAdmin
+        .from("execution_decisions")
+        .upsert(
+          {
+            org_id: org.activeOrgId,
+            site_id: org.activeSiteId,
+            decision_type: "resolve_no_go",
+            target_type: "line_shift",
+            target_id,
+            reason: note,
+            root_cause,
+            actions,
+            status: "active",
+            created_by: org.userId,
+          },
+          { onConflict: "decision_type,target_type,target_id" }
+        )
+        .select("id, target_id, created_at")
+        .single();
+
+      if (error) {
+        console.error("[cockpit/decisions] POST execution_decisions upsert error:", error);
+        throw new Error(error.message);
+      }
+
+      return {
+        decision_id: data?.id,
+        target_id,
+        created_at: data?.created_at,
+      };
+    },
+  });
+
+  if (!result.ok) {
+    const res = NextResponse.json(
+      { ok: false, error: result.error },
+      { status: result.status }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const res = NextResponse.json({
+    ok: true,
+    ...result.data,
+  });
+  applySupabaseCookies(res, pendingCookies);
+  return res;
 }

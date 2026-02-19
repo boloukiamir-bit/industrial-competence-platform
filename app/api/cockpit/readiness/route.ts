@@ -1,12 +1,15 @@
 /**
  * GET /api/cockpit/readiness?shift_id=<uuid>
  * Returns Industrial Readiness Index (v1.1) for the given shift.
+ * Unit-level policy binding: if any station has no unit or any unit has no active policy, returns LEGAL_STOP / NO_GO with POLICY_MISSING / UNIT_MISSING.
  * Tenant scope: org_id and site_id from session only (never from query).
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { getCockpitReadiness } from "@/lib/server/getCockpitReadiness";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -21,6 +24,8 @@ export type ReadinessResponse = {
     reason_codes: string[];
     calculated_at: string;
   };
+  legitimacy_status?: "LEGAL_STOP" | "OK";
+  policy?: Array<{ unit_id: string; industry_type: string; version: number }>;
 };
 
 function isUuid(value: string | null): value is string {
@@ -56,85 +61,37 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const safeFallback = (): ReadinessResponse => ({
-    ok: true,
-    readiness: {
-      readiness_score: 0,
-      status: "NO_GO",
-      blocking_stations: [],
-      reason_codes: ["NO_ASSIGNMENTS"],
-      calculated_at: new Date().toISOString(),
-    },
+  const admin =
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_ROLE_KEY
+        )
+      : null;
+
+  const result = await getCockpitReadiness({
+    supabase,
+    admin,
+    orgId: org.activeOrgId,
+    siteId: activeSiteId,
+    shiftId,
   });
 
-  const mapRowToReadiness = (row: {
-    readiness_score?: number | null;
-    status?: string | null;
-    blocking_stations?: string[] | (unknown[]) | null;
-    reason_codes?: string[] | null;
-    calculated_at?: string | null;
-  }): ReadinessResponse["readiness"] => {
-    const status = (row.status === "GO" || row.status === "WARNING" || row.status === "NO_GO"
-      ? row.status
-      : "NO_GO") as ReadinessStatus;
-    const blocking = Array.isArray(row.blocking_stations)
-      ? row.blocking_stations.map((id) => (typeof id === "string" ? id : String(id)))
-      : [];
-    const reasonCodes = Array.isArray(row.reason_codes) ? row.reason_codes : [];
-    return {
-      readiness_score: Number(row.readiness_score ?? 0),
-      status,
-      blocking_stations: blocking,
-      reason_codes: reasonCodes,
-      calculated_at: row.calculated_at ? String(row.calculated_at) : new Date().toISOString(),
-    };
-  };
-
-  const { data: rows, error } = await supabase.rpc("calculate_industrial_readiness", {
-    p_org_id: org.activeOrgId,
-    p_site_id: activeSiteId,
-    p_shift_id: shiftId,
-  });
-
-  if (error) {
-    const fallback = await supabase.rpc("calculate_industrial_readiness_v1", {
-      p_org_id: org.activeOrgId,
-      p_site_id: activeSiteId,
-      p_shift_id: shiftId,
-    });
-    if (fallback.error) {
-      const res = NextResponse.json(
-        { ok: true, readiness: safeFallback().readiness },
-        { status: 200 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-    const row = Array.isArray(fallback.data) ? fallback.data[0] : fallback.data;
-    const readiness = mapRowToReadiness(row ?? {});
-    const res = NextResponse.json({
+  const res = NextResponse.json(
+    {
       ok: true,
-      readiness: { ...readiness, reason_codes: [] },
-    } satisfies ReadinessResponse);
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
-  const row = Array.isArray(rows) ? rows[0] : rows;
-  if (!row) {
-    const res = NextResponse.json({
-      ok: true,
-      readiness: safeFallback().readiness,
-    } satisfies ReadinessResponse);
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
-  const readiness = mapRowToReadiness(row);
-  const res = NextResponse.json({
-    ok: true,
-    readiness,
-  } satisfies ReadinessResponse);
+      readiness: {
+        readiness_score: result.readiness_score,
+        status: result.readiness_status,
+        blocking_stations: result.blocking_stations,
+        reason_codes: result.reason_codes,
+        calculated_at: result.calculated_at,
+      },
+      legitimacy_status: result.legitimacy_status,
+      policy: result.policy.length ? result.policy : undefined,
+    } satisfies ReadinessResponse,
+    { status: 200 }
+  );
   applySupabaseCookies(res, pendingCookies);
   return res;
 }
