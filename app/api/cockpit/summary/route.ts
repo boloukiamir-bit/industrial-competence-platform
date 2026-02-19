@@ -7,6 +7,8 @@ import {
 } from "@/lib/server/fetchCockpitIssues";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getCockpitReadiness } from "@/lib/server/getCockpitReadiness";
+import { toPolicyEnvelope, type PolicyEnvelope } from "@/lib/server/policyEnvelope";
+import { assertExecutionLegitimacy } from "@/lib/server/governance/runtimeGuard";
 
 export type CockpitSummaryResponse = {
   active_total: number;
@@ -17,7 +19,8 @@ export type CockpitSummaryResponse = {
   readiness_status: "GO" | "WARNING" | "NO_GO";
   legitimacy_status: "LEGAL_STOP" | "OK";
   reason_codes: string[];
-  policy: Array<{ unit_id: string; industry_type: string; version: number }>;
+  /** Canonical envelope: always { units, compliance }. */
+  policy: PolicyEnvelope;
 };
 
 export async function GET(request: NextRequest) {
@@ -89,6 +92,19 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    const runtime = assertExecutionLegitimacy({
+      readiness_status: readiness.readiness_status,
+      reason_codes: readiness.reason_codes ?? [],
+    });
+    if (!runtime.allowed) {
+      const res = NextResponse.json(
+        { ok: false, error: runtime.error },
+        { status: runtime.status }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
     const useZeroCounts = readiness.legitimacy_status === "LEGAL_STOP";
 
     let active_blocking = 0;
@@ -133,7 +149,7 @@ export async function GET(request: NextRequest) {
       readiness_status: readiness.readiness_status,
       legitimacy_status: readiness.legitimacy_status,
       reason_codes: readiness.reason_codes,
-      policy: readiness.policy,
+      policy: toPolicyEnvelope(readiness.policy, readiness.policy_compliance),
     };
     if (debugInfo) body._debug = debugInfo;
 

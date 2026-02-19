@@ -6,20 +6,42 @@
  * Dates: shift_date and due_date stored as DATE (YYYY-MM-DD); API returns ISO strings.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { pool } from "@/lib/db/pool";
-import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { parseDateForStorage, addDaysISO, toISODateString } from "@/lib/dateIso";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { requireGovernedMutation } from "@/lib/server/governance/firewall";
+import { withGovernanceGate } from "@/lib/server/governance/withGovernanceGate";
+import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 const VALID_OWNERS = ["Ops", "Supervisor", "HR"] as const;
 
+function getAdmin(): ReturnType<typeof createClient> | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
 export async function POST(request: NextRequest) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
+  const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
     const res = NextResponse.json({ error: org.error }, { status: org.status });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const admin = getAdmin();
+  const fw = requireGovernedMutation({
+    admin,
+    governed: true,
+    context: { route: "/api/hr/tasks/create", action: "HR_TASK_CREATE" },
+  });
+  if (!fw.ok) {
+    const res = NextResponse.json(fw.body, { status: fw.status });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
@@ -87,18 +109,32 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
+  const target_id = `task:template:${templateId}:station:${stationId ?? "na"}:employee:${targetEmployeeId ?? "na"}`;
+
   try {
-    const verify = await pool.query(
+    const result = await withGovernanceGate({
+    supabase,
+    admin: admin!,
+    orgId: activeOrgId,
+    siteId: activeSiteId,
+    context: {
+      action: "HR_TASK_CREATE",
+      target_type: "hr_task",
+      target_id,
+      meta: {
+        route: "/api/hr/tasks/create",
+        template_id: templateId,
+        station_id: stationId ?? null,
+        employee_id: targetEmployeeId ?? null,
+      },
+    },
+    handler: async () => {
+  const verify = await pool.query(
       `SELECT id, name FROM hr_workflows WHERE id = $1 AND org_id = $2 AND is_active = true LIMIT 1`,
       [templateId, activeOrgId]
     );
     if (verify.rows.length === 0) {
-      const res = NextResponse.json(
-        { error: "Template not found or not in your org" },
-        { status: 404 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      throw new Error("Template not found or not in your org");
     }
 
     const templateName = (verify.rows[0]?.name as string) || "Training task";
@@ -170,24 +206,42 @@ export async function POST(request: NextRequest) {
       }
     }
     const row = insert.rows[0];
+    return {
+      success: true,
+      id: row.id,
+      title: row.title,
+      owner_role: row.owner_role,
+      shift_date: toISODateString(shiftDate),
+      due_date: toISODateString(row.due_date) ?? dueDate,
+      status: row.status,
+      created_at: row.created_at,
+      metadata_supported: metadataSupported,
+    };
+    }
+  });
+
+  if (!result.ok) {
     const res = NextResponse.json(
-      {
-        success: true,
-        id: row.id,
-        title: row.title,
-        owner_role: row.owner_role,
-        shift_date: toISODateString(shiftDate),
-        due_date: toISODateString(row.due_date) ?? dueDate,
-        status: row.status,
-        created_at: row.created_at,
-        metadata_supported: metadataSupported,
-      },
-      { status: 201 }
+      { ok: false, error: result.error },
+      { status: result.status }
     );
     applySupabaseCookies(res, pendingCookies);
     return res;
+  }
+
+  const res = NextResponse.json({ ok: true, ...result.data }, { status: 201 });
+  applySupabaseCookies(res, pendingCookies);
+  return res;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "Template not found or not in your org") {
+      const res = NextResponse.json(
+        { error: "Template not found or not in your org" },
+        { status: 404 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
     if (/relation .* does not exist|42P01/i.test(msg)) {
       const res = NextResponse.json(
         { error: "Training tasks not available. Run database migrations." },

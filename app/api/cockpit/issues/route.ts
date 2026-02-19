@@ -8,6 +8,8 @@ import {
   type CockpitIssue,
 } from "@/lib/server/fetchCockpitIssues";
 import { getCockpitReadiness } from "@/lib/server/getCockpitReadiness";
+import { toPolicyEnvelope } from "@/lib/server/policyEnvelope";
+import { assertExecutionLegitimacy } from "@/lib/server/governance/runtimeGuard";
 
 export type CockpitIssueRow = CockpitIssue;
 
@@ -81,6 +83,19 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    const runtime = assertExecutionLegitimacy({
+      readiness_status: readiness.readiness_status,
+      reason_codes: readiness.reason_codes ?? [],
+    });
+    if (!runtime.allowed) {
+      const res = NextResponse.json(
+        { ok: false, error: runtime.error },
+        { status: runtime.status }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
     const summaryCount = issues.length;
 
     const res = NextResponse.json({
@@ -89,7 +104,7 @@ export async function GET(request: NextRequest) {
       readiness_status: readiness.readiness_status,
       legitimacy_status: readiness.legitimacy_status,
       reason_codes: readiness.reason_codes,
-      policy: readiness.policy,
+      policy: toPolicyEnvelope(readiness.policy, readiness.policy_compliance),
       _debug: debugInfo ?? { summaryCount, issuesLength: issues.length, reconciled: true },
     });
     applySupabaseCookies(res, pendingCookies);

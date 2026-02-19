@@ -10,6 +10,11 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getCockpitReadiness } from "@/lib/server/getCockpitReadiness";
+import { toPolicyEnvelope, type PolicyEnvelope } from "@/lib/server/policyEnvelope";
+import { normalizeShiftParam } from "@/lib/server/fetchCockpitIssues";
+import { assertExecutionLegitimacy } from "@/lib/server/governance/runtimeGuard";
+import { createExecutionToken } from "@/lib/server/governance/executionToken";
+import { computePolicyFingerprint } from "@/lib/server/governance/enforceLegitimacy";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -25,7 +30,9 @@ export type ReadinessResponse = {
     calculated_at: string;
   };
   legitimacy_status?: "LEGAL_STOP" | "OK";
-  policy?: Array<{ unit_id: string; industry_type: string; version: number }>;
+  /** Canonical envelope: always { units, compliance }. */
+  policy?: PolicyEnvelope;
+  execution_token?: string;
 };
 
 function isUuid(value: string | null): value is string {
@@ -42,6 +49,8 @@ export async function GET(request: NextRequest) {
   }
 
   const shiftId = request.nextUrl.searchParams.get("shift_id")?.trim() ?? null;
+  const dateParam = request.nextUrl.searchParams.get("date")?.trim() ?? null;
+  const shiftCodeParam = request.nextUrl.searchParams.get("shift_code")?.trim() ?? null;
   if (!shiftId || !isUuid(shiftId)) {
     const res = NextResponse.json(
       { error: "shift_id is required and must be a valid UUID" },
@@ -77,6 +86,80 @@ export async function GET(request: NextRequest) {
     shiftId,
   });
 
+  const runtime = assertExecutionLegitimacy({
+    readiness_status: result.readiness_status,
+    reason_codes: result.reason_codes,
+  });
+  if (!runtime.allowed) {
+    const res = NextResponse.json(
+      { ok: false, error: runtime.error },
+      { status: runtime.status }
+    );
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  let shift_date: string | null = null;
+  let shift_code: string | null = null;
+  const dateValid = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam);
+  const shiftCodeNormalized = normalizeShiftParam(shiftCodeParam);
+  if (dateValid && shiftCodeNormalized) {
+    shift_date = dateParam;
+    shift_code = shiftCodeNormalized;
+  } else if (admin) {
+    const { data: shiftRow } = await admin
+      .from("shifts")
+      .select("shift_date, shift_code")
+      .eq("id", shiftId)
+      .single();
+    if (shiftRow) {
+      const row = shiftRow as { shift_date?: string | Date | null; shift_code?: string | null };
+      if (row.shift_date != null) {
+        shift_date =
+          typeof row.shift_date === "string"
+            ? /^\d{4}-\d{2}-\d{2}$/.test(row.shift_date)
+              ? row.shift_date
+              : null
+            : row.shift_date instanceof Date
+              ? row.shift_date.toISOString().slice(0, 10)
+              : null;
+      }
+      shift_code =
+        typeof row.shift_code === "string"
+          ? normalizeShiftParam(row.shift_code) ?? row.shift_code
+          : null;
+    }
+  }
+
+  const policyEnvelope = toPolicyEnvelope(result.policy, result.policy_compliance);
+
+  let execution_token: string | undefined;
+  if (
+    (result.readiness_status === "GO" || result.readiness_status === "WARNING") &&
+    process.env.EXECUTION_TOKEN_SECRET
+  ) {
+    try {
+      const policy_fingerprint = computePolicyFingerprint(
+        result.legitimacy_status,
+        result.reason_codes,
+        policyEnvelope
+      );
+      execution_token = createExecutionToken({
+        org_id: org.activeOrgId,
+        site_id: activeSiteId,
+        shift_code: shift_code ?? null,
+        shift_date: shift_date ?? null,
+        readiness_status: result.readiness_status,
+        policy_fingerprint,
+        calculated_at: result.calculated_at,
+        issued_at: Date.now(),
+        allowed_actions: ["COCKPIT_DECISION_CREATE"],
+      });
+    } catch {
+      // omit token if secret missing or creation fails
+    }
+  }
+
   const res = NextResponse.json(
     {
       ok: true,
@@ -88,7 +171,8 @@ export async function GET(request: NextRequest) {
         calculated_at: result.calculated_at,
       },
       legitimacy_status: result.legitimacy_status,
-      policy: result.policy.length ? result.policy : undefined,
+      policy: policyEnvelope,
+      ...(execution_token != null && { execution_token }),
     } satisfies ReadinessResponse,
     { status: 200 }
   );

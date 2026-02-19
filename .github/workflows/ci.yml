@@ -43,5 +43,19 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run build
 
+      - name: Governance audit (Phase A)
+        run: |
+          set +e
+          npm run gov:audit
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "GOVERNANCE REGRESSION: cap exceeded"
+            exit 2
+          elif [ "$code" -eq 1 ]; then
+            echo "Governance debt remains (within cap). Not failing Phase A."
+            exit 0
+          fi
+
       - name: Test
         run: npm test
