@@ -86,6 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_compliance_requirement_bindings_org_station
 
 ALTER TABLE public.compliance_requirement_bindings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS compliance_requirement_bindings_select_org ON public.compliance_requirement_bindings;
 CREATE POLICY compliance_requirement_bindings_select_org
   ON public.compliance_requirement_bindings
   FOR SELECT

@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_execution_token_uses_org_action_used_at
 
 ALTER TABLE public.execution_token_uses ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS execution_token_uses_select_org ON public.execution_token_uses;
 CREATE POLICY execution_token_uses_select_org
   ON public.execution_token_uses
   FOR SELECT

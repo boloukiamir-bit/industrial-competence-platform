@@ -22,6 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_roles_org_id ON public.roles(org_id);
 
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS roles_select_org ON public.roles;
 CREATE POLICY roles_select_org
   ON public.roles
   FOR SELECT
@@ -59,6 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_roles_org_role ON public.employee_roles(
 
 ALTER TABLE public.employee_roles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS employee_roles_select_org ON public.employee_roles;
 CREATE POLICY employee_roles_select_org
   ON public.employee_roles
   FOR SELECT

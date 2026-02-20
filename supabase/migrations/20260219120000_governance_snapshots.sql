@@ -32,6 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_governance_snapshots_org_scope_created
 
 ALTER TABLE public.governance_snapshots ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS governance_snapshots_select_org ON public.governance_snapshots;
 CREATE POLICY governance_snapshots_select_org
   ON public.governance_snapshots
   FOR SELECT

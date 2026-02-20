@@ -26,6 +26,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_governance_config_org_null_site
 
 ALTER TABLE public.governance_config ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS governance_config_select_org ON public.governance_config;
 CREATE POLICY governance_config_select_org
   ON public.governance_config
   FOR SELECT

@@ -31,6 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_governance_events_org_outcome_created
 ALTER TABLE public.governance_events ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: authenticated users see only rows for their active org.
+DROP POLICY IF EXISTS governance_events_select_org ON public.governance_events;
 CREATE POLICY governance_events_select_org
   ON public.governance_events
   FOR SELECT
