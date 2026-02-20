@@ -10,18 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PriorityFixesWidget } from "@/components/cockpit/PriorityFixesWidget";
-import { ActionsWidget } from "@/components/cockpit/ActionsWidget";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
-import { StaffingWidget } from "@/components/cockpit/StaffingWidget";
 import { useCockpitFilters } from "@/lib/CockpitFilterContext";
-import { ComplianceWidget } from "@/components/cockpit/ComplianceWidget";
-import { SafetyWidget } from "@/components/cockpit/SafetyWidget";
-import { PlanActualWidget } from "@/components/cockpit/PlanActualWidget";
-import { HandoverWidget } from "@/components/cockpit/HandoverWidget";
 import { ActionDrawer } from "@/components/cockpit/ActionDrawer";
 import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal";
 import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
@@ -59,15 +50,20 @@ import type {
   EmployeeSuggestion,
   HandoverItem,
 } from "@/types/cockpit";
+
+/** Drilldown from GET /api/cockpit/shift-legitimacy/[shiftId] */
+type ShiftLegitimacyDrilldown = {
+  shift_status: "GO" | "WARNING" | "ILLEGAL";
+  blocking_employees: Array<{ id: string; name: string; reasons: string[] }>;
+  warning_employees: Array<{ id: string; name: string; reasons: string[] }>;
+};
 import { useToast } from "@/hooks/use-toast";
 import { fetchJson } from "@/lib/coreFetch";
 import { cockpitSummaryParams, dateDaysAgo } from "@/lib/client/cockpitUrl";
 import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 import { PageFrame } from "@/components/layout/PageFrame";
-import { aggregateRanges, formatSekRange, formatHoursRange, FRAGILITY_PTS } from "@/lib/cockpitCostEngine";
-import { SectionHeader } from "@/components/ui/section-header";
+import { FRAGILITY_PTS } from "@/lib/cockpitCostEngine";
 import { EmptyState } from "@/components/ui/empty-state";
-import Link from "next/link";
 
 type GapsLineRow = {
   lineCode: string;
@@ -157,6 +153,9 @@ export default function CockpitPage() {
   const [undoUntil, setUndoUntil] = useState<number>(0);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const [markedPlannedIds, setMarkedPlannedIds] = useState<Set<string>>(new Set());
+
+  const [legitimacyDrilldown, setLegitimacyDrilldown] = useState<ShiftLegitimacyDrilldown | null>(null);
+  const [legitimacyDrilldownLoading, setLegitimacyDrilldownLoading] = useState(false);
 
   // Only query params: date, shift_code, optional line, optional show_resolved=1. Default show_resolved OFF.
   const summaryParams = (() => {
@@ -371,6 +370,42 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [issuesUrl, toast, issuesRefreshKey]);
 
+  // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (for blocking/at-risk lists)
+  useEffect(() => {
+    if (isDemoMode() || !summary) return;
+    const status = summary.shift_legitimacy_status;
+    if (status !== "ILLEGAL" && status !== "WARNING") {
+      setLegitimacyDrilldown(null);
+      return;
+    }
+    let cancelled = false;
+    setLegitimacyDrilldownLoading(true);
+    const params = new URLSearchParams({ date, shift: shiftType });
+    fetchJson<{ shift_ids?: string[] }>(`/api/cockpit/shift-ids?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok || !res.data?.shift_ids?.length) return null;
+        return res.data.shift_ids[0];
+      })
+      .then((shiftId) => {
+        if (cancelled || !shiftId) {
+          if (!cancelled) setLegitimacyDrilldown(null);
+          return;
+        }
+        const drillParams = new URLSearchParams({ date });
+        return fetchJson<ShiftLegitimacyDrilldown>(
+          `/api/cockpit/shift-legitimacy/${shiftId}?${drillParams.toString()}`
+        ).then((r) => (r.ok ? r.data : null));
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setLegitimacyDrilldown(data ?? null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLegitimacyDrilldownLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [date, shiftType, summary?.shift_legitimacy_status, summary != null]);
 
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
@@ -561,33 +596,12 @@ export default function CockpitPage() {
     toast({ title: "Undo restored in UI; refresh to confirm." });
   };
 
-  const dateLabel = format(new Date(date + "T12:00:00"), "EEEE, MMMM d, yyyy");
-
   // Fragility Index 0–100 from severity (BLOCKING = 25 pts, WARNING = 8 pts). UI-only, no backend.
   const blockingCount = summary?.active_blocking ?? issues.filter((i) => !i.resolved && i.severity === "BLOCKING").length;
   const warningCount = summary?.active_nonblocking ?? issues.filter((i) => !i.resolved && i.severity === "WARNING").length;
   const fragilityBlockingPts = blockingCount * 25;
   const fragilityWarningPts = warningCount * 8;
   const fragilityIndex = Math.min(100, fragilityBlockingPts + fragilityWarningPts);
-
-  // Management Brief (current view only; UI-only heuristics, range aggregation)
-  const resolvedIssues = issues.filter((i) => i.resolved);
-  const openIssues = issues.filter((i) => !i.resolved);
-  const mitigatedIssues = resolvedIssues.filter((i) => !i.decision_actions?.includes?.("acknowledged"));
-  const acceptedRiskIssues = resolvedIssues.filter((i) => i.decision_actions?.includes?.("acknowledged"));
-  const hasClosed = resolvedIssues.length > 0;
-  const hasOpen = openIssues.length > 0;
-  const showManagementBrief = issues.length >= 1;
-
-  const openRanges = aggregateRanges(openIssues.map((i) => i.severity));
-  const openFragilityExposure = openIssues.reduce((s, i) => s + FRAGILITY_PTS[i.severity], 0);
-  const avoidedRanges = aggregateRanges(mitigatedIssues.map((i) => i.severity));
-  const deferredRanges = aggregateRanges(acceptedRiskIssues.map((i) => i.severity));
-  const netFragilityDelta = resolvedIssues.reduce((s, i) => s + FRAGILITY_PTS[i.severity], 0);
-
-  const filteredStaffingCards = line === "all"
-    ? staffingCards
-    : staffingCards.filter((c) => c.station.line === line);
 
   // Line options from /api/cockpit/lines only; exclude any legacy display names
   const lineOptions = availableLines.filter((l) => !isLegacyLine(l));
@@ -647,23 +661,11 @@ export default function CockpitPage() {
             Show resolved
           </label>
         </div>
-        <div className="flex items-center gap-3">
-          {!summaryLoading && summary != null && (
-            <span className="cockpit-label cockpit-num" data-testid="cockpit-active-count">
-              Open decisions: {summary.active_total}
-            </span>
-          )}
-          {!isDemoMode() && (
-            <div
-              className="cockpit-card-primary flex items-baseline gap-2 px-3 py-2"
-              title={`Blocking: ${blockingCount} × 25 = ${fragilityBlockingPts} · Warnings: ${warningCount} × 8 = ${fragilityWarningPts}`}
-              data-testid="fragility-index"
-            >
-              <span className="cockpit-label">Fragility Index</span>
-              <span className="cockpit-num text-[1.75rem] font-semibold" style={{ color: "hsl(var(--foreground))" }}>{fragilityIndex}</span>
-            </div>
-          )}
-        </div>
+        {!summaryLoading && summary != null && (
+          <span className="cockpit-label cockpit-num text-muted-foreground" data-testid="cockpit-active-count">
+            Open decisions: {summary.active_total}
+          </span>
+        )}
       </header>
     </>
   );
@@ -691,7 +693,7 @@ export default function CockpitPage() {
   return (
     <PageFrame filterBar={filterBar} debugPanel={debugPanel}>
       {summary && summary.active_total === 0 && !summaryLoading && !fallbackSearching && fallbackSearchDone && (
-        <div className="cockpit-card-secondary mb-4 px-3 py-2 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
+        <div className="mb-4 px-3 py-2 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body text-muted-foreground">No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
             {SHIFT_OPTIONS.map((s) => (
@@ -716,99 +718,130 @@ export default function CockpitPage() {
         </div>
       )}
 
-      {lastResolvedIssue != null && undoUntil > 0 && (() => {
-        const pts = lastResolvedIssue.severity === "BLOCKING" ? 25 : 8;
-        return (
-          <div className="cockpit-card mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]" data-testid="cockpit-resolve-undo-bar">
-            <div className="flex flex-wrap items-center gap-3 cockpit-body">
-              <span className="cockpit-status-ok font-medium">Decision recorded.</span>
-              <span className="cockpit-num">Fragility Δ −{pts}</span>
-              <span className="cockpit-num">Undo ({undoSecondsLeft}s)</span>
-            </div>
-            <Button variant="outline" size="sm" className="h-7 text-[13px]" onClick={handleResolveUndo} data-testid="cockpit-resolve-undo-btn">
-              Undo
-            </Button>
+      {lastResolvedIssue != null && undoUntil > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]" data-testid="cockpit-resolve-undo-bar">
+          <div className="flex flex-wrap items-center gap-3 cockpit-body">
+            <span className="cockpit-status-ok font-medium">Decision recorded.</span>
+            <span className="cockpit-num">Undo ({undoSecondsLeft}s)</span>
           </div>
-        );
-      })()}
+          <Button variant="outline" size="sm" className="h-7 text-[13px]" onClick={handleResolveUndo} data-testid="cockpit-resolve-undo-btn">
+            Undo
+          </Button>
+        </div>
+      )}
 
-      {!isDemoMode() && showManagementBrief && (
-        <div className="cockpit-card-primary mb-4 p-5" data-testid="management-brief">
-          <p className="cockpit-title font-semibold mb-4">Management Brief</p>
-          {!hasClosed && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div>
-                <p className="cockpit-num text-[1.125rem] font-semibold">{formatSekRange(openRanges.costMin, openRanges.costMax)}</p>
-                <p className="cockpit-label mt-0.5">Cost</p>
-              </div>
-              <div>
-                <p className="cockpit-num text-[1.125rem] font-semibold">{formatHoursRange(openRanges.hoursMin, openRanges.hoursMax)}</p>
-                <p className="cockpit-label mt-0.5">Time</p>
-              </div>
-              <div>
-                <p className="cockpit-num text-[1.125rem] font-semibold">{openFragilityExposure}</p>
-                <p className="cockpit-label mt-0.5">Fragility</p>
-              </div>
-            </div>
-          )}
-          {hasClosed && (
+      {/* Hero: shift legitimacy status (top 70% visual weight) */}
+      {!summaryLoading && summary != null && (
+        <section
+          className={[
+            "flex flex-col items-center justify-center py-24 text-center space-y-6 animate-in fade-in duration-300",
+            summary.shift_legitimacy_status === "GO" && "bg-[hsl(var(--ds-status-ok-text)/0.06)]",
+            summary.shift_legitimacy_status === "WARNING" && "bg-[hsl(var(--ds-status-at-risk-text)/0.07)]",
+            summary.shift_legitimacy_status === "ILLEGAL" && "bg-[hsl(var(--ds-status-blocking-text)/0.06)]",
+          ].filter(Boolean).join(" ")}
+          data-testid="cockpit-hero"
+        >
+          <h1 className="text-5xl font-bold tracking-tight text-foreground md:text-6xl">
+            {summary.shift_legitimacy_status === "GO" && "SHIFT READY"}
+            {summary.shift_legitimacy_status === "WARNING" && "SHIFT AT RISK"}
+            {summary.shift_legitimacy_status === "ILLEGAL" && "SHIFT NOT LEGALLY READY"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {summary.illegal_count} blockers · {summary.warning_count} expiring soon
+          </p>
+        </section>
+      )}
+
+      {/* Conditional detail: blocking / at-risk operators */}
+      {!summaryLoading && summary != null && (summary.shift_legitimacy_status === "ILLEGAL" || summary.shift_legitimacy_status === "WARNING") && (
+        <section className="mt-8 max-w-2xl mx-auto" data-testid="cockpit-detail">
+          {summary.shift_legitimacy_status === "ILLEGAL" && (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-ok">
-                    {formatSekRange(avoidedRanges.costMin, avoidedRanges.costMax)}
-                  </p>
-                  <p className="cockpit-label mt-0.5">Cost avoided</p>
-                </div>
-                <div>
-                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-at-risk">
-                    {formatSekRange(deferredRanges.costMin, deferredRanges.costMax)}
-                  </p>
-                  <p className="cockpit-label mt-0.5">Cost deferred</p>
-                </div>
-                <div>
-                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-ok">
-                    {formatHoursRange(avoidedRanges.hoursMin, avoidedRanges.hoursMax)}
-                  </p>
-                  <p className="cockpit-label mt-0.5">Time saved</p>
-                </div>
-                <div>
-                  <p className="cockpit-num text-[1.125rem] font-semibold cockpit-status-at-risk">
-                    {formatHoursRange(deferredRanges.hoursMin, deferredRanges.hoursMax)}
-                  </p>
-                  <p className="cockpit-label mt-0.5">Time deferred</p>
-                </div>
-              </div>
-              {hasOpen && (
-                <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-baseline gap-4 cockpit-body cockpit-num">
-                  <span>{formatSekRange(openRanges.costMin, openRanges.costMax)}</span>
-                  <span>{formatHoursRange(openRanges.hoursMin, openRanges.hoursMax)}</span>
-                  <span>Fragility {openFragilityExposure}</span>
-                </div>
+              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                Blocking operators
+              </h2>
+              {legitimacyDrilldownLoading ? (
+                <p className="text-sm text-muted-foreground py-2">Loading…</p>
+              ) : legitimacyDrilldown && legitimacyDrilldown.blocking_employees.length > 0 ? (
+                <ul>
+                  {legitimacyDrilldown.blocking_employees.map((emp) => (
+                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t border-muted first:border-t-0">
+                      <span className="font-medium text-foreground">{emp.name || "—"}</span>
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        {emp.reasons.map((r) => (
+                          <span key={r} className="text-xs font-mono text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground py-2">No blocking operators listed.</p>
               )}
-              <div className="flex flex-wrap items-baseline gap-4 mt-4 pt-4 border-t border-border cockpit-body cockpit-num text-muted-foreground">
-                <span>Accepted: <span className="font-medium text-foreground">{acceptedRiskIssues.length}</span></span>
-                <span>Net Δ <span className="font-medium cockpit-status-ok">−{netFragilityDelta}</span></span>
-              </div>
             </>
+          )}
+          {summary.shift_legitimacy_status === "WARNING" && (
+            <>
+              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                At risk
+              </h2>
+              {legitimacyDrilldownLoading ? (
+                <p className="text-sm text-muted-foreground py-2">Loading…</p>
+              ) : legitimacyDrilldown && legitimacyDrilldown.warning_employees.length > 0 ? (
+                <ul>
+                  {legitimacyDrilldown.warning_employees.map((emp) => (
+                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t border-muted first:border-t-0">
+                      <span className="font-medium text-foreground">{emp.name || "—"}</span>
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        {emp.reasons.map((r) => (
+                          <span key={r} className="text-xs font-mono text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground py-2">No at-risk operators listed.</p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* Supporting metrics: compact row */}
+      {!summaryLoading && summary != null && (
+        <div className="mt-12 pt-8 border-t border-border flex flex-wrap items-baseline gap-8 text-muted-foreground" data-testid="cockpit-metrics">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Open decisions</p>
+            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.active_total}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Blockers</p>
+            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.illegal_count}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Restricted</p>
+            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.restricted_count ?? 0}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Expiring soon</p>
+            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.warning_count}</p>
+          </div>
+          {!isDemoMode() && (
+            <div title={`Blocking: ${blockingCount} × 25 · Warnings: ${warningCount} × 8`}>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Readiness</p>
+              <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{fragilityIndex}</p>
+            </div>
           )}
         </div>
       )}
 
-      <div className="mb-5">
-        <PriorityFixesWidget
-          items={priorityItems}
-          onResolve={handleResolvePriority}
-          summary={summary}
-          summaryLoading={summaryLoading}
-          summaryError={summaryError}
-          date={date}
-          shiftType={shiftType}
-        />
-      </div>
-
       {!isDemoMode() && (
-        <div className="mb-5">
+        <div className="mt-8">
           <InterventionQueue
             issues={issues}
             markedPlannedIds={markedPlannedIds}
@@ -824,7 +857,7 @@ export default function CockpitPage() {
               setIssueDrawerOpen(true);
             }}
           />
-          <SectionHeader title="Decision queue" description={issues.length > 0 ? String(issues.length) : undefined} className="mb-2 mt-1" />
+          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2 mt-4">Decision queue</h2>
           <IssueTable
             issues={issues}
             loading={issuesLoading}
@@ -833,80 +866,6 @@ export default function CockpitPage() {
           />
         </div>
       )}
-
-      {metrics && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 mt-6 pt-4 border-t border-border">
-          <div className="cockpit-card-secondary px-3 py-2">
-            <p className="cockpit-label">Open actions</p>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <p className="cockpit-title cockpit-num">{metrics.openActions}</p>
-              {metrics.criticalActions > 0 && (
-                <span className="cockpit-label cockpit-status-blocking">{metrics.criticalActions} critical</span>
-              )}
-            </div>
-          </div>
-          <div className="cockpit-card-secondary px-3 py-2">
-            <p className="cockpit-label">Staffing</p>
-            <div className="flex items-baseline gap-1 mt-0.5 cockpit-num">
-              <p className="cockpit-title">{metrics.staffedStations}</p>
-              <p className="cockpit-body text-muted-foreground">/ {metrics.totalStations}</p>
-            </div>
-          </div>
-          <div className="cockpit-card-secondary px-3 py-2">
-            <p className="cockpit-label">Compliance</p>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <p className="cockpit-title cockpit-num cockpit-status-at-risk">{metrics.expiringCompliance + metrics.overdueCompliance}</p>
-              <span className="cockpit-label">{metrics.overdueCompliance} overdue</span>
-            </div>
-          </div>
-          <div className="cockpit-card-secondary px-3 py-2">
-            <p className="cockpit-label">Safety</p>
-            <div className="flex items-baseline gap-2 mt-0.5 cockpit-num">
-              <p className="cockpit-title">{metrics.safetyObservationsThisWeek}</p>
-              <span className="cockpit-label">this week</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-4 mt-2">
-        <div className="lg:col-span-4 space-y-4 lg:space-y-6">
-          <ActionsWidget
-            actions={actions}
-            onMarkDone={handleMarkActionDone}
-            onActionClick={openActionDrawer}
-            summary={summary}
-            summaryLoading={summaryLoading}
-            summaryError={summaryError}
-          />
-          <HandoverWidget
-            openLoops={handoverData.openLoops}
-            decisions={handoverData.decisions}
-            risks={handoverData.risks}
-            onGenerateHandover={handleGenerateHandover}
-          />
-        </div>
-
-        <div className="lg:col-span-8 space-y-4 lg:space-y-6">
-          <StaffingWidget
-            staffingCards={filteredStaffingCards}
-            onSuggestReplacement={handleSuggestReplacement}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ComplianceWidget
-              items={complianceItems}
-              onCreateAction={handleCreateComplianceAction}
-            />
-            <SafetyWidget
-              observations={safetyObservations}
-              openActionsCount={metrics?.openSafetyActions || 0}
-              onCreateObservation={handleCreateObservation}
-            />
-            <PlanActualWidget data={planVsActual} />
-          </div>
-        </div>
-      </div>
 
       <ActionDrawer
         action={selectedAction}

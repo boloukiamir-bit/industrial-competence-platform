@@ -20,7 +20,7 @@ export function WarmSection({
       className={cn(
         "py-16 md:py-24 lg:py-28",
         variant === "warm" && "warm-bg",
-        variant === "white" && "bg-white",
+        variant === "white" && "bg-surface",
         dotGrid && "warm-dot-grid",
         className
       )}

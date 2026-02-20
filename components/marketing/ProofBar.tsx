@@ -9,7 +9,7 @@ const signals = [
 
 export function ProofBar() {
   return (
-    <section className="py-8 bg-white border-y border-black/5" aria-label="Trust signals">
+    <section className="py-10 bg-surface border-y border-border" aria-label="Trust signals">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4 text-sm text-muted-foreground">
           {signals.map(({ icon: Icon, text }) => (

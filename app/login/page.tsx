@@ -196,120 +196,107 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className="hr-page" style={{ maxWidth: 420, margin: '0 auto', paddingTop: 80 }}>
-        <div className="flex items-center justify-center gap-2">
+      <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-background">
+        <div className="flex items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <p className="hr-page__subtitle">Loading...</p>
+          <p className="text-sm">Loading...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="hr-page" style={{ maxWidth: 420, margin: '0 auto', paddingTop: 80 }}>
-      <h1 className="hr-page__title">Sign in</h1>
-      <p className="hr-page__subtitle">
-        Use your Nadiplan account to access HR dashboards.
-      </p>
-
-      <form onSubmit={handleSubmit} className="hr-card" style={{ marginTop: 16 }}>
-        <div className="hr-form-field">
-          <label className="hr-form-label">Email</label>
-          <input
-            type="email"
-            className="hr-input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-            data-testid="input-email"
-          />
-        </div>
-
-        <div className="hr-form-field">
-          <label className="hr-form-label">Password</label>
-          <input
-            type="password"
-            className="hr-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-            data-testid="input-password"
-          />
-        </div>
-
-        {errorMsg && (
-          <p className="hr-error" style={{ marginTop: 8 }} data-testid="error-message">
-            {errorMsg}
+    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-background">
+      <div className="w-full max-w-[420px] flex flex-col gap-8">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use your account to access the platform.
           </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6 rounded-lg border border-border bg-surface">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-foreground">Email</label>
+            <input
+              type="email"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+              data-testid="input-email"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-foreground">Password</label>
+            <input
+              type="password"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+              data-testid="input-password"
+            />
+          </div>
+          {errorMsg && (
+            <p className="text-sm text-destructive" data-testid="error-message">{errorMsg}</p>
+          )}
+          <button
+            type="submit"
+            className="w-full py-2.5 px-4 rounded-md text-sm font-medium text-primary-foreground bg-accent hover:opacity-90 transition-opacity disabled:opacity-50"
+            disabled={loading}
+            data-testid="button-signin"
+          >
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+
+        {showBootstrap && (
+          <div className="flex flex-col gap-3 p-6 rounded-lg border border-border bg-surface" data-testid="bootstrap-section">
+            <h3 className="text-sm font-semibold text-foreground">Admin Setup Required</h3>
+            <p className="text-sm text-muted-foreground">
+              No admin user exists. Click below to become the first admin.
+            </p>
+            {bootstrapMessage && (
+              <p
+                className={`text-sm ${bootstrapStatus === 'error' ? 'text-destructive' : 'text-foreground'}`}
+                data-testid="bootstrap-message"
+              >
+                {bootstrapMessage}
+              </p>
+            )}
+            <button
+              onClick={handleBootstrap}
+              disabled={bootstrapStatus === 'loading' || bootstrapStatus === 'success'}
+              className="w-full py-2.5 px-4 rounded-md text-sm font-medium border border-border bg-background text-foreground hover:bg-surface"
+              data-testid="button-bootstrap"
+            >
+              {bootstrapStatus === 'loading' ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Running Bootstrap...
+                </span>
+              ) : bootstrapStatus === 'success' ? (
+                'Bootstrap Complete!'
+              ) : (
+                'Run Admin Bootstrap'
+              )}
+            </button>
+          </div>
         )}
 
-        <button
-          type="submit"
-          className="hr-button hr-button--primary"
-          disabled={loading}
-          style={{ marginTop: 12, width: '100%' }}
-          data-testid="button-signin"
-        >
-          {loading ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
-
-      {showBootstrap && (
-        <div className="hr-card" style={{ marginTop: 16, padding: 16 }} data-testid="bootstrap-section">
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            Admin Setup Required
-          </h3>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-            No admin user exists. Click below to become the first admin.
-          </p>
-          
-          {bootstrapMessage && (
-            <p 
-              className={bootstrapStatus === 'error' ? 'hr-error' : 'hr-success'}
-              style={{ marginBottom: 8, fontSize: 13 }}
-              data-testid="bootstrap-message"
-            >
-              {bootstrapMessage}
-            </p>
-          )}
-          
-          <button
-            onClick={handleBootstrap}
-            disabled={bootstrapStatus === 'loading' || bootstrapStatus === 'success'}
-            className="hr-button hr-button--secondary"
-            style={{ width: '100%' }}
-            data-testid="button-bootstrap"
-          >
-            {bootstrapStatus === 'loading' ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Running Bootstrap...
-              </span>
-            ) : bootstrapStatus === 'success' ? (
-              'Bootstrap Complete!'
-            ) : (
-              'Run Admin Bootstrap'
-            )}
-          </button>
-        </div>
-      )}
-
-      <p style={{ marginTop: 16, fontSize: 13, color: 'var(--color-text-secondary)', textAlign: 'center' }}>
-        Don&apos;t have an account?{' '}
-        <a href="/signup" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }} data-testid="link-signup">
-          Sign up
-        </a>
-      </p>
-
-      {process.env.NODE_ENV !== "production" && (
-        <p style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>
-          <a href="/health" style={{ textDecoration: 'underline' }} data-testid="link-health">
-            System Health Check
-          </a>
+        <p className="text-sm text-muted-foreground text-center">
+          Don&apos;t have an account?{' '}
+          <a href="/signup" className="text-accent underline" data-testid="link-signup">Sign up</a>
         </p>
-      )}
+        {process.env.NODE_ENV !== "production" && (
+          <p className="text-xs text-muted-foreground text-center">
+            <a href="/health" className="underline" data-testid="link-health">System Health Check</a>
+          </p>
+        )}
+      </div>
     </main>
   );
 }

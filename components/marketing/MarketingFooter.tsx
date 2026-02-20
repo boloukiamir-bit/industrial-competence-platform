@@ -15,7 +15,7 @@ const legal = [
 export function MarketingFooter() {
   return (
     <footer
-      className="bg-[#f7f5f2] border-t border-black/5 py-16 md:py-20"
+      className="bg-surface border-t border-border py-16 md:py-20"
       role="contentinfo"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -90,7 +90,7 @@ export function MarketingFooter() {
             </div>
           </nav>
         </div>
-        <div className="mt-14 pt-8 border-t border-black/5">
+        <div className="mt-14 pt-8 border-t border-border">
           <p className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} BCLEDGE. All rights reserved.
           </p>

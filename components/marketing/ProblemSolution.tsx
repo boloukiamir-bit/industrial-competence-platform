@@ -44,7 +44,7 @@ export function ProblemSolution() {
             return (
             <div
               key={p.title}
-              className="rounded-2xl bg-white p-8 shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)] border border-black/5 hover:shadow-[0_4px_24px_-6px_rgba(0,0,0,0.08)] transition-shadow"
+              className="rounded-lg bg-surface p-8 border border-border"
             >
               <div className="w-12 h-12 text-muted-foreground/60 flex items-center justify-center mb-4">
                 <Illu className="w-10 h-10" aria-hidden />
@@ -59,7 +59,7 @@ export function ProblemSolution() {
         <div className="mt-16 grid md:grid-cols-3 gap-6">
           {principles.map((p) => (
             <div key={p.title} className="flex gap-4">
-              <div className="shrink-0 w-10 h-10 rounded-xl bg-white border border-black/5 flex items-center justify-center shadow-sm">
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center">
                 <p.icon className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>

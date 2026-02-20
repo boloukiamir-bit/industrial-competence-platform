@@ -35,7 +35,7 @@ const modules = [
 
 export function CoreModules() {
   return (
-    <WarmSection variant="white" className="border-t border-black/5">
+    <WarmSection variant="white" className="border-t border-border">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Capabilities</p>
         <h2 className="mt-2 font-display text-2xl md:text-3xl font-normal tracking-tight text-foreground">
@@ -49,11 +49,11 @@ export function CoreModules() {
             const collage = (
               <div className="flex justify-center">
                 <div className="w-full max-w-sm">
-                  <div className="rounded-2xl bg-[#f7f5f2] p-8 border border-black/5 shadow-sm">
+                  <div className="rounded-lg bg-surface p-8 border border-border">
                     <div className="w-16 h-16 text-muted-foreground/50 flex items-center justify-center mb-4">
                       <Illu className="w-14 h-14" aria-hidden />
                     </div>
-                    <div className="rounded-xl bg-white p-4 shadow-sm border border-black/5">
+                    <div className="rounded-lg bg-background p-4 border border-border">
                       <p className="text-xs text-muted-foreground">{mod.title}</p>
                       <p className="mt-1 text-lg font-display font-normal text-foreground">94%</p>
                       <p className="text-xs text-muted-foreground mt-2">Readiness · 2 due</p>

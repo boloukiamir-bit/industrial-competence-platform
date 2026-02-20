@@ -2,7 +2,14 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-const defaultDate = () => new Date().toISOString().slice(0, 10);
+/** Prefer date from URL (searchParams); otherwise today. No hardcoded day (e.g. 13). */
+function defaultDate(): string {
+  if (typeof window === "undefined") return new Date().toISOString().slice(0, 10);
+  const params = new URLSearchParams(window.location.search);
+  const d = params.get("date")?.trim();
+  if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  return new Date().toISOString().slice(0, 10);
+}
 
 const CockpitFilterContext = createContext<{
   date: string;

@@ -11,9 +11,9 @@ const items = [
 
 export function SecurityTrust() {
   return (
-    <WarmSection variant="white" className="border-t border-black/5">
+    <WarmSection variant="white" className="border-t border-border">
       <div id="security" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
-        <div className="rounded-2xl bg-[#f7f5f2] p-10 md:p-14 border border-black/5">
+        <div className="rounded-lg bg-surface p-10 md:p-14 border border-border">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-10">
             <div>
               <div className="w-14 h-14 text-muted-foreground/50 flex items-center justify-center mb-4">
@@ -29,7 +29,7 @@ export function SecurityTrust() {
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 flex-1 md:pl-12">
               {items.map((item) => (
-                <div key={item.title} className="rounded-xl bg-white p-5 border border-black/5 shadow-sm">
+                <div key={item.title} className="rounded-lg bg-background p-5 border border-border">
                   <item.icon className="h-5 w-5 text-muted-foreground" aria-hidden />
                   <h3 className="mt-3 font-semibold text-foreground text-sm">{item.title}</h3>
                   <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{item.description}</p>

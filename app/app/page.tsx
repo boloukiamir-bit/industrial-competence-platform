@@ -7,13 +7,13 @@ export default function AppPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/app/dashboard");
+    router.replace("/app/cockpit");
   }, [router]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="animate-pulse text-muted-foreground">
-        Loading dashboard...
+        Loading...
       </div>
     </div>
   );

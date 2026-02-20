@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { withDevBearer } from "@/lib/devBearer";
 import {
@@ -43,6 +43,7 @@ import type {
   OneToOneMeeting,
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
+import { EmployeeLegitimacyProfile } from "@/components/employees/EmployeeLegitimacyProfile";
 
 type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "compliance" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
 
@@ -309,6 +310,13 @@ export default function EmployeeDetailPage() {
     );
   }
 
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+  const asOfDate =
+    dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+      ? dateParam
+      : new Date().toISOString().slice(0, 10);
+
   const { employee, skills, events, documents, equipment, reviews, currentSalary, salaryRevisions, meetings, employeeProfile } = data;
 
   const navItems: { id: TabId; label: string; icon: React.ElementType; count?: number }[] = [
@@ -406,6 +414,9 @@ export default function EmployeeDetailPage() {
       </aside>
 
       <main className="flex-1 overflow-auto p-6">
+        <div className="mb-6">
+          <EmployeeLegitimacyProfile employeeId={id} asOfDate={asOfDate} />
+        </div>
         {activeTab === "personal" && (
           <Card>
             <CardHeader>

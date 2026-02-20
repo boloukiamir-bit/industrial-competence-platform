@@ -28,7 +28,7 @@ export function PricingTeaser() {
         </h2>
         <p className="mt-2 text-muted-foreground max-w-2xl">Contact us for details.</p>
         <div className="mt-12 grid md:grid-cols-2 gap-8 max-w-4xl">
-          <Card className="rounded-2xl border-black/5 shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)] bg-white overflow-hidden">
+          <Card className="rounded-lg border-border bg-surface overflow-hidden">
             <CardHeader className="pb-2">
               <h3 className="font-display text-xl font-normal text-foreground">Pilot</h3>
               <p className="text-sm text-muted-foreground mt-1">
@@ -39,17 +39,17 @@ export function PricingTeaser() {
               <ul className="space-y-2 text-sm text-muted-foreground" role="list">
                 {pilotIncludes.map((item) => (
                   <li key={item} className="flex gap-2">
-                    <Check className="h-4 w-4 shrink-0 text-[#1e3a5f] mt-0.5" aria-hidden />
+                    <Check className="h-4 w-4 shrink-0 text-accent mt-0.5" aria-hidden />
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
-              <Button variant="outline" className="w-full rounded-xl border-black/10" asChild>
+              <Button variant="outline" className="w-full rounded-lg border-border" asChild>
                 <Link href="#book-demo">Contact sales</Link>
               </Button>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-black/5 shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)] bg-white overflow-hidden">
+          <Card className="rounded-lg border-border bg-surface overflow-hidden">
             <CardHeader className="pb-2">
               <h3 className="font-display text-xl font-normal text-foreground">Scale</h3>
               <p className="text-sm text-muted-foreground mt-1">
@@ -60,12 +60,12 @@ export function PricingTeaser() {
               <ul className="space-y-2 text-sm text-muted-foreground" role="list">
                 {scaleIncludes.map((item) => (
                   <li key={item} className="flex gap-2">
-                    <Check className="h-4 w-4 shrink-0 text-[#1e3a5f] mt-0.5" aria-hidden />
+                    <Check className="h-4 w-4 shrink-0 text-accent mt-0.5" aria-hidden />
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
-              <Button variant="outline" className="w-full rounded-xl border-black/10" asChild>
+              <Button variant="outline" className="w-full rounded-lg border-border" asChild>
                 <Link href="#book-demo">Contact sales</Link>
               </Button>
             </CardContent>

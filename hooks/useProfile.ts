@@ -135,18 +135,8 @@ export function useProfile(): UseProfileResult {
 }
 
 /**
- * Get the redirect path based on user role
+ * Get the redirect path after login. Always cockpit; never HR tasks.
  */
 export function getRoleRedirectPath(role: string | null): string {
-  switch (role) {
-    case "admin":
-      return "/app/admin";
-    case "hr":
-      return "/app/hr/tasks";
-    case "manager":
-      return "/app/manager";
-    case "user":
-    default:
-      return "/app/hr/tasks"; // Default workspace for regular users
-  }
+  return "/app/cockpit";
 }

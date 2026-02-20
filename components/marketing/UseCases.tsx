@@ -45,12 +45,12 @@ export function UseCases() {
           Built for HR, production, and management—one platform
         </h2>
         <Tabs defaultValue="hr-compliance" className="mt-12">
-          <TabsList className="w-full sm:w-auto flex flex-wrap h-auto gap-1 p-1.5 bg-white/80 rounded-xl border border-black/5 shadow-sm">
+          <TabsList className="w-full sm:w-auto flex flex-wrap h-auto gap-1 p-1.5 bg-surface rounded-lg border border-border">
             {useCases.map((uc) => (
               <TabsTrigger
                 key={uc.id}
                 value={uc.id}
-                className="data-[state=active]:bg-white data-[state=active]:shadow data-[state=active]:border data-[state=active]:border-black/5 rounded-lg px-5 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background data-[state=active]:border data-[state=active]:border-border rounded-md px-5 py-2.5 text-sm font-medium"
               >
                 {uc.label}
               </TabsTrigger>
@@ -60,14 +60,14 @@ export function UseCases() {
             <TabsContent
               key={uc.id}
               value={uc.id}
-              className="mt-8 rounded-2xl bg-white p-8 md:p-10 border border-black/5 shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)]"
+              className="mt-8 rounded-lg bg-surface p-8 md:p-10 border border-border"
             >
               <h3 className="font-display text-xl font-normal text-foreground">{uc.label}</h3>
               <p className="mt-3 text-muted-foreground">{uc.replaces}</p>
               <ul className="mt-6 space-y-2" role="list">
                 {uc.outcomes.map((o) => (
                   <li key={o} className="flex gap-2 text-sm">
-                    <span className="text-[#1e3a5f] shrink-0">—</span>
+                    <span className="text-accent shrink-0">—</span>
                     <span className="text-foreground">{o}</span>
                   </li>
                 ))}

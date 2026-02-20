@@ -46,7 +46,7 @@ export function MarketingNav() {
   return (
     <>
       <header
-        className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-black/5"
+        className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border"
         aria-label="Main navigation"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -66,7 +66,7 @@ export function MarketingNav() {
                   href={item.href}
                   className={cn(
                     "px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg transition-colors",
-                    "hover:text-foreground hover:bg-black/[0.04]"
+                    "hover:text-foreground hover:bg-surface"
                   )}
                 >
                   {item.label}
@@ -96,7 +96,7 @@ export function MarketingNav() {
         </div>
 
         {stickyVisible && (
-          <div className="hidden md:block border-t border-black/5 bg-white/95 backdrop-blur-md">
+          <div className="hidden md:block border-t border-border bg-background/95 backdrop-blur-md">
             <div className="max-w-6xl mx-auto px-4">
               <nav className="flex items-center justify-center gap-1 h-12" aria-label="Section navigation">
                 {stickyNavIds.map((id) => (
@@ -106,7 +106,7 @@ export function MarketingNav() {
                     className={cn(
                       "px-3 py-2 text-xs font-medium rounded-lg transition-colors",
                       activeId === id
-                        ? "text-foreground bg-black/[0.06]"
+                        ? "text-foreground bg-surface"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
@@ -120,13 +120,13 @@ export function MarketingNav() {
       </header>
 
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 pt-16 bg-white border-t border-black/5">
+        <div className="md:hidden fixed inset-0 z-50 pt-16 bg-background border-t border-border">
           <nav className="max-w-6xl mx-auto px-4 py-6 flex flex-col gap-1" aria-label="Main mobile">
             {mainNavItems.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
-                className="px-4 py-3 text-sm font-medium text-foreground rounded-xl hover:bg-[#f7f5f2]"
+                className="px-4 py-3 text-sm font-medium text-foreground rounded-lg hover:bg-surface"
                 onClick={() => setMobileOpen(false)}
               >
                 {item.label}

@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { fetchCockpitIssues } from "@/lib/server/fetchCockpitIssues";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { getFirstShiftIdForCockpit } from "@/lib/server/getCockpitReadiness";
+import { evaluateEmployeeLegitimacy } from "@/lib/domain/legitimacy/evaluateEmployeeLegitimacy";
+import type { ComplianceStatusForLegitimacy } from "@/lib/domain/legitimacy/evaluateEmployeeLegitimacy";
+import { evaluateShiftLegitimacy } from "@/lib/domain/legitimacy/evaluateShiftLegitimacy";
+import { evaluateEmployeeComplianceV2 } from "@/lib/server/compliance/evaluateEmployeeComplianceV2";
+import { getInductionStatusForLegitimacy } from "@/lib/server/induction/inductionService";
+import type { EvaluatorCellStatus } from "@/lib/server/compliance/evaluateEmployeeComplianceV2";
 
 const DATA_SOURCE_VIEW = "v_cockpit_station_summary";
+
+function evaluatorStatusToExpiryStatus(s: EvaluatorCellStatus): ComplianceStatusForLegitimacy {
+  if (s === "overdue") return "ILLEGAL";
+  if (s === "expiring") return "WARNING";
+  return "VALID";
+}
 
 export type CockpitSummaryResponse = {
   active_total: number;
@@ -12,6 +26,10 @@ export type CockpitSummaryResponse = {
   active_nonblocking: number;
   top_actions: Array<{ action: string; count: number }>;
   by_type: Array<{ type: string; count: number }>;
+  shift_legitimacy_status: "GO" | "WARNING" | "ILLEGAL";
+  illegal_count: number;
+  restricted_count: number;
+  warning_count: number;
 };
 
 export async function GET(request: NextRequest) {
@@ -97,12 +115,81 @@ export async function GET(request: NextRequest) {
       count,
     }));
 
+    let shift_legitimacy_status: "GO" | "WARNING" | "ILLEGAL" = "GO";
+    let illegal_count = 0;
+    let restricted_count = 0;
+    let warning_count = 0;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && serviceRoleKey) {
+      const admin = createClient(supabaseUrl, serviceRoleKey);
+      const shiftId = await getFirstShiftIdForCockpit(admin, {
+        orgId: org.activeOrgId,
+        siteId: org.activeSiteId,
+        date,
+        shift_code: normalized,
+      });
+      if (shiftId) {
+        const { data: saRows } = await admin
+          .from("shift_assignments")
+          .select("employee_id")
+          .eq("shift_id", shiftId)
+          .eq("org_id", org.activeOrgId);
+        const employeeIds = [
+          ...new Set(
+            (saRows ?? [])
+              .map((r: { employee_id: string | null }) => r.employee_id)
+              .filter((id): id is string => id != null && id !== "")
+          ),
+        ];
+        const referenceDate = (() => {
+          const d = new Date(date + "T00:00:00.000Z");
+          return isNaN(d.getTime()) ? new Date() : d;
+        })();
+        const siteId = org.activeSiteId ?? null;
+        const legitimacies: Array<"GO" | "WARNING" | "ILLEGAL" | "RESTRICTED"> = [];
+        for (const employeeId of employeeIds) {
+          const applicableRows = await evaluateEmployeeComplianceV2(admin, {
+            orgId: org.activeOrgId,
+            siteId,
+            employeeId,
+            referenceDate,
+            expiringDaysDefault: 30,
+          });
+          const complianceStatuses: ComplianceStatusForLegitimacy[] = applicableRows.map((r) =>
+            evaluatorStatusToExpiryStatus(r.status)
+          );
+          const inductionStatus = await getInductionStatusForLegitimacy(admin, {
+            orgId: org.activeOrgId,
+            siteId,
+            employeeId,
+          });
+          const result = evaluateEmployeeLegitimacy({
+            complianceStatuses,
+            inductionStatus,
+            disciplinaryRestriction: false,
+          });
+          legitimacies.push(result.legitimacyStatus);
+        }
+        const aggregated = evaluateShiftLegitimacy({ employeeLegitimacies: legitimacies });
+        shift_legitimacy_status = aggregated.shiftStatus;
+        illegal_count = aggregated.illegalCount;
+        restricted_count = aggregated.restrictedCount;
+        warning_count = aggregated.warningCount;
+      }
+    }
+
     const body: CockpitSummaryResponse & { _debug?: unknown; _debug_error?: { message: string; code?: string } } = {
       active_total: issues.length,
       active_blocking,
       active_nonblocking,
       top_actions,
       by_type,
+      shift_legitimacy_status,
+      illegal_count,
+      restricted_count,
+      warning_count,
     };
     if (debugInfo) body._debug = debugInfo;
 

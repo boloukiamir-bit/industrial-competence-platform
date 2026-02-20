@@ -10,6 +10,7 @@ import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { getActiveSiteName } from "@/lib/server/siteName";
 import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 import { getActiveLines } from "@/lib/server/getActiveLines";
+import { evaluateExpiryStatus } from "@/lib/domain/compliance/evaluateExpiryStatus";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,15 +32,12 @@ function computeStatus(
 ): MatrixCellStatus {
   if (waived) return "waived";
   if (!validTo) return "missing";
-  const to = new Date(validTo);
-  to.setHours(0, 0, 0, 0);
-  const asOfNorm = new Date(asOf);
-  asOfNorm.setHours(0, 0, 0, 0);
-  const expiringEnd = new Date(asOfNorm);
-  expiringEnd.setDate(expiringEnd.getDate() + expiringDays);
-  if (to < asOfNorm) return "overdue";
-  if (to <= expiringEnd) return "expiring";
-  return "valid";
+  const s = evaluateExpiryStatus({
+    expiryDate: validTo,
+    reminderOffsetDays: expiringDays,
+    referenceDate: asOf,
+  });
+  return s === "ILLEGAL" ? "overdue" : s === "WARNING" ? "expiring" : "valid";
 }
 
 function daysLeft(validTo: string | null, asOf: Date): number | null {

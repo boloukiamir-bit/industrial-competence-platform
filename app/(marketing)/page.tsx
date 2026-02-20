@@ -8,10 +8,12 @@ import { SecurityTrust } from "@/components/marketing/SecurityTrust";
 import { PricingTeaser } from "@/components/marketing/PricingTeaser";
 import { FinalCTA } from "@/components/marketing/FinalCTA";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { AuthRedirectToCockpit } from "@/components/marketing/AuthRedirectToCockpit";
 
 export default function MarketingPage() {
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-screen flex flex-col bg-background">
+      <AuthRedirectToCockpit />
       <MarketingNav />
       <div className="flex-1">
         <HeroSection />

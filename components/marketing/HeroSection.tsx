@@ -5,7 +5,7 @@ import { HeroProductCollage } from "./HeroProductCollage";
 export function HeroSection() {
   return (
     <section
-      className="warm-bg warm-dot-grid pt-28 pb-20 md:pt-32 md:pb-24 lg:pt-36 lg:pb-28"
+      className="warm-bg warm-dot-grid pt-28 pb-24 md:pt-32 md:pb-28 lg:pt-36 lg:pb-32"
       aria-labelledby="hero-heading"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -24,10 +24,10 @@ export function HeroSection() {
               One auditable source of truth for skills, readiness, and compliance. Reduce risk with a decision log that stands up to audit.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button size="lg" className="marketing-accent border-0 rounded-xl" asChild>
+              <Button size="lg" className="marketing-accent border-0 rounded-lg" asChild>
                 <Link href="#book-demo">Book a demo</Link>
               </Button>
-              <Button variant="outline" size="lg" className="rounded-xl border-border hover:bg-white/80" asChild>
+              <Button variant="outline" size="lg" className="rounded-lg border-border hover:bg-surface" asChild>
                 <Link href="#join-pilot">Join pilot</Link>
               </Button>
             </div>
