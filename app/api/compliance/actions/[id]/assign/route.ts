@@ -1,124 +1,104 @@
 /**
  * POST /api/compliance/actions/[id]/assign
  * Body: { owner_user_id?: string|null } — if omitted, assign to current user.
- * Admin/HR only. Org-scoped. Strict site check when activeSiteId set.
+ * Admin/HR only. Org-scoped. Governed via withMutationGovernance.
  */
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { NextResponse } from "next/server";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 import { isHrAdmin } from "@/lib/auth";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 function errorPayload(step: string, error: unknown, details?: string) {
   const msg = error instanceof Error ? error.message : String(error);
   return { ok: false as const, step, error: msg, ...(details != null && { details }) };
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
-  const org = await getActiveOrgFromSession(request, supabase);
-  if (!org.ok) {
-    const res = NextResponse.json(errorPayload("getActiveOrg", org.error), { status: org.status });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+function getIdFromPath(pathname: string): string | null {
+  const parts = pathname.split("/");
+  const i = parts.indexOf("actions");
+  if (i < 0 || i + 1 >= parts.length) return null;
+  const id = parts[i + 1];
+  return id && id !== "create" ? id : null;
+}
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("role")
-    .eq("user_id", org.userId)
-    .eq("org_id", org.activeOrgId)
-    .eq("status", "active")
-    .maybeSingle();
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    const { data: membership } = await ctx.supabase
+      .from("memberships")
+      .select("role")
+      .eq("user_id", ctx.userId)
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active")
+      .maybeSingle();
 
-  if (!isHrAdmin(membership?.role)) {
-    const res = NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    if (!isHrAdmin(membership?.role)) {
+      return NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
+    }
 
-  const { id } = await params;
-  if (!id) {
-    const res = NextResponse.json(errorPayload("validation", "id is required"), { status: 400 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    const pathname = new URL(ctx.request.url).pathname;
+    const id = getIdFromPath(pathname);
+    if (!id) {
+      return NextResponse.json(errorPayload("validation", "id is required"), { status: 400 });
+    }
 
-  let body: Record<string, unknown> = {};
-  try {
-    body = await request.json();
-  } catch {
-    body = {};
-  }
+    const owner_user_id =
+      ctx.body.owner_user_id === undefined
+        ? ctx.userId
+        : ctx.body.owner_user_id === null
+          ? null
+          : typeof ctx.body.owner_user_id === "string"
+            ? ctx.body.owner_user_id.trim() || null
+            : ctx.userId;
 
-  const owner_user_id =
-    body.owner_user_id === undefined
-      ? org.userId
-      : body.owner_user_id === null
-        ? null
-        : typeof body.owner_user_id === "string"
-          ? body.owner_user_id.trim() || null
-          : org.userId;
-
-  try {
-    const { data: existing, error: fetchErr } = await supabaseAdmin
+    const { data: existing, error: fetchErr } = await ctx.admin
       .from("compliance_actions")
       .select("id, org_id, site_id")
       .eq("id", id)
       .single();
 
     if (fetchErr || !existing) {
-      const res = NextResponse.json(errorPayload("not_found", "Action not found"), { status: 404 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(errorPayload("not_found", "Action not found"), { status: 404 });
     }
-    if (existing.org_id !== org.activeOrgId) {
-      const res = NextResponse.json(errorPayload("forbidden", "Action not in active org"), { status: 403 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+    if ((existing as { org_id: string }).org_id !== ctx.orgId) {
+      return NextResponse.json(
+        errorPayload("forbidden", "Action not in active org"),
+        { status: 403 }
+      );
     }
-    if (org.activeSiteId != null && existing.site_id !== org.activeSiteId) {
-      const res = NextResponse.json(
+    if (
+      ctx.siteId != null &&
+      (existing as { site_id: string | null }).site_id !== ctx.siteId
+    ) {
+      return NextResponse.json(
         errorPayload("forbidden", "Action does not belong to active site"),
         { status: 403 }
       );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
     }
 
-    let updateQuery = supabaseAdmin
+    let updateQuery = ctx.admin
       .from("compliance_actions")
       .update({ owner_user_id })
       .eq("id", id)
-      .eq("org_id", org.activeOrgId);
-    if (org.activeSiteId) {
-      updateQuery = updateQuery.eq("site_id", org.activeSiteId);
+      .eq("org_id", ctx.orgId);
+    if (ctx.siteId) {
+      updateQuery = updateQuery.eq("site_id", ctx.siteId);
     }
 
     const { error: updateErr } = await updateQuery;
 
     if (updateErr) {
       console.error("compliance/actions/[id]/assign", updateErr);
-      const res = NextResponse.json(errorPayload("update", updateErr.message), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(errorPayload("update", updateErr.message), { status: 500 });
     }
 
-    const res = NextResponse.json({ ok: true, action_id: id });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (err) {
-    console.error("POST /api/compliance/actions/[id]/assign failed:", err);
-    const res = NextResponse.json(errorPayload("unexpected", err), { status: 500 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
+    return NextResponse.json({ ok: true, action_id: id });
+  },
+  {
+    route: "/api/compliance/actions/[id]/assign",
+    action: "COMPLIANCE_ACTION_ASSIGN",
+    target_type: "compliance_action",
+    allowNoShiftContext: true,
+    getTargetIdAndMeta: (_body, _shift) => {
+      return { target_id: "assign", meta: {} };
+    },
   }
-}
+);

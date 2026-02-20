@@ -27,6 +27,58 @@ function devBearerMatches(token: string): boolean {
   return dev !== "" && token === dev;
 }
 
+/** Dev-only: resolve identity from DEV_BEARER_TOKEN (same path as /api/debug/auth). Returns null in production or when token does not match. */
+export type DevBearerContext = {
+  userId: string;
+  email: string | null;
+  active_org_id: string | null;
+  active_site_id: string | null;
+  role: string | null;
+};
+
+export async function getDevBearerContext(request: NextRequest): Promise<DevBearerContext | null> {
+  const token = extractBearerToken(request);
+  if (!token || isProduction || !devBearerMatches(token)) return null;
+  if (process.env.TEST_DEV_BEARER_CONTEXT_JSON) {
+    try {
+      return JSON.parse(process.env.TEST_DEV_BEARER_CONTEXT_JSON) as DevBearerContext;
+    } catch {
+      return null;
+    }
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  const admin = createClient(url, key);
+  const devEmail =
+    (process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "").trim() || "amir@bolouki.se";
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("id, email, active_org_id, active_site_id")
+    .eq("email", devEmail)
+    .maybeSingle();
+  if (profileError || !profile?.id) return null;
+  let role: string | null = null;
+  const activeOrgId = profile.active_org_id as string | null;
+  if (activeOrgId) {
+    const { data: membership } = await admin
+      .from("memberships")
+      .select("role")
+      .eq("org_id", activeOrgId)
+      .eq("user_id", profile.id)
+      .eq("status", "active")
+      .maybeSingle();
+    role = membership?.role ?? null;
+  }
+  return {
+    userId: profile.id,
+    email: profile.email ?? devEmail,
+    active_org_id: activeOrgId,
+    active_site_id: (profile.active_site_id as string | null) ?? null,
+    role,
+  };
+}
+
 async function resolveDevBearer(token: string): Promise<ResolvedAuth | null> {
   if (isProduction || !devBearerMatches(token)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;

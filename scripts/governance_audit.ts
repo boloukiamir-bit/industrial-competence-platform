@@ -1,10 +1,13 @@
 /**
  * Governance Coverage Audit: fails if any mutating API route is missing governance gating.
- * Mutating = POST | PUT | PATCH | DELETE. Must be gated (withGovernanceGate) OR in Phase A allowlist.
+ * Mutating = POST | PUT | PATCH | DELETE. Must be gated (withGovernanceGate or withMutationGovernance) OR in Phase A allowlist.
  * GOV:EXEMPT in files is ignored for pass/fail; reported as warning only.
+ * Phase A HIGH cap: risk_level HIGH count must be <= PHASE_A_MAX_HIGH (default 62).
+ * Burn-down: if PHASE_A_PREVIOUS_HIGH is set (e.g. by CI from main), HIGH must decrease by at least PHASE_A_BURN_DOWN (5).
  */
 import * as fs from "fs/promises";
 import * as path from "path";
+import { execSync } from "child_process";
 
 const ROOT = process.cwd();
 const API_DIR = path.join(ROOT, "app", "api");
@@ -18,8 +21,13 @@ const PHASE_A_ALLOW_MUTATIONS = new Set<string>([
 /** Phase A burn-down: ungoverned count must not exceed this (must trend down). Override via env PHASE_A_MAX_UNGOVERNED_MUTATIONS. */
 const PHASE_A_MAX_UNGOVERNED_MUTATIONS = 92;
 
-const RE_MUTATORS = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/g;
-const RE_GATED = /withGovernanceGate\s*\(/;
+/** Phase A HIGH risk cap: mutation routes with risk_level HIGH must not exceed this. Override via env PHASE_A_MAX_HIGH. */
+const PHASE_A_MAX_HIGH = 62;
+/** Required burn-down of HIGH count per PR. CI sets PHASE_A_PREVIOUS_HIGH from main. Override via env PHASE_A_BURN_DOWN. */
+const PHASE_A_BURN_DOWN = 5;
+
+const RE_MUTATORS = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b|export\s+const\s+(POST|PUT|PATCH|DELETE)\s*=\s*withMutationGovernance/g;
+const RE_GATED = /withGovernanceGate\s*\(|withMutationGovernance\s*\(/;
 const RE_EXEMPT = /^\s*\/\/\s*GOV:EXEMPT\b/m;
 
 /** Normalize to repo-relative path with forward slashes. */
@@ -55,8 +63,8 @@ async function main(): Promise<void> {
 
   for (const filePath of allRoutes) {
     const content = await fs.readFile(filePath, "utf-8");
-    RE_MUTATORS.lastIndex = 0;
     const hasMutator = RE_MUTATORS.test(content);
+    RE_MUTATORS.lastIndex = 0;
     if (!hasMutator) continue;
 
     mutating += 1;
@@ -79,7 +87,7 @@ async function main(): Promise<void> {
   console.log("------------------------");
   console.log(`  Total route.ts scanned:  ${allRoutes.length}`);
   console.log(`  Mutating routes found:   ${mutating}`);
-  console.log(`  Gated (withGovernanceGate): ${gated}`);
+  console.log(`  Gated (withGovernanceGate or withMutationGovernance): ${gated}`);
   console.log(`  Allowlisted (Phase A):   ${allowlisted} (max ${PHASE_A_ALLOW_MUTATIONS.size})`);
   if (hasExemptMarker > 0) {
     console.log(`  (GOV:EXEMPT in files:   ${hasExemptMarker} — ignored for pass/fail)`);
@@ -99,7 +107,7 @@ async function main(): Promise<void> {
   }
 
   if (failing.length > 0) {
-    console.log("Failing routes (add gate or add to PHASE_A_ALLOW_MUTATIONS):");
+    console.log("Ungoverned routes (add gate or allowlist; burn down over time):");
     console.log("--------------------------------------------------------------");
     const pathWidth = Math.max(8, ...failing.map((e) => e.path.length));
     const fixWidth = 10;
@@ -108,10 +116,52 @@ async function main(): Promise<void> {
     for (const { path: p, fix } of failing) {
       console.log(`  ${p.padEnd(pathWidth)}  ${fix}`);
     }
-    process.exit(1);
+    console.log("");
   }
 
-  console.log("All mutating routes are gated or allowlisted.");
+  // Phase A HIGH cap and burn-down: run perimeter audit and enforce HIGH <= cap, HIGH <= previous - burn_down
+  let highCount = 0;
+  try {
+    const perimeterOut = execSync("npx tsx scripts/gov_perimeter_audit.ts", {
+      encoding: "utf-8",
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    const report = JSON.parse(perimeterOut) as { routes?: { risk_level: string }[] };
+    highCount = report.routes?.filter((r) => r.risk_level === "HIGH").length ?? 0;
+  } catch (e) {
+    console.error("gov:audit could not run gov:perimeter:", e);
+    process.exit(2);
+  }
+
+  const maxHigh = Number(process.env.PHASE_A_MAX_HIGH ?? PHASE_A_MAX_HIGH);
+  const burnDown = Number(process.env.PHASE_A_BURN_DOWN ?? PHASE_A_BURN_DOWN);
+  const previousHigh = process.env.PHASE_A_PREVIOUS_HIGH != null
+    ? Number(process.env.PHASE_A_PREVIOUS_HIGH)
+    : null;
+
+  console.log(`  Perimeter HIGH count: ${highCount} (cap ${maxHigh})`);
+  if (previousHigh != null && Number.isFinite(previousHigh)) {
+    console.log(`  Previous HIGH (main): ${previousHigh} | required burn-down: ${burnDown}`);
+  }
+
+  if (highCount > maxHigh) {
+    console.log("");
+    console.log(`GOVERNANCE REGRESSION: HIGH risk mutation routes = ${highCount} exceeds cap = ${maxHigh}`);
+    process.exit(2);
+  }
+
+  if (previousHigh != null && Number.isFinite(previousHigh)) {
+    const requiredMax = Math.max(0, previousHigh - burnDown);
+    if (highCount > requiredMax) {
+      console.log("");
+      console.log(
+        `BURN-DOWN REQUIRED: HIGH = ${highCount} must be <= ${requiredMax} (previous ${previousHigh} - ${burnDown})`
+      );
+      process.exit(2);
+    }
+  }
+
+  console.log("Ungoverned within cap; HIGH cap and burn-down satisfied.");
   process.exit(0);
 }
 

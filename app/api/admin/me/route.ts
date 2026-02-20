@@ -2,9 +2,11 @@
  * GET /api/admin/me
  * Returns current user's email, active_org_id, and membership_role for the active org.
  * Uses org-scoped memberships.role (not profile.role). 403 if no active org or no membership.
+ * In DEVELOPMENT only: Authorization: Bearer <DEV_BEARER_TOKEN> is accepted (no cookies).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getDevBearerContext } from "@/lib/server/auth";
 import { getOrgIdFromSession } from "@/lib/orgSession";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
@@ -13,6 +15,9 @@ export const revalidate = 0;
 
 const NO_CACHE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
+const isProduction =
+  process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -20,7 +25,31 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    if (!isProduction) {
+      const devCtx = await getDevBearerContext(request);
+      if (devCtx) {
+        if (!devCtx.active_org_id || devCtx.role === null) {
+          const { pendingCookies } = await createSupabaseServerClient(request);
+          const res = NextResponse.json(
+            { error: devCtx.active_org_id ? "No active membership for this organization" : "No active organization" },
+            { status: 403, headers: NO_CACHE_HEADERS }
+          );
+          applySupabaseCookies(res, pendingCookies);
+          return res;
+        }
+        const res = NextResponse.json(
+          {
+            email: devCtx.email ?? null,
+            active_org_id: devCtx.active_org_id,
+            membership_role: devCtx.role,
+          },
+          { headers: NO_CACHE_HEADERS }
+        );
+        return res;
+      }
+    }
+
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
       const res = NextResponse.json({ error: session.error }, { status: session.status, headers: NO_CACHE_HEADERS });

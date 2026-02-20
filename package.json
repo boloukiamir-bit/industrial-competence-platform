@@ -13,7 +13,9 @@
     "smoke:eligibility": "npx tsx scripts/smoke-eligibility-line.ts",
     "smoke:is-active": "npx tsx scripts/smoke-is-active-filter.ts",
     "db:smoke": "npx tsx scripts/db_smoke.ts",
-    "gov:audit": "npx tsx scripts/governance_audit.ts"
+    "gov:audit": "npx tsx scripts/governance_audit.ts",
+    "gov:perimeter": "npx tsx scripts/gov_perimeter_audit.ts",
+    "gov:perimeter:live": "BASE_URL=http://127.0.0.1:5001 npx tsx scripts/gov_perimeter_audit.ts --live"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.0",

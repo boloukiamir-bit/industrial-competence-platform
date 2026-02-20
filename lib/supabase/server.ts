@@ -61,9 +61,12 @@ function normalizeSupabaseAuthCookie(name: string, value: string): string | null
  *
  * When request is provided, cookies are read from request.cookies (recommended for
  * route handlers; ensures curl Cookie header is used). Otherwise uses next/headers cookies().
+ *
+ * @param getCookieStore - Optional, test-only: when request has no cookies, use this instead of next/headers cookies(). Production callers never pass this.
  */
 export async function createSupabaseServerClient(
-  request?: NextRequest
+  request?: NextRequest,
+  getCookieStore?: () => Promise<{ getAll: () => { name: string; value: string }[] }>
 ): Promise<{
   supabase: ReturnType<typeof createServerClient>;
   pendingCookies: CookieToSet[];
@@ -78,11 +81,14 @@ export async function createSupabaseServerClient(
   const pendingCookies: CookieToSet[] = [];
 
   // Use request.cookies when available (explicit for curl/route handlers); else next/headers cookies().
-  const cookieSource = request
-    ? { getAll: () => request.cookies.getAll().map((c) => ({ name: c.name, value: c.value })) }
-    : await cookies().then((store) => ({
+  // When request has no cookies (e.g. bearer-only curl), fall back to next/headers so auth can still resolve via bearer.
+  const cookieSource = await (request?.cookies?.getAll
+    ? Promise.resolve({
+        getAll: () => request!.cookies.getAll().map((c) => ({ name: c.name, value: c.value })),
+      })
+    : (getCookieStore ?? cookies)().then((store) => ({
         getAll: () => store.getAll().map((c) => ({ name: c.name, value: c.value })),
-      }));
+      })));
 
   const allCookies = cookieSource.getAll();
 

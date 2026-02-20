@@ -43,14 +43,39 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run build
 
+      - name: Get main branch HIGH count (PR burn-down baseline)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          git worktree add main-baseline origin/main
+          (
+            cd main-baseline
+            npm ci
+            HIGH=$(npx tsx scripts/gov_perimeter_audit.ts 2>/dev/null | node -e "
+              const d = require('fs').readFileSync(0, 'utf8');
+              const j = JSON.parse(d);
+              const routes = j.routes || [];
+              console.log(routes.filter(r => r.risk_level === 'HIGH').length);
+            ")
+            echo "PHASE_A_PREVIOUS_HIGH=$HIGH" >> $GITHUB_ENV
+          )
+          git worktree remove main-baseline --force
+
       - name: Governance audit (Phase A)
+        env:
+          PHASE_A_PREVIOUS_HIGH: ${{ env.PHASE_A_PREVIOUS_HIGH }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set +e
           npm run gov:audit
           code=$?
           set -e
           if [ "$code" -eq 2 ]; then
-            echo "GOVERNANCE REGRESSION: cap exceeded"
+            echo "GOVERNANCE REGRESSION: cap exceeded or burn-down required"
             exit 2
           elif [ "$code" -eq 1 ]; then
             echo "Governance debt remains (within cap). Not failing Phase A."

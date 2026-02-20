@@ -1,10 +1,10 @@
 /**
  * POST /api/compliance/catalog/upsert — upsert catalog item by (org_id, code). Admin/HR only.
  * Body: { code, name, category, description?, default_validity_days?, site_id?, is_active? }
+ * Governed via withMutationGovernance (org-only).
  */
-import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { NextResponse } from "next/server";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 import { isHrAdmin } from "@/lib/auth";
 
 const CATEGORIES = ["license", "medical", "contract"] as const;
@@ -14,61 +14,49 @@ function errorPayload(step: string, error: unknown, details?: string) {
   return { ok: false as const, step, error: msg, ...(details != null && { details }) };
 }
 
-export async function POST(request: NextRequest) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
-  const org = await getActiveOrgFromSession(request, supabase);
-  if (!org.ok) {
-    const res = NextResponse.json(errorPayload("getActiveOrg", org.error), { status: org.status });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    const { data: membership } = await ctx.supabase
+      .from("memberships")
+      .select("role")
+      .eq("user_id", ctx.userId)
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active")
+      .maybeSingle();
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("role")
-    .eq("user_id", org.userId)
-    .eq("org_id", org.activeOrgId)
-    .eq("status", "active")
-    .maybeSingle();
+    if (!isHrAdmin(membership?.role)) {
+      return NextResponse.json(
+        { ok: false as const, step: "forbidden", error: "Admin or HR role required" },
+        { status: 403 }
+      );
+    }
 
-  if (!isHrAdmin(membership?.role)) {
-    const res = NextResponse.json(
-      { ok: false as const, step: "forbidden", error: "Admin or HR role required" },
-      { status: 403 }
-    );
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    const code = typeof ctx.body.code === "string" ? ctx.body.code.trim() : "";
+    const name = typeof ctx.body.name === "string" ? ctx.body.name.trim() : "";
+    const category =
+      typeof ctx.body.category === "string" &&
+      (CATEGORIES as readonly string[]).includes(ctx.body.category)
+        ? ctx.body.category
+        : null;
+    if (!code || !name || !category) {
+      return NextResponse.json(
+        errorPayload(
+          "validation",
+          "code, name, and category (license|medical|contract) are required"
+        ),
+        { status: 400 }
+      );
+    }
 
-  let body: Record<string, unknown> = {};
-  try {
-    body = await request.json();
-  } catch {
-    const res = NextResponse.json(errorPayload("body", "Invalid JSON"), { status: 400 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    const description =
+      typeof ctx.body.description === "string" ? ctx.body.description.trim() || null : null;
+    const default_validity_days =
+      typeof ctx.body.default_validity_days === "number" ? ctx.body.default_validity_days : null;
+    const site_id = typeof ctx.body.site_id === "string" ? ctx.body.site_id || null : null;
+    const is_active = ctx.body.is_active !== false;
 
-  const code = typeof body.code === "string" ? body.code.trim() : "";
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  const category = typeof body.category === "string" && (CATEGORIES as readonly string[]).includes(body.category) ? body.category : null;
-  if (!code || !name || !category) {
-    const res = NextResponse.json(
-      errorPayload("validation", "code, name, and category (license|medical|contract) are required"),
-      { status: 400 }
-    );
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
-  const description = typeof body.description === "string" ? body.description.trim() || null : null;
-  const default_validity_days = typeof body.default_validity_days === "number" ? body.default_validity_days : null;
-  const site_id = typeof body.site_id === "string" ? body.site_id || null : null;
-  const is_active = body.is_active !== false;
-
-  try {
     const row = {
-      org_id: org.activeOrgId,
+      org_id: ctx.orgId,
       site_id,
       category,
       code,
@@ -79,17 +67,20 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await ctx.supabase
       .from("compliance_catalog")
       .upsert(row, { onConflict: "org_id,code", ignoreDuplicates: false })
-      .select("id, org_id, site_id, category, code, name, description, default_validity_days, is_active, created_at, updated_at")
+      .select(
+        "id, org_id, site_id, category, code, name, description, default_validity_days, is_active, created_at, updated_at"
+      )
       .single();
 
     if (error) {
       console.error("compliance/catalog/upsert", { step: "upsert", error });
-      const res = NextResponse.json(errorPayload("upsert", error.message, error.details ?? undefined), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(
+        errorPayload("upsert", error.message, (error as { details?: string }).details),
+        { status: 500 }
+      );
     }
 
     const item = data
@@ -108,13 +99,19 @@ export async function POST(request: NextRequest) {
         }
       : null;
 
-    const res = NextResponse.json({ ok: true, item });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (err) {
-    console.error("POST /api/compliance/catalog/upsert failed:", err);
-    const res = NextResponse.json(errorPayload("unexpected", err), { status: 500 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
+    return NextResponse.json({ ok: true, item });
+  },
+  {
+    route: "/api/compliance/catalog/upsert",
+    action: "COMPLIANCE_CATALOG_UPSERT",
+    target_type: "compliance_catalog",
+    allowNoShiftContext: true,
+    getTargetIdAndMeta: (body) => ({
+      target_id:
+        typeof body.code === "string" ? `catalog:${body.code}` : "unknown",
+      meta: {
+        category: typeof body.category === "string" ? body.category : "",
+      },
+    }),
   }
-}
+);

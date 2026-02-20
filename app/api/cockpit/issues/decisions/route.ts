@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { normalizeShift } from "@/lib/shift";
+import {
+  createSupabaseServerClient,
+  applySupabaseCookies,
+} from "@/lib/supabase/server";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 import { stationShiftTargetId } from "@/lib/shared/decisionIds";
 
 const supabaseAdmin = createClient(
@@ -12,90 +15,41 @@ const supabaseAdmin = createClient(
 
 const ALLOWED_ACTIONS = ["acknowledged", "plan_training", "swap", "escalate"] as const;
 
-export async function POST(request: NextRequest) {
-  try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
-    const org = await getActiveOrgFromSession(request, supabase);
-    if (!org.ok) {
-      const res = NextResponse.json(
-        { ok: false, error: org.error },
-        { status: org.status }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      const res = NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      const res = NextResponse.json(
-        { ok: false, error: "Invalid JSON body" },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const b = body as Record<string, unknown>;
-    const dateRaw = typeof b.date === "string" ? b.date.trim() : "";
-    const shiftRaw = typeof b.shift_code === "string" ? b.shift_code.trim() : "";
-    const stationId = typeof b.station_id === "string" ? b.station_id.trim() : "";
-    const issueTypeRaw = typeof b.issue_type === "string" ? b.issue_type.trim() : "";
-    const actionRaw = typeof b.action === "string" ? b.action.trim().toLowerCase() : "";
-    const actionsObj = b.actions && typeof b.actions === "object" ? (b.actions as Record<string, unknown>) : {};
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    const stationId = typeof ctx.body.station_id === "string" ? ctx.body.station_id.trim() : "";
+    const issueTypeRaw = typeof ctx.body.issue_type === "string" ? ctx.body.issue_type.trim() : "";
+    const actionRaw = typeof ctx.body.action === "string" ? ctx.body.action.trim().toLowerCase() : "";
+    const actionsObj =
+      ctx.body.actions && typeof ctx.body.actions === "object"
+        ? (ctx.body.actions as Record<string, unknown>)
+        : {};
     const chosen = (actionsObj.chosen ?? actionRaw) as string;
-    const action = ALLOWED_ACTIONS.includes(chosen as (typeof ALLOWED_ACTIONS)[number]) ? chosen : null;
-    const note = typeof b.note === "string" ? b.note.trim() || null : null;
+    const action = ALLOWED_ACTIONS.includes(chosen as (typeof ALLOWED_ACTIONS)[number])
+      ? chosen
+      : null;
+    const note = typeof ctx.body.note === "string" ? ctx.body.note.trim() || null : null;
 
-    const shift = normalizeShift(shiftRaw || "Day");
-    const dateMatch = dateRaw.match(/^\d{4}-\d{2}-\d{2}$/);
-    const dateStr = dateMatch ? dateRaw : "";
+    const dateStr = ctx.date ?? "";
+    const shift = ctx.shift_code ?? "";
     const issueType = ["NO_GO", "WARNING", "GO"].includes(issueTypeRaw) ? issueTypeRaw : "NO_GO";
 
     if (!stationId) {
-      const res = NextResponse.json(
+      return NextResponse.json(
         { ok: false, error: "station_id is required" },
         { status: 400 }
       );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-    if (!dateStr) {
-      const res = NextResponse.json(
-        { ok: false, error: "date is required (YYYY-MM-DD)" },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-    if (!shift) {
-      const res = NextResponse.json(
-        { ok: false, error: "Invalid shift_code" },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
     }
     if (!action) {
-      const res = NextResponse.json(
+      return NextResponse.json(
         { ok: false, error: `action must be one of: ${ALLOWED_ACTIONS.join(", ")}` },
         { status: 400 }
       );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
     }
 
     const targetId = stationShiftTargetId(
-      org.activeOrgId,
-      org.activeSiteId,
+      ctx.orgId,
+      ctx.siteId,
       dateStr,
       shift,
       stationId,
@@ -104,8 +58,8 @@ export async function POST(request: NextRequest) {
 
     const rootCause = {
       type: "station_issue",
-      org_id: org.activeOrgId,
-      site_id: org.activeSiteId,
+      org_id: ctx.orgId,
+      site_id: ctx.siteId,
       station_id: stationId,
       shift_date: dateStr,
       shift_code: shift,
@@ -116,10 +70,10 @@ export async function POST(request: NextRequest) {
 
     const actions = { chosen: action, note: note ?? undefined, resolved: true };
 
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await ctx.admin
       .from("execution_decisions")
       .select("id, status")
-      .eq("org_id", org.activeOrgId)
+      .eq("org_id", ctx.orgId)
       .eq("decision_type", "acknowledged_station_issue")
       .eq("target_type", "station_shift")
       .eq("target_id", targetId)
@@ -127,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     let record: Record<string, unknown>;
     if (existing && existing.status === "active") {
-      const { data: updated, error: updErr } = await supabaseAdmin
+      const { data: updated, error: updErr } = await ctx.admin
         .from("execution_decisions")
         .update({ root_cause: rootCause, actions })
         .eq("id", existing.id)
@@ -135,52 +89,68 @@ export async function POST(request: NextRequest) {
         .single();
       if (updErr) {
         console.error("[cockpit/issues/decisions] update error:", updErr);
-        const res = NextResponse.json({ ok: false, error: "Failed to update decision" }, { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+        return NextResponse.json(
+          { ok: false, error: "Failed to update decision" },
+          { status: 500 }
+        );
       }
       record = updated as Record<string, unknown>;
     } else {
-      const { data: inserted, error: insErr } = await supabaseAdmin
+      const { data: inserted, error: insErr } = await ctx.admin
         .from("execution_decisions")
         .insert({
-          org_id: org.activeOrgId,
-          site_id: org.activeSiteId,
+          org_id: ctx.orgId,
+          site_id: ctx.siteId,
           decision_type: "acknowledged_station_issue",
           target_type: "station_shift",
           target_id: targetId,
           root_cause: rootCause,
           actions,
           status: "active",
-          created_by: user.id,
+          created_by: ctx.userId,
         })
         .select()
         .single();
       if (insErr) {
         console.error("[cockpit/issues/decisions] insert error:", insErr);
-        const res = NextResponse.json({ ok: false, error: "Failed to save decision" }, { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+        return NextResponse.json(
+          { ok: false, error: "Failed to save decision" },
+          { status: 500 }
+        );
       }
       record = inserted as Record<string, unknown>;
     }
 
-    const res = NextResponse.json({
+    return NextResponse.json({
       ok: true,
       decision: record,
       target_id: targetId,
       decision_id: (record as { id?: string }).id,
     });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (err) {
-    console.error("[cockpit/issues/decisions] error:", err);
-    return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Failed to save decision" },
-      { status: 500 }
-    );
+  },
+  {
+    route: "/api/cockpit/issues/decisions",
+    action: "COCKPIT_ISSUE_DECISION_CREATE",
+    target_type: "station_shift",
+    getTargetIdAndMeta: (body, shift) => {
+      const stationId = typeof body.station_id === "string" ? body.station_id.trim() : "";
+      const issueType = typeof body.issue_type === "string" ? body.issue_type.trim() : "NO_GO";
+      const date = shift.date ?? (typeof body.date === "string" ? body.date.trim().slice(0, 10) : "");
+      const shiftCode = shift.shift_code ?? "";
+      const target_id =
+        date && shiftCode && stationId
+          ? `station_shift:${stationId}:${date}:${shiftCode}:${issueType}`
+          : "unknown";
+      return {
+        target_id,
+        meta: {
+          station_id: stationId,
+          issue_type: issueType,
+        },
+      };
+    },
   }
-}
+);
 
 export async function GET(request: NextRequest) {
   try {
