@@ -104,7 +104,13 @@ const EMPTY_EMPLOYEE_PROFILE: EmployeeProfileRow = {
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const dateParam = searchParams.get("date");
+  const asOfDate =
+    dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+      ? dateParam
+      : new Date().toISOString().slice(0, 10);
 
   const [data, setData] = useState<EmployeeData>({
     employee: null,
@@ -383,13 +389,6 @@ export default function EmployeeDetailPage() {
       </div>
     );
   }
-
-  const searchParams = useSearchParams();
-  const dateParam = searchParams.get("date");
-  const asOfDate =
-    dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
-      ? dateParam
-      : new Date().toISOString().slice(0, 10);
 
   const { employee, skills, events, documents, equipment, reviews, currentSalary, salaryRevisions, meetings, employeeProfile } = data;
 

@@ -380,11 +380,14 @@ export default function CockpitPage() {
     }
     let cancelled = false;
     setLegitimacyDrilldownLoading(true);
-    const params = new URLSearchParams({ date, shift: shiftType });
-    fetchJson<{ shift_ids?: string[] }>(`/api/cockpit/shift-ids?${params.toString()}`)
+    const params = new URLSearchParams({ date, shift_code: shiftType, line });
+    fetchJson<{
+      ok?: boolean;
+      shift_ids?: Array<{ shift_id: string; shift_code: string; line: string | null; shift_date: string }>;
+    }>(`/api/cockpit/shift-ids?${params.toString()}`)
       .then((res) => {
         if (!res.ok || !res.data?.shift_ids?.length) return null;
-        return res.data.shift_ids[0];
+        return res.data.shift_ids[0]?.shift_id ?? null;
       })
       .then((shiftId) => {
         if (cancelled || !shiftId) {
@@ -405,7 +408,7 @@ export default function CockpitPage() {
         if (!cancelled) setLegitimacyDrilldownLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, sessionOk, summary?.shift_legitimacy_status, summary != null]);
+  }, [date, shiftType, line, sessionOk, summary?.shift_legitimacy_status, summary != null]);
 
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")

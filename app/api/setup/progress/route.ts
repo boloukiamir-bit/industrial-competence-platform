@@ -28,12 +28,12 @@ export async function GET(request: NextRequest) {
     const [
       orgUnitsRes,
       employeesRes,
-      competencesRes,
+      skillsRes,
       positionsRes,
     ] = await Promise.all([
       supabaseAdmin.from("org_units").select("id", { count: "exact", head: true }).eq("org_id", org.activeOrgId),
       supabaseAdmin.from("employees").select("id", { count: "exact", head: true }).eq("org_id", org.activeOrgId).eq("is_active", true),
-      supabaseAdmin.from("competences").select("id", { count: "exact", head: true }).eq("org_id", org.activeOrgId),
+      supabaseAdmin.from("skills").select("id", { count: "exact", head: true }).eq("org_id", org.activeOrgId),
       supabaseAdmin.from("positions").select("id", { count: "exact", head: true }).eq("org_id", org.activeOrgId),
     ]);
 
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     const progress = {
       orgUnit: (orgUnitsRes.count ?? 0) > 0,
       employees: (employeesRes.count ?? 0) > 0,
-      skills: (competencesRes.count ?? 0) > 0,
+      skills: (skillsRes.count ?? 0) > 0,
       positions: (positionsRes.count ?? 0) > 0 || hasRequirements,
       gaps: false,
     };
