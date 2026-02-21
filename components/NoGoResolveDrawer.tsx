@@ -20,8 +20,8 @@ type NoGoResolveDrawerProps = {
   onResolved?: (status: "created" | "already_resolved") => void;
   /** Cockpit filter: date (YYYY-MM-DD) for Line Overview deep-link */
   cockpitDate?: string;
-  /** Cockpit filter: shift type for Line Overview deep-link */
-  cockpitShift?: "Day" | "Evening" | "Night";
+  /** Cockpit filter: shift code for Line Overview deep-link */
+  cockpitShift?: string;
   /** Cockpit filter: line; use "all" or omit when no line filter */
   cockpitLine?: string;
 };

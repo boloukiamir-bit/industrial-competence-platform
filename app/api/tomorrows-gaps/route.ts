@@ -55,7 +55,7 @@ export type TomorrowsGapsLineRow = {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date")?.trim() || new Date().toISOString().slice(0, 10);
-  const shiftRaw = searchParams.get("shift");
+  const shiftRaw = searchParams.get("shift_code") ?? searchParams.get("shift");
   const shift = normalizeShift(shiftRaw ?? "Day");
   
   if (!shift) {

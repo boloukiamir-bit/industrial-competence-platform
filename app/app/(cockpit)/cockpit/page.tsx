@@ -99,18 +99,35 @@ function CockpitSkeleton() {
   );
 }
 
-const SHIFT_OPTIONS = ["Day", "Evening", "Night"] as const;
+function uniqueShiftCodes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const code = item.trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    out.push(code);
+  }
+  return out;
+}
+
+function isLegacyShiftType(shiftCode: string): boolean {
+  return shiftCode === "Day" || shiftCode === "Evening" || shiftCode === "Night";
+}
 
 export default function CockpitPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { date, shiftType, line, setDate, setShiftType, setLine } = useCockpitFilters();
+  const { date, shiftCode, line, setDate, setShiftCode, setLine } = useCockpitFilters();
   const { hasSession } = useSessionHealth();
   const sessionOk = hasSession === true;
   const [isDemo, setIsDemo] = useState(false);
   const [jumpingLatest, setJumpingLatest] = useState(false);
   const urlSyncedRef = useRef(false);
+  const [availableShiftCodes, setAvailableShiftCodes] = useState<string[]>([]);
   
   const [actions, setActions] = useState<Action[]>([]);
   const [staffingCards, setStaffingCards] = useState<StationStaffingCard[]>([]);
@@ -155,12 +172,13 @@ export default function CockpitPage() {
 
   const [legitimacyDrilldown, setLegitimacyDrilldown] = useState<ShiftLegitimacyDrilldown | null>(null);
   const [legitimacyDrilldownLoading, setLegitimacyDrilldownLoading] = useState(false);
+  const hasShiftCode = shiftCode.trim().length > 0;
 
   // Only query params: date, shift_code, optional line, optional show_resolved=1. Default show_resolved OFF.
   const summaryParams = (() => {
     const p = new URLSearchParams();
     if (date) p.set("date", date);
-    p.set("shift_code", shiftType);
+    if (shiftCode) p.set("shift_code", shiftCode);
     if (line && line !== "all") p.set("line", line);
     if (showResolved) p.set("show_resolved", "1");
     return p;
@@ -168,7 +186,7 @@ export default function CockpitPage() {
   const issuesParams = (() => {
     const p = new URLSearchParams();
     if (date) p.set("date", date);
-    p.set("shift_code", shiftType);
+    if (shiftCode) p.set("shift_code", shiftCode);
     if (line && line !== "all") p.set("line", line);
     if (showResolved) p.set("show_resolved", "1");
     return p;
@@ -182,11 +200,11 @@ export default function CockpitPage() {
     const rawDate = searchParams.get("date")?.trim();
     const urlDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
     const initialDate = urlDate ?? getInitialDateFromUrlOrToday(searchParams);
-    const qShift = searchParams.get("shift_code")?.trim();
+    const qShift = (searchParams.get("shift_code") ?? searchParams.get("shift"))?.trim();
     const qLine = searchParams.get("line")?.trim();
 
     if (date !== initialDate) setDate(initialDate);
-    if (qShift === "Day" || qShift === "Evening" || qShift === "Night") setShiftType(qShift);
+    if (qShift) setShiftCode(qShift);
     if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
 
     if (!urlDate) {
@@ -195,19 +213,57 @@ export default function CockpitPage() {
       router.replace(`/app/cockpit?${p.toString()}`, { scroll: false });
     }
     urlSyncedRef.current = true;
-  }, [searchParams, setDate, setShiftType, setLine, router, date]);
+  }, [searchParams, setDate, setShiftCode, setLine, router, date]);
+
+  // Data-driven shift selector: fetch shift codes for selected date, then validate/fallback shift_code.
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    const p = new URLSearchParams({ date });
+    fetchJson<{ ok: boolean; shift_codes?: string[] }>(`/api/cockpit/shift-codes?${p.toString()}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(res.error || "Failed to load shift codes");
+        }
+        const codes = uniqueShiftCodes(res.data.shift_codes);
+        if (cancelled) return;
+        setAvailableShiftCodes(codes);
+        if (codes.length === 0) {
+          if (shiftCode !== "") setShiftCode("");
+          return;
+        }
+        const fromUrlRaw = (searchParams.get("shift_code") ?? searchParams.get("shift") ?? "").trim().toLowerCase();
+        const fromUrl = fromUrlRaw
+          ? codes.find((code) => code.toLowerCase() === fromUrlRaw) ?? null
+          : null;
+        const currentRaw = shiftCode.trim().toLowerCase();
+        const current = currentRaw
+          ? codes.find((code) => code.toLowerCase() === currentRaw) ?? null
+          : null;
+        const nextShiftCode = current ?? fromUrl ?? codes[0];
+        if (nextShiftCode !== shiftCode) setShiftCode(nextShiftCode);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[cockpit] shift codes", err);
+        setAvailableShiftCodes([]);
+      });
+    return () => { cancelled = true; };
+  }, [date, sessionOk, searchParams, setShiftCode, shiftCode]);
 
   // URL sync: push date, shift_code, line to URL when they change
   useEffect(() => {
     if (!urlSyncedRef.current) return;
     const p = new URLSearchParams(searchParams.toString());
     p.set("date", date);
-    p.set("shift_code", shiftType);
+    if (shiftCode) p.set("shift_code", shiftCode);
+    else p.delete("shift_code");
+    p.delete("shift");
     p.set("line", line);
     const next = p.toString();
     const current = searchParams.toString();
     if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
-  }, [date, shiftType, line, router, searchParams]);
+  }, [date, shiftCode, line, router, searchParams]);
 
   // Dev-only safety: warn if URL/date ever diverge after sync
   useEffect(() => {
@@ -239,7 +295,8 @@ export default function CockpitPage() {
 
   // Load cockpit summary (date, shift_code, optional line). Skip when session invalid to avoid 401 spam.
   useEffect(() => {
-    if (!sessionOk) {
+    if (!sessionOk || !hasShiftCode) {
+      setSummary(null);
       setSummaryLoading(false);
       return;
     }
@@ -277,10 +334,10 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionOk, summaryUrl, toast]);
+  }, [sessionOk, hasShiftCode, summaryUrl, toast]);
 
   const handleJumpLatest = async () => {
-    if (jumpingLatest || isDemoMode()) return;
+    if (jumpingLatest || isDemoMode() || !hasShiftCode) return;
     setJumpingLatest(true);
     try {
       const searchBack = async (fromDate: string, daysLeft: number): Promise<string | null> => {
@@ -289,7 +346,7 @@ export default function CockpitPage() {
           const res = await fetchJson<CockpitSummaryResponse>(
             `/api/cockpit/summary?${cockpitSummaryParams({
               date: d,
-              shift_code: shiftType,
+              shift_code: shiftCode,
               line: line === "all" ? undefined : line,
               show_resolved: showResolved,
             }).toString()}`
@@ -309,10 +366,15 @@ export default function CockpitPage() {
 
   // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
   useEffect(() => {
-    if (isDemoMode() || !sessionOk) return;
+    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (!isLegacyShiftType(shiftCode)) {
+      setGapsLines([]);
+      setGapsLoading(false);
+      return;
+    }
     let cancelled = false;
     setGapsLoading(true);
-    const params = new URLSearchParams({ date, shift: shiftType.toLowerCase() });
+    const params = new URLSearchParams({ date, shift_code: shiftCode });
     fetchJson<{ lines?: GapsLineRow[] }>(`/api/tomorrows-gaps?${params.toString()}`)
       .then((res) => {
         if (!res.ok) {
@@ -337,11 +399,11 @@ export default function CockpitPage() {
         if (!cancelled) setGapsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, sessionOk, toast]);
+  }, [date, shiftCode, sessionOk, hasShiftCode, toast]);
 
   // Load Issue Inbox (date, shift_code, optional line)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk) return;
+    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
     let cancelled = false;
     setIssuesLoading(true);
     setIssuesError(null);
@@ -368,11 +430,11 @@ export default function CockpitPage() {
         if (!cancelled) setIssuesLoading(false);
       });
     return () => { cancelled = true; };
-  }, [issuesUrl, sessionOk, toast, issuesRefreshKey]);
+  }, [issuesUrl, sessionOk, hasShiftCode, toast, issuesRefreshKey]);
 
   // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (for blocking/at-risk lists)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !summary) return;
+    if (isDemoMode() || !sessionOk || !summary || !hasShiftCode) return;
     const status = summary.shift_legitimacy_status;
     if (status !== "ILLEGAL" && status !== "WARNING") {
       setLegitimacyDrilldown(null);
@@ -380,7 +442,7 @@ export default function CockpitPage() {
     }
     let cancelled = false;
     setLegitimacyDrilldownLoading(true);
-    const params = new URLSearchParams({ date, shift_code: shiftType, line });
+    const params = new URLSearchParams({ date, shift_code: shiftCode, line });
     fetchJson<{
       ok?: boolean;
       shift_ids?: Array<{ shift_id: string; shift_code: string; line: string | null; shift_date: string }>;
@@ -408,7 +470,7 @@ export default function CockpitPage() {
         if (!cancelled) setLegitimacyDrilldownLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, line, sessionOk, summary?.shift_legitimacy_status, summary != null]);
+  }, [date, shiftCode, line, sessionOk, hasShiftCode, summary?.shift_legitimacy_status, summary != null]);
 
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
@@ -420,8 +482,8 @@ export default function CockpitPage() {
 
   // Load line options from v_cockpit_station_summary.area for selected date+shift (no legacy codes)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk) return;
-    const p = new URLSearchParams({ date, shift_code: shiftType });
+    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    const p = new URLSearchParams({ date, shift_code: shiftCode });
     const url = `/api/cockpit/lines?${p.toString()}`;
     fetchJson<{ lines?: string[] }>(url)
       .then((res) => {
@@ -430,7 +492,7 @@ export default function CockpitPage() {
         if ("source" in res.data && res.data.source) console.debug("[cockpit lines] source:", res.data.source);
       })
       .catch((err) => console.error("[cockpit lines]", err));
-  }, [date, shiftType, sessionOk]);
+  }, [date, shiftCode, sessionOk, hasShiftCode]);
 
   useEffect(() => {
     const demo = isDemoMode();
@@ -640,14 +702,18 @@ export default function CockpitPage() {
             className="h-8 px-2 rounded-sm border border-[var(--hairline)] bg-[var(--surface)] text-[var(--text)] cockpit-body"
             data-testid="input-date"
           />
-          <Select value={shiftType} onValueChange={(v) => setShiftType(v as typeof shiftType)}>
+          <Select value={shiftCode || undefined} onValueChange={setShiftCode} disabled={availableShiftCodes.length === 0}>
             <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-shift">
               <SelectValue placeholder="Shift" />
             </SelectTrigger>
             <SelectContent>
-              {SHIFT_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
+              {availableShiftCodes.length > 0 ? (
+                availableShiftCodes.map((code) => (
+                  <SelectItem key={code} value={code}>{code}</SelectItem>
+                ))
+              ) : (
+                <SelectItem value="__no_shift_codes" disabled>No shifts</SelectItem>
+              )}
             </SelectContent>
           </Select>
           <Select value={line} onValueChange={setLine}>
@@ -707,9 +773,9 @@ export default function CockpitPage() {
         <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
-            {SHIFT_OPTIONS.map((s) => (
-              <Button key={s} variant="outline" size="sm" className="h-7 text-[13px]" onClick={() => setShiftType(s)} data-testid={`empty-shift-${s}`}>
-                {s}
+            {availableShiftCodes.map((code) => (
+              <Button key={code} variant="outline" size="sm" className="h-7 text-[13px]" onClick={() => setShiftCode(code)} data-testid={`empty-shift-${code}`}>
+                {code}
               </Button>
             ))}
             <Button
@@ -717,7 +783,7 @@ export default function CockpitPage() {
               size="sm"
               className="h-7 text-[13px]"
               onClick={handleJumpLatest}
-              disabled={jumpingLatest}
+              disabled={jumpingLatest || !hasShiftCode}
               data-testid="empty-jump-latest"
             >
               Jump to latest
@@ -908,7 +974,7 @@ export default function CockpitPage() {
         onOpenChange={(open) => !open && setRootCauseDrawerLine(null)}
         line={rootCauseDrawerLine}
         date={date}
-        shift={shiftType}
+        shift={shiftCode}
       />
 
       <IssueDrawer

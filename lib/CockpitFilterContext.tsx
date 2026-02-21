@@ -35,21 +35,21 @@ export const getInitialCockpitDate = getInitialDateFromUrlOrToday;
 
 const CockpitFilterContext = createContext<{
   date: string;
-  shiftType: string;
+  shiftCode: string;
   line: string;
   setDate: (d: string) => void;
-  setShiftType: (s: string) => void;
+  setShiftCode: (s: string) => void;
   setLine: (l: string) => void;
 } | null>(null);
 
 export function CockpitFilterProvider({ children }: { children: ReactNode }) {
   const [date, setDate] = useState<string>(() => getInitialDateFromUrlOrToday());
-  const [shiftType, setShiftType] = useState<string>("Day");
+  const [shiftCode, setShiftCode] = useState<string>("");
   const [line, setLine] = useState<string>("all");
 
   return (
     <CockpitFilterContext.Provider
-      value={{ date, shiftType, line, setDate, setShiftType, setLine }}
+      value={{ date, shiftCode, line, setDate, setShiftCode, setLine }}
     >
       {children}
     </CockpitFilterContext.Provider>

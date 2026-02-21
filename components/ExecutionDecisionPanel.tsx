@@ -23,7 +23,7 @@ type DecisionRow = {
 };
 
 export function ExecutionDecisionPanel() {
-  const { date, shiftType, line } = useCockpitFilters();
+  const { date, shiftCode, line } = useCockpitFilters();
   const { hasSession } = useSessionHealth();
   const [rows, setRows] = useState<DecisionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,12 +39,18 @@ export function ExecutionDecisionPanel() {
   const supabase = useMemo(() => createClient(), []);
 
   const loadDecisions = useCallback(async () => {
+    if (!shiftCode) {
+      setRows([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
         date,
-        shift: shiftType,
+        shift_code: shiftCode,
         line: line || "all",
       });
       const headers: HeadersInit = {};
@@ -71,7 +77,7 @@ export function ExecutionDecisionPanel() {
     } finally {
       setLoading(false);
     }
-  }, [date, shiftType, line, supabase]);
+  }, [date, shiftCode, line, supabase]);
 
   useEffect(() => {
     if (!sessionOk) return;
@@ -126,7 +132,7 @@ export function ExecutionDecisionPanel() {
             </div>
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-xs" style={{ color: "var(--text-3)" }}>
-                {date} · {shiftType} · {line === "all" ? "All Lines" : line || "—"}
+                {date} · {shiftCode || "—"} · {line === "all" ? "All Lines" : line || "—"}
               </span>
               <div className="flex items-center gap-2">
                 <Label htmlFor="show-resolved" className="text-xs font-normal cursor-pointer" style={{ color: "var(--text-3)" }}>
@@ -201,7 +207,7 @@ export function ExecutionDecisionPanel() {
         employeeName={drawerRow?.employee_name ?? undefined}
         onResolved={handleResolved}
         cockpitDate={date}
-        cockpitShift={shiftType as "Day" | "Evening" | "Night"}
+        cockpitShift={shiftCode || undefined}
         cockpitLine={line || "all"}
       />
     </>
