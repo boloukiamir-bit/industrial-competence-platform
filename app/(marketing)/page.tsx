@@ -1,29 +1,25 @@
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { HeroSection } from "@/components/marketing/HeroSection";
-import { ProofBar } from "@/components/marketing/ProofBar";
-import { ProblemSolution } from "@/components/marketing/ProblemSolution";
-import { CoreModules } from "@/components/marketing/CoreModules";
-import { UseCases } from "@/components/marketing/UseCases";
-import { SecurityTrust } from "@/components/marketing/SecurityTrust";
-import { PricingTeaser } from "@/components/marketing/PricingTeaser";
-import { FinalCTA } from "@/components/marketing/FinalCTA";
+import { ProofStrip } from "@/components/marketing/ProofStrip";
+import { Chapter01Gap } from "@/components/marketing/chapters/Chapter01Gap";
+import { Chapter02Model } from "@/components/marketing/chapters/Chapter02Model";
+import { Chapter03Proof } from "@/components/marketing/chapters/Chapter03Proof";
+import { RequestBrief } from "@/components/marketing/RequestBrief";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { AuthRedirectToCockpit } from "@/components/marketing/AuthRedirectToCockpit";
 
 export default function MarketingPage() {
   return (
-    <main className="min-h-screen flex flex-col bg-background">
+    <main className="min-h-screen flex flex-col">
       <AuthRedirectToCockpit />
       <MarketingNav />
       <div className="flex-1">
         <HeroSection />
-        <ProofBar />
-        <ProblemSolution />
-        <CoreModules />
-        <UseCases />
-        <SecurityTrust />
-        <PricingTeaser />
-        <FinalCTA />
+        <ProofStrip />
+        <Chapter01Gap />
+        <Chapter02Model />
+        <Chapter03Proof />
+        <RequestBrief />
       </div>
       <MarketingFooter />
     </main>

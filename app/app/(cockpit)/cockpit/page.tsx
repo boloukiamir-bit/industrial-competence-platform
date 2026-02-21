@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
-import { useCockpitFilters } from "@/lib/CockpitFilterContext";
+import { getInitialCockpitDate, useCockpitFilters } from "@/lib/CockpitFilterContext";
 import { ActionDrawer } from "@/components/cockpit/ActionDrawer";
 import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal";
 import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
@@ -106,11 +106,7 @@ export default function CockpitPage() {
   const searchParams = useSearchParams();
   const { date, shiftType, line, setDate, setShiftType, setLine } = useCockpitFilters();
   const [isDemo, setIsDemo] = useState(false);
-  const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null);
-  const [fallbackSearchDone, setFallbackSearchDone] = useState(false);
-  const [fallbackSearching, setFallbackSearching] = useState(false);
-  const [fallbackRetryKey, setFallbackRetryKey] = useState(0);
-  const [lastFallbackDate, setLastFallbackDate] = useState<string | null>(null);
+  const [jumpingLatest, setJumpingLatest] = useState(false);
   const urlSyncedRef = useRef(false);
   
   const [actions, setActions] = useState<Action[]>([]);
@@ -180,14 +176,21 @@ export default function CockpitPage() {
   // URL sync: read date, shift_code, line from URL on mount
   useEffect(() => {
     if (urlSyncedRef.current) return;
-    const qDate = searchParams.get("date")?.trim();
+    const rawDate = searchParams.get("date")?.trim();
+    const hasValidDate = !!rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
+    const initialDate = getInitialCockpitDate(searchParams);
     const qShift = searchParams.get("shift_code")?.trim();
     const qLine = searchParams.get("line")?.trim();
-    if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) setDate(qDate);
+    if (date !== initialDate) setDate(initialDate);
     if (qShift === "Day" || qShift === "Evening" || qShift === "Night") setShiftType(qShift);
     if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
+    if (!hasValidDate) {
+      const p = new URLSearchParams(searchParams.toString());
+      p.set("date", initialDate);
+      router.replace(`/app/cockpit?${p.toString()}`, { scroll: false });
+    }
     urlSyncedRef.current = true;
-  }, [searchParams, setDate, setShiftType, setLine]);
+  }, [searchParams, setDate, setShiftType, setLine, router, date]);
 
   // URL sync: push date, shift_code, line to URL when they change
   useEffect(() => {
@@ -201,11 +204,15 @@ export default function CockpitPage() {
     if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
   }, [date, shiftType, line, router, searchParams]);
 
-  // Clear auto-selected label and fallback date when user changes date
+  // Dev-only safety: warn if URL/date ever diverge after sync
   useEffect(() => {
-    if (autoSelectedDate != null && date !== autoSelectedDate) setAutoSelectedDate(null);
-    if (lastFallbackDate != null && date !== lastFallbackDate) setLastFallbackDate(null);
-  }, [date, autoSelectedDate, lastFallbackDate]);
+    if (process.env.NODE_ENV === "production") return;
+    if (!urlSyncedRef.current) return;
+    const urlDate = searchParams.get("date")?.trim();
+    if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate) && urlDate !== date) {
+      console.warn("[cockpit] Date diverged from URL", { stateDate: date, urlDate });
+    }
+  }, [date, searchParams]);
 
   // P1.3: Undo countdown (30s)
   useEffect(() => {
@@ -263,49 +270,33 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [summaryUrl, toast]);
 
-  // P1.1: If current date has no issues, search backward up to 14 days for most recent date with data
-  const fallbackKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (isDemoMode() || summaryLoading || summary == null) return;
-    if (summary.active_total > 0) {
-      setFallbackSearchDone(false);
-      return;
+  const handleJumpLatest = async () => {
+    if (jumpingLatest || isDemoMode()) return;
+    setJumpingLatest(true);
+    try {
+      const searchBack = async (fromDate: string, daysLeft: number): Promise<string | null> => {
+        for (let i = 1; i <= daysLeft; i++) {
+          const d = dateDaysAgo(fromDate, i);
+          const res = await fetchJson<CockpitSummaryResponse>(
+            `/api/cockpit/summary?${cockpitSummaryParams({
+              date: d,
+              shift_code: shiftType,
+              line: line === "all" ? undefined : line,
+              show_resolved: showResolved,
+            }).toString()}`
+          );
+          if (res.ok && res.data && res.data.active_total > 0) return d;
+        }
+        return null;
+      };
+      const found = await searchBack(date, 14);
+      if (found != null) setDate(found);
+    } catch (err) {
+      console.error("[cockpit] Jump to latest failed", err);
+    } finally {
+      setJumpingLatest(false);
     }
-    if (date === lastFallbackDate) return;
-    const key = `${date}-${shiftType}-${line}`;
-    if (fallbackKeyRef.current === key) return;
-    fallbackKeyRef.current = key;
-    setFallbackSearching(true);
-    let cancelled = false;
-    const searchBack = async (fromDate: string, daysLeft: number): Promise<string | null> => {
-      for (let i = 1; i <= daysLeft; i++) {
-        if (cancelled) return null;
-        const d = dateDaysAgo(fromDate, i);
-        const res = await fetchJson<CockpitSummaryResponse>(
-          `/api/cockpit/summary?${cockpitSummaryParams({
-            date: d,
-            shift_code: shiftType,
-            line: line === "all" ? undefined : line,
-            show_resolved: showResolved,
-          }).toString()}`
-        );
-        if (!cancelled && res.ok && res.data && res.data.active_total > 0) return d;
-      }
-      return null;
-    };
-    searchBack(date, 14).then((found) => {
-      if (cancelled) return;
-      setFallbackSearching(false);
-      if (found != null) {
-        setDate(found);
-        setAutoSelectedDate(found);
-        setLastFallbackDate(found);
-      } else {
-        setFallbackSearchDone(true);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [date, shiftType, line, showResolved, summary, summaryLoading, setDate, fallbackRetryKey, lastFallbackDate]);
+  };
 
   // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
   useEffect(() => {
@@ -692,7 +683,7 @@ export default function CockpitPage() {
 
   return (
     <PageFrame filterBar={filterBar} debugPanel={debugPanel}>
-      {summary && summary.active_total === 0 && !summaryLoading && !fallbackSearching && fallbackSearchDone && (
+      {summary && summary.active_total === 0 && !summaryLoading && (
         <div className="mb-4 px-3 py-2 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body text-muted-foreground">No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
@@ -705,11 +696,8 @@ export default function CockpitPage() {
               variant="secondary"
               size="sm"
               className="h-7 text-[13px]"
-              onClick={() => {
-                setFallbackSearchDone(false);
-                fallbackKeyRef.current = null;
-                setFallbackRetryKey((k) => k + 1);
-              }}
+              onClick={handleJumpLatest}
+              disabled={jumpingLatest}
               data-testid="empty-jump-latest"
             >
               Jump to latest

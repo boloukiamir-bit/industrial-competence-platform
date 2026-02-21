@@ -6,10 +6,11 @@ import { signInWithEmail, getSession } from '@/services/auth';
 import { isSupabaseReady, supabase } from '@/lib/supabaseClient';
 import { getRoleRedirectPath } from '@/hooks/useProfile';
 import { Loader2 } from 'lucide-react';
+import { LoginShell2030 } from '@/components/auth/LoginShell2030';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@nadiplan.test');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -196,107 +197,109 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-background">
-        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+      <LoginShell2030>
+        <div className="flex items-center justify-center gap-2 text-muted-foreground py-12">
           <Loader2 className="w-4 h-4 animate-spin" />
           <p className="text-sm">Loading...</p>
         </div>
-      </main>
+      </LoginShell2030>
     );
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-background">
-      <div className="w-full max-w-[420px] flex flex-col gap-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Use your account to access the platform.
-          </p>
-        </div>
+    <LoginShell2030>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--text, #0F172A)' }}>Sign in</h1>
+        <p className="mt-1 text-sm" style={{ color: 'var(--text-3, #94A3B8)' }}>
+          Access the governance platform.
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6 rounded-lg border border-border bg-surface">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground">Email</label>
-            <input
-              type="email"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-              data-testid="input-email"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground">Password</label>
-            <input
-              type="password"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-              data-testid="input-password"
-            />
-          </div>
-          {errorMsg && (
-            <p className="text-sm text-destructive" data-testid="error-message">{errorMsg}</p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-2, #475569)' }}>Email</label>
+          <input
+            type="email"
+            className="login-input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            placeholder="you@company.com"
+            required
+            data-testid="input-email"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-2, #475569)' }}>Password</label>
+          <input
+            type="password"
+            className="login-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+            data-testid="input-password"
+          />
+        </div>
+        {errorMsg && (
+          <p className="text-sm" style={{ color: '#B91C1C' }} data-testid="error-message">{errorMsg}</p>
+        )}
+        <button
+          type="submit"
+          className="w-full py-3 px-4 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+          style={{ backgroundColor: 'var(--accent, #1E40AF)', borderRadius: '3px' }}
+          disabled={loading}
+          data-testid="button-signin"
+        >
+          {loading ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
+
+      {showBootstrap && (
+        <div className="flex flex-col gap-3 p-5 border" style={{ borderColor: 'var(--border, #E5EAF0)', borderRadius: '3px' }} data-testid="bootstrap-section">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text, #0F172A)' }}>Admin Setup Required</h3>
+          <p className="text-sm" style={{ color: 'var(--text-2, #475569)' }}>
+            No admin user exists. Click below to become the first admin.
+          </p>
+          {bootstrapMessage && (
+            <p
+              className="text-sm"
+              style={{ color: bootstrapStatus === 'error' ? '#B91C1C' : 'var(--text, #0F172A)' }}
+              data-testid="bootstrap-message"
+            >
+              {bootstrapMessage}
+            </p>
           )}
           <button
-            type="submit"
-            className="w-full py-2.5 px-4 rounded-md text-sm font-medium text-primary-foreground bg-accent hover:opacity-90 transition-opacity disabled:opacity-50"
-            disabled={loading}
-            data-testid="button-signin"
+            onClick={handleBootstrap}
+            disabled={bootstrapStatus === 'loading' || bootstrapStatus === 'success'}
+            className="w-full py-2.5 px-4 text-sm font-medium border transition-colors hover:opacity-90 disabled:opacity-50"
+            style={{ borderColor: 'var(--border, #E5EAF0)', borderRadius: '3px', color: 'var(--text, #0F172A)' }}
+            data-testid="button-bootstrap"
           >
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-
-        {showBootstrap && (
-          <div className="flex flex-col gap-3 p-6 rounded-lg border border-border bg-surface" data-testid="bootstrap-section">
-            <h3 className="text-sm font-semibold text-foreground">Admin Setup Required</h3>
-            <p className="text-sm text-muted-foreground">
-              No admin user exists. Click below to become the first admin.
-            </p>
-            {bootstrapMessage && (
-              <p
-                className={`text-sm ${bootstrapStatus === 'error' ? 'text-destructive' : 'text-foreground'}`}
-                data-testid="bootstrap-message"
-              >
-                {bootstrapMessage}
-              </p>
+            {bootstrapStatus === 'loading' ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Running Bootstrap...
+              </span>
+            ) : bootstrapStatus === 'success' ? (
+              'Bootstrap Complete!'
+            ) : (
+              'Run Admin Bootstrap'
             )}
-            <button
-              onClick={handleBootstrap}
-              disabled={bootstrapStatus === 'loading' || bootstrapStatus === 'success'}
-              className="w-full py-2.5 px-4 rounded-md text-sm font-medium border border-border bg-background text-foreground hover:bg-surface"
-              data-testid="button-bootstrap"
-            >
-              {bootstrapStatus === 'loading' ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Running Bootstrap...
-                </span>
-              ) : bootstrapStatus === 'success' ? (
-                'Bootstrap Complete!'
-              ) : (
-                'Run Admin Bootstrap'
-              )}
-            </button>
-          </div>
-        )}
+          </button>
+        </div>
+      )}
 
-        <p className="text-sm text-muted-foreground text-center">
-          Don&apos;t have an account?{' '}
-          <a href="/signup" className="text-accent underline" data-testid="link-signup">Sign up</a>
+      <p className="text-sm text-center" style={{ color: 'var(--text-3, #94A3B8)' }}>
+        Don&apos;t have an account?{' '}
+        <a href="/signup" className="underline" style={{ color: 'var(--accent, #1E40AF)' }} data-testid="link-signup">Sign up</a>
+      </p>
+      {process.env.NODE_ENV !== "production" && (
+        <p className="text-xs text-center" style={{ color: 'var(--text-3, #94A3B8)' }}>
+          <a href="/health" className="underline" data-testid="link-health">System Health Check</a>
         </p>
-        {process.env.NODE_ENV !== "production" && (
-          <p className="text-xs text-muted-foreground text-center">
-            <a href="/health" className="underline" data-testid="link-health">System Health Check</a>
-          </p>
-        )}
-      </div>
-    </main>
+      )}
+    </LoginShell2030>
   );
 }

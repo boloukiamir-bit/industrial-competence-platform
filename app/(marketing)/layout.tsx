@@ -1,20 +1,13 @@
 import type { Metadata } from "next";
-import { Instrument_Serif } from "next/font/google";
-
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-display",
-});
 
 export const metadata: Metadata = {
-  title: "BCLEDGE — The system of record for industrial competence and compliance",
+  title: "BCLEDGE — Governance Infrastructure for Industrial Execution",
   description:
-    "Auditable competence, readiness, and compliance for industrial organizations. Single source of truth, skills-to-stations logic, audit-grade compliance. Sweden and EU-ready.",
+    "Industrial legitimacy. Validated. Execution without validation is risk. Governance infrastructure for auditable competence and compliance.",
   openGraph: {
-    title: "BCLEDGE — Industrial competence and compliance",
+    title: "BCLEDGE — Governance Infrastructure",
     description:
-      "The system of record for industrial competence and compliance. Built for auditability, pilot-ready in weeks.",
+      "Industrial legitimacy. Validated. Governance infrastructure for auditable competence, readiness, and compliance.",
     type: "website",
   },
 };
@@ -23,7 +16,7 @@ export default function MarketingLayout({
   children,
 }: { children: React.ReactNode }) {
   return (
-    <div className={`${instrumentSerif.variable} font-sans`}>
+    <div data-theme="2030" className="min-h-screen bg-background text-foreground">
       {children}
     </div>
   );

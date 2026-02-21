@@ -1,145 +1,204 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import { Menu, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-const mainNavItems = [
-  { label: "Product", href: "#product" },
-  { label: "Use Cases", href: "#use-cases" },
-  { label: "Security", href: "#security" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "Resources", href: "#resources" },
-];
+const NAV_ANCHORS = [
+  { label: "Problem",       href: "#chapter-gap"    },
+  { label: "Model",         href: "#chapter-model"  },
+  { label: "Command",       href: "#chapter-output" },
+  { label: "Request Brief", href: "#request-brief"  },
+] as const;
 
-const stickyNavIds = ["product", "use-cases", "security", "pricing"];
+const LINK_STYLE: React.CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 500,
+  letterSpacing: "0.01em",
+  color: "var(--text-2, #475569)",
+  textDecoration: "none",
+  paddingBottom: "2px",
+  borderBottom: "1px solid transparent",
+  transition: "color 0.15s ease, border-color 0.15s ease",
+};
+
+const LINK_HOVER_STYLE: React.CSSProperties = {
+  color: "var(--text, #0F172A)",
+  borderBottom: "1px solid var(--hairline, rgba(15,23,42,0.10))",
+};
+
+function NavLink({
+  href,
+  children,
+  onClick,
+}: {
+  href: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
+  const isAnchor = href.startsWith("#");
+  const [hovered, setHovered] = useState(false);
+
+  const combinedStyle = {
+    ...LINK_STYLE,
+    ...(hovered ? LINK_HOVER_STYLE : {}),
+  };
+
+  if (isAnchor) {
+    return (
+      <a
+        href={href}
+        style={combinedStyle}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={onClick}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      style={combinedStyle}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+    >
+      {children}
+    </Link>
+  );
+}
 
 export function MarketingNav() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [stickyVisible, setStickyVisible] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const onScroll = () => setStickyVisible(window.scrollY > 320);
-  }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          const id = e.target.id;
-          if (stickyNavIds.includes(id)) setActiveId(id);
-        }
-      },
-      { rootMargin: "-20% 0px -60% 0px", threshold: 0 }
-    );
-    stickyNavIds.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, [stickyVisible]);
+  const closeMobile = () => setMobileOpen(false);
 
   return (
     <>
       <header
-        className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border"
+        className="fixed top-0 left-0 right-0 z-50"
+        style={{
+          height: "72px",
+          backgroundColor: "var(--bg, #F4F6F8)",
+          borderBottom: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))",
+        }}
         aria-label="Main navigation"
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 md:grid md:grid-cols-3 md:gap-4">
-            <Link
-              href="/"
-              className="font-semibold text-foreground text-lg tracking-tight hover:opacity-80 transition-opacity"
-              aria-label="BCLEDGE home"
+        <div className="arch-container h-full flex items-center justify-between">
+
+          {/* Logo + wordmark */}
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 flex-shrink-0"
+            style={{ textDecoration: "none" }}
+            aria-label="BCLEDGE home"
+          >
+            <Image
+              src="/bcledge-logo.png"
+              alt="BCLedge"
+              width={28}
+              height={28}
+              style={{ objectFit: "contain" }}
+              priority
+            />
+            <span
+              style={{
+                fontSize: "1rem",
+                fontWeight: 700,
+                letterSpacing: "-0.02em",
+                color: "var(--text, #0F172A)",
+              }}
             >
               BCLEDGE
-            </Link>
+            </span>
+          </Link>
 
-            <nav className="hidden md:flex items-center justify-center gap-1" aria-label="Main">
-              {mainNavItems.map((item) => (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  className={cn(
-                    "px-3 py-2 text-sm font-medium text-muted-foreground rounded-lg transition-colors",
-                    "hover:text-foreground hover:bg-surface"
-                  )}
-                >
-                  {item.label}
-                </a>
-              ))}
-            </nav>
+          {/* Desktop nav — center anchors */}
+          <nav
+            className="hidden md:flex items-center"
+            style={{ gap: "32px" }}
+            aria-label="Main"
+          >
+            {NAV_ANCHORS.map((item) => (
+              <NavLink key={item.label} href={item.href}>
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
 
-            <div className="hidden md:flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/login">Login</Link>
-              </Button>
-              <Button size="sm" className="marketing-accent border-0 rounded-xl" asChild>
-                <Link href="#book-demo">Book a demo</Link>
-              </Button>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden col-start-3 justify-self-end"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
+          {/* Desktop — Login */}
+          <div className="hidden md:flex">
+            <NavLink href="/login">Login</NavLink>
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-2 -mr-2"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen
+              ? <X className="h-5 w-5" style={{ color: "var(--text, #0F172A)" }} />
+              : <Menu className="h-5 w-5" style={{ color: "var(--text, #0F172A)" }} />
+            }
+          </button>
         </div>
-
-        {stickyVisible && (
-          <div className="hidden md:block border-t border-border bg-background/95 backdrop-blur-md">
-            <div className="max-w-6xl mx-auto px-4">
-              <nav className="flex items-center justify-center gap-1 h-12" aria-label="Section navigation">
-                {stickyNavIds.map((id) => (
-                  <a
-                    key={id}
-                    href={`#${id}`}
-                    className={cn(
-                      "px-3 py-2 text-xs font-medium rounded-lg transition-colors",
-                      activeId === id
-                        ? "text-foreground bg-surface"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {id === "use-cases" ? "Use Cases" : id.charAt(0).toUpperCase() + id.slice(1)}
-                  </a>
-                ))}
-              </nav>
-            </div>
-          </div>
-        )}
       </header>
 
+      {/* Mobile menu overlay */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 pt-16 bg-background border-t border-border">
-          <nav className="max-w-6xl mx-auto px-4 py-6 flex flex-col gap-1" aria-label="Main mobile">
-            {mainNavItems.map((item) => (
+        <div
+          className="md:hidden fixed inset-0 z-50"
+          style={{
+            paddingTop: "72px",
+            backgroundColor: "var(--bg, #F4F6F8)",
+            borderTop: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))",
+          }}
+        >
+          <nav
+            className="arch-container flex flex-col"
+            style={{ paddingTop: "32px", gap: "0" }}
+            aria-label="Mobile main"
+          >
+            {NAV_ANCHORS.map((item, i) => (
               <a
                 key={item.label}
                 href={item.href}
-                className="px-4 py-3 text-sm font-medium text-foreground rounded-lg hover:bg-surface"
-                onClick={() => setMobileOpen(false)}
+                onClick={closeMobile}
+                style={{
+                  padding: "16px 0",
+                  fontSize: "1rem",
+                  fontWeight: 500,
+                  color: "var(--text, #0F172A)",
+                  textDecoration: "none",
+                  borderBottom: i < NAV_ANCHORS.length - 1
+                    ? "1px solid var(--hairline-soft, rgba(15,23,42,0.06))"
+                    : "none",
+                  display: "block",
+                }}
               >
                 {item.label}
               </a>
             ))}
-            <div className="flex flex-col gap-2 pt-6 mt-4 border-t border-black/5">
-              <Button variant="outline" className="w-full rounded-xl" asChild>
-                <Link href="/login" onClick={() => setMobileOpen(false)}>Login</Link>
-              </Button>
-              <Button className="w-full marketing-accent border-0 rounded-xl" asChild>
-                <Link href="#book-demo" onClick={() => setMobileOpen(false)}>Book a demo</Link>
-              </Button>
-            </div>
+            <Link
+              href="/login"
+              onClick={closeMobile}
+              style={{
+                padding: "16px 0",
+                fontSize: "1rem",
+                fontWeight: 500,
+                color: "var(--text-2, #475569)",
+                textDecoration: "none",
+                display: "block",
+                marginTop: "8px",
+              }}
+            >
+              Login
+            </Link>
           </nav>
         </div>
       )}

@@ -100,6 +100,66 @@
   --ds-status-ok-text: 142 50% 78%;
 }
 
+/* Design Foundation 2030 — Light Corporate Premium (marketing /2030 + login) */
+[data-theme="2030"] {
+  --bg: #F4F6F8;
+  --surface: #FFFFFF;
+  --surface-2: #F9FAFB;
+  --text: #0F172A;
+  --text-2: #475569;
+  --text-3: #94A3B8;
+  --border: #E5EAF0;
+  --accent: #1E40AF;
+  --go: #15803D;
+  --warn: #B45309;
+  --nog: #B91C1C;
+  --illegal: #7F1D1D;
+
+  /* Map to existing Tailwind/HSL so bg-background, text-foreground etc. work */
+  --color-bg: #F4F6F8;
+  --color-surface: #FFFFFF;
+  --color-border: #E5EAF0;
+  --color-accent: #1E40AF;
+  --color-muted: #94A3B8;
+  --color-go: rgba(21, 128, 61, 0.12);
+  --color-warning: rgba(180, 83, 9, 0.12);
+  --color-illegal: rgba(185, 28, 28, 0.08);
+
+  --background: 210 20% 97%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 224 76% 38%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 20% 94%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 20% 94%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 224 76% 38%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 72% 40%;
+  --destructive-foreground: 0 0% 98%;
+  --input: 214 32% 91%;
+  --ring: 224 76% 38%;
+  --surface-2: 210 20% 98%;
+}
+
+[data-theme="2030"] .theme-2030-shadow {
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="2030"] .theme-2030-focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+[data-theme="2030"] input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--accent);
+}
+
 /* Operational Readiness Platform – Cockpit UI Rulebook */
 .cockpit-card {
   border-radius: 4px;
@@ -282,17 +342,131 @@
   display: none;
 }
 
-/* Marketing: use foundation (no light overrides) */
+/* =====================================================
+   Signature System — Scandinavian Strategic (marketing only)
+   These tokens + classes are ONLY used in [data-theme="2030"]
+   marketing/login surfaces. DO NOT apply in cockpit.
+   ===================================================== */
+[data-theme="2030"] {
+  --surface-3: #F2F4F7;
+  --shadow-1: 0 1px 3px rgba(15,23,42,0.05), 0 1px 2px rgba(15,23,42,0.03);
+  --shadow-2: 0 4px 6px rgba(15,23,42,0.04), 0 10px 30px rgba(15,23,42,0.08);
+  --hairline: rgba(15,23,42,0.10);
+  --hairline-soft: rgba(15,23,42,0.06);
+}
+
+/* Signature panel — white surface with hairline border + subtle lift */
+[data-theme="2030"] .gov-panel {
+  background: var(--surface, #FFFFFF);
+  border: 1px solid var(--hairline-soft, rgba(15,23,42,0.06));
+  border-radius: 3px;
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+[data-theme="2030"] .gov-panel--elevated {
+  box-shadow: var(--shadow-2);
+  transition: box-shadow 0.25s ease;
+}
+[data-theme="2030"] .gov-panel--elevated:hover {
+  box-shadow: 0 6px 8px rgba(15,23,42,0.05), 0 16px 40px rgba(15,23,42,0.10);
+}
+
+/* Kicker label — uppercase, tight tracking, muted */
+[data-theme="2030"] .gov-kicker {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: var(--text-3, #94A3B8);
+}
+
+/* Vertical governance axis spine */
+[data-theme="2030"] .gov-axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--hairline-soft, rgba(15,23,42,0.06));
+  pointer-events: none;
+}
+
+/* Horizontal hairline rule */
+[data-theme="2030"] .gov-rule {
+  height: 1px;
+  background: var(--hairline-soft, rgba(15,23,42,0.06));
+}
+
+/* Hero atmospheric radial — subtle tonal depth, dual zone */
+[data-theme="2030"] .hero-atmosphere {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 35% 40%, rgba(15,23,42,0.075), transparent 60%),
+    radial-gradient(circle at 75% 45%, rgba(30,64,175,0.05), transparent 55%);
+  pointer-events: none;
+}
+
+/* =====================================================
+   Architectural Grid Foundation — Scandinavian Strategic
+   ===================================================== */
+[data-theme="2030"] .arch-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-left: 80px;
+  padding-right: 80px;
+}
+[data-theme="2030"] .arch-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  column-gap: 24px;
+}
+[data-theme="2030"] .arch-col-6 {
+  grid-column: span 6;
+}
+@media (max-width: 1024px) {
+  [data-theme="2030"] .arch-container {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
+/* Proof strip — mobile stacking */
+@media (max-width: 768px) {
+  [data-theme="2030"] .proof-strip-grid {
+    grid-template-columns: 1fr !important;
+  }
+  [data-theme="2030"] .proof-strip-item {
+    border-right: none !important;
+    border-bottom: 1px solid var(--hairline-soft, rgba(15,23,42,0.06));
+    padding: 20px 0 !important;
+  }
+  [data-theme="2030"] .proof-strip-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0 !important;
+  }
+  [data-theme="2030"] .proof-strip-item:first-child {
+    padding-top: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  [data-theme="2030"] .arch-container {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  [data-theme="2030"] .arch-grid {
+    grid-template-columns: 1fr;
+  }
+  [data-theme="2030"] .arch-col-6 {
+    grid-column: span 1;
+  }
+}
+
+/* Marketing utilities */
 .warm-bg {
   background-color: var(--color-bg);
 }
 .warm-bg-soft {
   background-color: var(--color-surface);
-}
-.warm-dot-grid {
-  background-image: radial-gradient(circle, var(--color-border) 1px, transparent 1px);
-  background-size: 20px 20px;
-  opacity: 0.5;
 }
 .marketing-accent {
   background-color: var(--color-accent);
@@ -302,6 +476,26 @@
   background-color: var(--color-accent);
   opacity: 0.9;
   color: #fff;
+}
+
+/* Login form inputs — architectural minimal */
+[data-theme="2030"] .login-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  color: var(--text, #0F172A);
+  background: var(--surface, #FFFFFF);
+  border: 1px solid var(--border, #E5EAF0);
+  border-radius: 2px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+[data-theme="2030"] .login-input::placeholder {
+  color: var(--text-3, #94A3B8);
+}
+[data-theme="2030"] .login-input:focus {
+  border-color: var(--accent, #1E40AF);
+  box-shadow: 0 2px 0 0 var(--accent, #1E40AF);
 }
 
 /* Apple-inspired HR Styles */

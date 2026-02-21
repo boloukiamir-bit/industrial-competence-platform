@@ -2,13 +2,32 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-/** Prefer date from URL (searchParams); otherwise today. No hardcoded day (e.g. 13). */
-function defaultDate(): string {
-  if (typeof window === "undefined") return new Date().toISOString().slice(0, 10);
-  const params = new URLSearchParams(window.location.search);
-  const d = params.get("date")?.trim();
+function getStockholmToday(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const map = { year: "", month: "", day: "" };
+  for (const part of parts) {
+    if (part.type === "year" || part.type === "month" || part.type === "day") {
+      map[part.type] = part.value;
+    }
+  }
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+/** Prefer date from URL (searchParams); otherwise today (Europe/Stockholm). */
+export function getInitialCockpitDate(searchParams?: URLSearchParams): string {
+  const params =
+    searchParams ??
+    (typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : null);
+  const d = params?.get("date")?.trim();
   if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  return new Date().toISOString().slice(0, 10);
+  return getStockholmToday();
 }
 
 const CockpitFilterContext = createContext<{
@@ -21,7 +40,7 @@ const CockpitFilterContext = createContext<{
 } | null>(null);
 
 export function CockpitFilterProvider({ children }: { children: ReactNode }) {
-  const [date, setDate] = useState<string>(defaultDate);
+  const [date, setDate] = useState<string>(() => getInitialCockpitDate());
   const [shiftType, setShiftType] = useState<string>("Day");
   const [line, setLine] = useState<string>("all");
 

@@ -1,97 +1,161 @@
 import Link from "next/link";
 
-const company = [
-  { label: "Product", href: "#product" },
-  { label: "Use Cases", href: "#use-cases" },
-  { label: "Security", href: "#security" },
-  { label: "Pricing", href: "#pricing" },
-];
+const navLinks = [
+  { label: "Problem",       href: "#chapter-gap",    external: false },
+  { label: "Model",         href: "#chapter-model",  external: false },
+  { label: "Command",       href: "#chapter-output", external: false },
+  { label: "Request Brief", href: "#request-brief",  external: false },
+  { label: "Login",         href: "/login",           external: true  },
+] as const;
 
 const legal = [
   { label: "Privacy", href: "/privacy" },
-  { label: "Terms", href: "/terms" },
-];
+  { label: "Terms",   href: "/terms"   },
+] as const;
+
+const KICKER: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.18em",
+  color: "var(--text-3, #94A3B8)",
+  marginBottom: "14px",
+  display: "block",
+};
+
+const LINK: React.CSSProperties = {
+  fontSize: "0.875rem",
+  color: "var(--text-2, #475569)",
+  textDecoration: "none",
+  display: "block",
+  lineHeight: 1,
+};
 
 export function MarketingFooter() {
   return (
     <footer
-      className="bg-surface border-t border-border py-16 md:py-20"
       role="contentinfo"
+      style={{
+        backgroundColor: "var(--surface, #FFFFFF)",
+        borderTop: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))",
+      }}
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-12">
-          <div>
+      <div
+        className="arch-container"
+        style={{ paddingTop: "72px", paddingBottom: "40px" }}
+      >
+        {/* Top row */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "48px",
+          }}
+          className="md:flex-row md:justify-between md:items-start"
+        >
+          {/* Brand block */}
+          <div style={{ maxWidth: "280px" }}>
             <Link
               href="/"
-              className="font-semibold text-foreground text-lg tracking-tight hover:opacity-80 transition-opacity"
+              style={{
+                fontSize: "1rem",
+                fontWeight: 700,
+                letterSpacing: "-0.02em",
+                color: "var(--text, #0F172A)",
+                textDecoration: "none",
+              }}
             >
               BCLEDGE
             </Link>
-            <p className="mt-2 text-sm text-muted-foreground max-w-xs">
-              The system of record for industrial competence and compliance.
+            <p
+              style={{
+                marginTop: "10px",
+                fontSize: "0.875rem",
+                lineHeight: 1.6,
+                color: "var(--text-3, #94A3B8)",
+              }}
+            >
+              Governance infrastructure for execution legitimacy.
             </p>
           </div>
-          <nav className="flex flex-wrap gap-12 md:gap-16" aria-label="Footer">
+
+          {/* Link groups */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "48px",
+            }}
+          >
+            {/* Platform navigation */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
-                Company
-              </p>
-              <ul className="space-y-2">
-                {company.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
+              <span style={KICKER}>Platform</span>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
+                {navLinks.map((link) =>
+                  link.external ? (
+                    <li key={link.label}>
+                      <Link href={link.href} style={LINK}>
+                        {link.label}
+                      </Link>
+                    </li>
+                  ) : (
+                    <li key={link.label}>
+                      <a href={link.href} style={LINK}>
+                        {link.label}
+                      </a>
+                    </li>
+                  )
+                )}
               </ul>
             </div>
+
+            {/* Legal */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
-                Legal
-              </p>
-              <ul className="space-y-2">
+              <span style={KICKER}>Legal</span>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
                 {legal.map((link) => (
                   <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
+                    <Link href={link.href} style={LINK}>
                       {link.label}
                     </Link>
                   </li>
                 ))}
               </ul>
             </div>
+
+            {/* Contact */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
-                Contact
-              </p>
+              <span style={KICKER}>Contact</span>
               <a
                 href="mailto:hello@bcledge.com"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                style={LINK}
               >
                 hello@bcledge.com
               </a>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
-                Security
-              </p>
-              <a
-                href="#security"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Security & trust
-              </a>
-            </div>
-          </nav>
+          </div>
         </div>
-        <div className="mt-14 pt-8 border-t border-border">
-          <p className="text-sm text-muted-foreground">
+
+        {/* Bottom rule */}
+        <div
+          style={{
+            marginTop: "48px",
+            paddingTop: "24px",
+            borderTop: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+            flexWrap: "wrap",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "0.8125rem",
+              color: "var(--text-3, #94A3B8)",
+              margin: 0,
+            }}
+          >
             © {new Date().getFullYear()} BCLEDGE. All rights reserved.
           </p>
         </div>
