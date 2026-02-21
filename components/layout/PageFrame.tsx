@@ -22,15 +22,22 @@ export interface PageFrameProps extends React.HTMLAttributes<HTMLDivElement> {
 export function PageFrame({ filterBar, debugPanel, children, className, ...props }: PageFrameProps) {
   const isDev = useIsDev();
   return (
-    <div className={cn("w-full mx-auto px-4 sm:px-6", className)} style={{ maxWidth: PAGE_MAX_WIDTH }} {...props}>
+    <div className={cn("w-full mx-auto px-4 sm:px-8 py-6", className)} style={{ maxWidth: PAGE_MAX_WIDTH }} {...props}>
       {filterBar != null && (
-        <div className="sticky top-0 z-10 -mx-4 px-4 sm:-mx-6 sm:px-6 py-2 mb-3 bg-background/98 backdrop-blur-sm border-b border-border">
+        <div
+          className="sticky top-0 z-10 -mx-4 px-4 sm:-mx-8 sm:px-8 py-2.5 mb-4 backdrop-blur-sm"
+          style={{
+            background: "color-mix(in srgb, var(--bg, hsl(var(--background))) 97%, transparent)",
+            borderBottom: "1px solid var(--hairline-soft, hsl(var(--border)))",
+          }}
+        >
           {filterBar}
         </div>
       )}
       {isDev && debugPanel != null && (
         <div
-          className="mb-4 rounded border border-dashed border-muted-foreground/30 bg-muted/30 p-3 font-mono text-xs"
+          className="mb-4 rounded border border-dashed p-3 font-mono text-xs"
+          style={{ borderColor: "var(--hairline, rgba(15,23,42,0.10))", background: "var(--surface-2, hsl(var(--muted) / 0.3))", color: "var(--text-2, hsl(var(--muted-foreground)))" }}
           data-testid="page-frame-debug-panel"
         >
           {debugPanel}

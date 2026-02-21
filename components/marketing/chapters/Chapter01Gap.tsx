@@ -49,7 +49,7 @@ const artifact = (
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: "0.2em",
-            color: "var(--accent, #1E40AF)",
+            color: "var(--color-accent, #1E40AF)",
           }}
         >
           Evidence

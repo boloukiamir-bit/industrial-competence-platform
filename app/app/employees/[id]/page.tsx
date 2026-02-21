@@ -122,6 +122,8 @@ export default function EmployeeDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>("personal");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState<EmployeeProfileRow>(EMPTY_EMPLOYEE_PROFILE);
+  /** Session expired (401), missing org/site (403), or not found (404). Null when employee loaded. */
+  const [employeeError, setEmployeeError] = useState<"session_expired" | "missing_context" | "not_found" | null>(null);
   type ComplianceItem = { category: string; name: string; status: string; valid_to: string | null; days_left: number | null };
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>([]);
   const [complianceLoading, setComplianceLoading] = useState(false);
@@ -132,32 +134,62 @@ export default function EmployeeDetailPage() {
         setLoading(false);
         return;
       }
+      setEmployeeError(null);
       // Tenant-scoped employee from API (session active_org_id)
       const employeeRes = await fetch(`/api/employees/${id}`, { credentials: "include" });
-      const employeeJson = employeeRes.ok ? await employeeRes.json().catch(() => null) : null;
-      const empFromApi = employeeJson && employeeRes.ok
+      const employeeJson = await employeeRes.json().catch(() => null);
+      const code = employeeJson?.code as string | undefined;
+
+      if (!employeeRes.ok) {
+        if (employeeRes.status === 401 && (code === "UNAUTHENTICATED" || code == null)) {
+          setEmployeeError("session_expired");
+        } else if (employeeRes.status === 403 && (code === "ORG_CONTEXT_REQUIRED" || code === "SITE_CONTEXT_REQUIRED")) {
+          setEmployeeError("missing_context");
+        } else if (employeeRes.status === 404 && (code == null || code === "NOT_FOUND")) {
+          setEmployeeError("not_found");
+        } else {
+          setEmployeeError("not_found");
+        }
+        setData({
+          employee: null,
+          skills: [],
+          events: [],
+          documents: [],
+          equipment: [],
+          reviews: [],
+          currentSalary: null,
+          salaryRevisions: [],
+          meetings: [],
+          employeeProfile: EMPTY_EMPLOYEE_PROFILE,
+        });
+        setLoading(false);
+        return;
+      }
+
+      const raw = employeeJson?.employee ?? employeeJson;
+      const empFromApi = raw && employeeRes.ok
         ? {
-            id: employeeJson.id,
-            name: employeeJson.name ?? "",
-            firstName: employeeJson.firstName,
-            lastName: employeeJson.lastName,
-            employeeNumber: employeeJson.employeeNumber ?? "",
-            email: employeeJson.email,
-            phone: employeeJson.phone,
-            dateOfBirth: employeeJson.dateOfBirth,
-            role: employeeJson.role ?? "",
-            line: employeeJson.line ?? "",
-            team: employeeJson.team ?? "",
-            employmentType: (employeeJson.employmentType ?? "permanent") as "permanent" | "temporary" | "consultant",
-            startDate: employeeJson.startDate,
-            contractEndDate: employeeJson.contractEndDate,
-            managerId: employeeJson.managerId,
-            managerName: employeeJson.managerName,
-            address: employeeJson.address,
-            city: employeeJson.city,
-            postalCode: employeeJson.postalCode,
-            country: employeeJson.country ?? "Sweden",
-            isActive: employeeJson.isActive ?? true,
+            id: raw.id,
+            name: raw.name ?? "",
+            firstName: raw.firstName,
+            lastName: raw.lastName,
+            employeeNumber: raw.employeeNumber ?? "",
+            email: raw.email,
+            phone: raw.phone,
+            dateOfBirth: raw.dateOfBirth,
+            role: raw.role ?? "",
+            line: raw.line ?? "",
+            team: raw.team ?? "",
+            employmentType: (raw.employmentType ?? "permanent") as "permanent" | "temporary" | "consultant",
+            startDate: raw.startDate,
+            contractEndDate: raw.contractEndDate,
+            managerId: raw.managerId,
+            managerName: raw.managerName,
+            address: raw.address,
+            city: raw.city,
+            postalCode: raw.postalCode,
+            country: raw.country ?? "Sweden",
+            isActive: raw.isActive ?? true,
           }
         : null;
 
@@ -300,6 +332,48 @@ export default function EmployeeDetailPage() {
   }
 
   if (!data.employee) {
+    if (employeeError === "session_expired") {
+      return (
+        <div className="p-6 max-w-md">
+          <div
+            className="rounded-lg border-l-4 p-4"
+            style={{
+              borderLeftColor: "hsl(var(--destructive))",
+              background: "color-mix(in srgb, hsl(var(--destructive)) 8%, var(--surface, #fff))",
+            }}
+          >
+            <p className="font-medium">Session expired</p>
+            <p className="text-sm mt-1 text-muted-foreground">Your sign-in session ended. Sign in to continue.</p>
+            <Button asChild className="mt-4" size="sm">
+              <Link href="/login">Sign in</Link>
+            </Button>
+          </div>
+          <Link href="/app/employees" className="text-muted-foreground hover:underline mt-4 inline-block text-sm">
+            Back to employees
+          </Link>
+        </div>
+      );
+    }
+    if (employeeError === "missing_context") {
+      return (
+        <div className="p-6 max-w-md">
+          <div
+            className="rounded-lg border-l-4 border-amber-500 bg-amber-500/10 p-4"
+          >
+            <p className="font-medium">Missing organization context</p>
+            <p className="text-sm mt-1 text-muted-foreground">
+              Your account is signed in, but no active organization or site is selected.
+            </p>
+            <Button asChild className="mt-4" size="sm">
+              <Link href="/app/setup">Go to Setup</Link>
+            </Button>
+          </div>
+          <Link href="/app/employees" className="text-muted-foreground hover:underline mt-4 inline-block text-sm">
+            Back to employees
+          </Link>
+        </div>
+      );
+    }
     return (
       <div className="p-6">
         <p className="text-muted-foreground">Employee not found</p>

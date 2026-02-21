@@ -85,6 +85,28 @@ Create environment variables in the Replit Secrets tab:
 | DELETE | `/api/training-programs/:id` | Delete a training program |
 | GET | `/api/health` | Health check |
 
+## Verify before shipping
+
+Run the full verification gate (clean build, optional dev server, cockpit smoke):
+
+```bash
+npm run verify
+```
+
+With an auth cookie to also run authenticated cockpit smoke:
+
+```bash
+COOKIE="sb-...=...; sb-...=..." npm run verify
+```
+
+To run verify on every push and avoid pushing broken builds, use the git hooks path:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This uses `.githooks/pre-push`, which runs `npm run verify`.
+
 ## Key Features (Planned)
 
 - Competency Matrix Management

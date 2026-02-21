@@ -51,7 +51,7 @@ export function LoginShell2030({ children }: { children: React.ReactNode }) {
               <a
                 href="/"
                 className="text-sm hover:underline"
-                style={{ color: "var(--accent, #1E40AF)" }}
+                style={{ color: "var(--color-accent, #1E40AF)" }}
               >
                 Back to overview
               </a>

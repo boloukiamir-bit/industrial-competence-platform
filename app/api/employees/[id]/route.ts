@@ -54,15 +54,44 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    if (!id) {
-      return NextResponse.json({ error: "Employee id required" }, { status: 400 });
+    const { id: employeeId } = await params;
+    if (!employeeId) {
+      return NextResponse.json({ ok: false, error: "Employee id required" }, { status: 400 });
     }
 
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      const res = NextResponse.json(
+        { ok: false, error: "Unauthorized", code: "UNAUTHENTICATED" },
+        { status: 401 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
     const org = await getActiveOrgFromSession(request, supabase);
     if (!org.ok) {
-      const res = NextResponse.json({ error: org.error }, { status: org.status });
+      const res = NextResponse.json(
+        { ok: false, error: "Missing organization context", code: "ORG_CONTEXT_REQUIRED" },
+        { status: 403 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    if (!org.activeOrgId?.trim()) {
+      const res = NextResponse.json(
+        { ok: false, error: "Missing organization context", code: "ORG_CONTEXT_REQUIRED" },
+        { status: 403 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    if (org.activeSiteId == null || String(org.activeSiteId).trim() === "") {
+      const res = NextResponse.json(
+        { ok: false, error: "Missing site context", code: "SITE_CONTEXT_REQUIRED" },
+        { status: 403 }
+      );
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
@@ -70,28 +99,34 @@ export async function GET(
     const { data, error } = await supabaseAdmin
       .from("employees")
       .select("*")
-      .eq("id", id)
+      .eq("id", employeeId)
       .eq("org_id", org.activeOrgId)
+      .eq("site_id", org.activeSiteId)
+      .limit(1)
       .maybeSingle();
 
     if (error) {
       console.error("[api/employees/[id]] GET error", error);
-      const res = NextResponse.json({ error: "Failed to load employee" }, { status: 500 });
+      const res = NextResponse.json({ ok: false, error: "Failed to load employee" }, { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
     if (!data) {
-      const res = NextResponse.json({ error: "Employee not found" }, { status: 404 });
+      const res = NextResponse.json(
+        { ok: false, error: "Employee not found", code: "NOT_FOUND" },
+        { status: 404 }
+      );
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
-    const res = NextResponse.json(toEmployeeDto(data as Record<string, unknown> & { manager?: { name: string } | null }));
+    const employee = toEmployeeDto(data as Record<string, unknown> & { manager?: { name: string } | null });
+    const res = NextResponse.json({ ok: true, employee }, { status: 200 });
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
     console.error("[api/employees/[id]] GET", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 });
   }
 }
 

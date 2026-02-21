@@ -21,9 +21,9 @@ interface StaffingSuggestModalProps {
 }
 
 const availabilityStyles = {
-  available: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
-  busy: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300",
-  off: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  available: "bg-green-100 text-green-700",
+  busy: "bg-orange-100 text-orange-700",
+  off: "bg-slate-100 text-slate-600",
 };
 
 export function StaffingSuggestModal({
@@ -79,11 +79,11 @@ export function StaffingSuggestModal({
                         {suggestion.availability}
                       </Badge>
                       {suggestion.complianceValid ? (
-                        <span className="flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400">
+                        <span className="flex items-center gap-0.5 text-[10px] text-green-600">
                           <Check className="h-3 w-3" /> Compliant
                         </span>
                       ) : (
-                        <span className="flex items-center gap-0.5 text-[10px] text-red-600 dark:text-red-400">
+                        <span className="flex items-center gap-0.5 text-[10px] text-red-600">
                           <AlertTriangle className="h-3 w-3" /> Issues
                         </span>
                       )}

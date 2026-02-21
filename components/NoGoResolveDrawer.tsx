@@ -367,8 +367,8 @@ export function NoGoResolveDrawer({
               ))}
             </div>
             {selectedActions.includes("swap") && (
-              <div className="rounded-md border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
-                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Swap is manual</p>
+              <div className="rounded-sm border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-800">Swap is manual</p>
                 <p className="text-xs text-muted-foreground">
                   Swap is a manual action; select the actual person in Line Overview.
                 </p>
@@ -405,7 +405,7 @@ export function NoGoResolveDrawer({
               onChange={(e) => setNote(e.target.value)}
             />
             {selectedActions.includes("swap") && note.trim().length < 10 && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+              <p className="text-xs text-amber-600">
                 Add a short note (min 10 characters) to log the manual swap.
               </p>
             )}

@@ -163,7 +163,7 @@ export function RequestBrief() {
                           fontWeight: 600,
                           letterSpacing: "0.01em",
                           color: "#fff",
-                          backgroundColor: "var(--accent, #1E40AF)",
+                          backgroundColor: "var(--color-accent, #1E40AF)",
                           border: "none",
                           borderRadius: "3px",
                           cursor: "pointer",

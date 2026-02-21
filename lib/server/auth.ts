@@ -156,5 +156,18 @@ export async function resolveAuthFromRequest(
     return { ok: false, error: "Invalid or expired session", status: 401 };
   }
 
+  // Cookie-based session: use passed supabase to get user (e.g. from createSupabaseServerClient)
+  if (options?.supabase) {
+    const { data, error } = await options.supabase.auth.getUser();
+    if (!error && data?.user) {
+      return {
+        ok: true,
+        user: data.user,
+        supabase: options.supabase,
+        pendingCookies: options.pendingCookies ?? [],
+        authType: "cookie",
+      };
+    }
+  }
   return { ok: false, error: "Invalid or expired session", status: 401 };
 }

@@ -19,6 +19,8 @@ export type IssueTableProps = {
   loading: boolean;
   error: string | null;
   onRowClick: (row: CockpitIssueRow) => void | Promise<void>;
+  /** When false, rows are non-interactive (disabled cursor + tooltip). */
+  sessionOk?: boolean;
 };
 
 function SeverityText({ severity }: { severity: string }) {
@@ -33,18 +35,19 @@ export function IssueTable({
   loading,
   error,
   onRowClick,
+  sessionOk = true,
 }: IssueTableProps) {
   if (loading) {
     return (
-      <div className="cockpit-card-secondary flex items-center justify-center py-6">
-        <span className="cockpit-body text-muted-foreground/70">—</span>
+      <div className="gov-panel flex items-center justify-center py-8">
+        <span className="cockpit-body" style={{ color: "var(--text-3)" }}>—</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="cockpit-card-secondary flex items-center justify-center py-6 border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]">
+      <div className="gov-panel flex items-center justify-center py-8 border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]">
         <span className="cockpit-body cockpit-status-at-risk">{error}</span>
       </div>
     );
@@ -52,25 +55,25 @@ export function IssueTable({
 
   if (issues.length === 0) {
     return (
-      <div className="cockpit-card-secondary flex items-center justify-center py-6">
-        <span className="cockpit-body text-muted-foreground">No decisions</span>
+      <div className="gov-panel flex items-center justify-center py-8">
+        <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
       </div>
     );
   }
 
   return (
-    <div className="cockpit-card-secondary p-0 overflow-hidden">
+    <div className="gov-panel p-0 overflow-hidden">
       <Table className="cockpit-table">
         <TableHeader>
           <TableRow className="border-0 h-0">
-            <TableHead className="w-[90px] px-3 py-1.5">Status</TableHead>
-            <TableHead className="px-3 py-1.5">Station</TableHead>
-            <TableHead className="px-3 py-1.5">Area</TableHead>
-            <TableHead className="px-3 py-1.5">Shift</TableHead>
-            <TableHead className="px-3 py-1.5 text-right">NO-GO</TableHead>
-            <TableHead className="px-3 py-1.5 text-right">Warn</TableHead>
-            <TableHead className="px-3 py-1.5 text-right">GO</TableHead>
-            <TableHead className="px-3 py-1.5">Action</TableHead>
+            <TableHead className="w-[90px] px-3 py-2.5">Status</TableHead>
+            <TableHead className="px-3 py-2.5">Station</TableHead>
+            <TableHead className="px-3 py-2.5">Area</TableHead>
+            <TableHead className="px-3 py-2.5">Shift</TableHead>
+            <TableHead className="px-3 py-2.5 text-right">NO-GO</TableHead>
+            <TableHead className="px-3 py-2.5 text-right">Warn</TableHead>
+            <TableHead className="px-3 py-2.5 text-right">GO</TableHead>
+            <TableHead className="px-3 py-2.5">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -80,15 +83,27 @@ export function IssueTable({
             <TableRow
               key={row.issue_id}
               className={cn(
-                "cursor-pointer px-3 py-1.5",
+                "transition-colors",
+                sessionOk ? "cursor-pointer" : "cursor-not-allowed opacity-60",
                 !row.resolved && row.severity === "BLOCKING" && "border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]",
                 !row.resolved && row.severity === "WARNING" && "border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]",
                 isAcceptedRisk && "border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]"
               )}
-              onClick={() => onRowClick(row)}
+              onClick={() => {
+                if (process.env.NODE_ENV !== "production") {
+                  console.log("[ui] issue-row-click", {
+                    station_id: row.station_id,
+                    station_code: row.station_code,
+                    shift_code: row.shift_code,
+                    date: row.date,
+                  });
+                }
+                if (sessionOk) onRowClick(row);
+              }}
+              title={sessionOk ? undefined : "Sign in to review"}
               data-testid={`issue-row-${row.issue_id}`}
             >
-              <TableCell className="px-3 py-1.5">
+              <TableCell className="px-3 py-2.5">
                 <div className="flex items-center gap-1 flex-wrap">
                     <SeverityText severity={row.severity} />
                     {row.resolved && (
@@ -99,27 +114,27 @@ export function IssueTable({
                     )}
                 </div>
               </TableCell>
-              <TableCell className="px-3 py-1.5 cockpit-body font-medium">
+              <TableCell className="px-3 py-2.5 cockpit-body font-medium" style={{ color: "var(--text)" }}>
                 {row.station_name ?? row.station_code ?? row.station_id?.slice(0, 8) ?? "—"}
               </TableCell>
-              <TableCell className="px-3 py-1.5 cockpit-body text-muted-foreground">{row.area ?? row.line ?? "—"}</TableCell>
-              <TableCell className="px-3 py-1.5 cockpit-body">{row.shift_code}</TableCell>
-              <TableCell className="px-3 py-1.5 text-right cockpit-num">
+              <TableCell className="px-3 py-2.5 cockpit-body" style={{ color: "var(--text-2)" }}>{row.area ?? row.line ?? "—"}</TableCell>
+              <TableCell className="px-3 py-2.5 cockpit-body">{row.shift_code}</TableCell>
+              <TableCell className="px-3 py-2.5 text-right cockpit-num">
                 {row.no_go_count != null && row.no_go_count > 0 ? (
                   <span className="cockpit-status-blocking font-medium">{row.no_go_count}</span>
                 ) : (
-                  <span className="text-muted-foreground">{row.no_go_count ?? 0}</span>
+                  <span style={{ color: "var(--text-3)" }}>{row.no_go_count ?? 0}</span>
                 )}
               </TableCell>
-              <TableCell className="px-3 py-1.5 text-right cockpit-num">
+              <TableCell className="px-3 py-2.5 text-right cockpit-num">
                 {row.warning_count != null && row.warning_count > 0 ? (
                   <span className="cockpit-status-at-risk font-medium">{row.warning_count}</span>
                 ) : (
-                  <span className="text-muted-foreground">{row.warning_count ?? 0}</span>
+                  <span style={{ color: "var(--text-3)" }}>{row.warning_count ?? 0}</span>
                 )}
               </TableCell>
-              <TableCell className="px-3 py-1.5 text-right cockpit-num text-muted-foreground">{row.go_count ?? 0}</TableCell>
-              <TableCell className="px-3 py-1.5 cockpit-body">{row.recommended_action || "—"}</TableCell>
+              <TableCell className="px-3 py-2.5 text-right cockpit-num" style={{ color: "var(--text-3)" }}>{row.go_count ?? 0}</TableCell>
+              <TableCell className="px-3 py-2.5 cockpit-body" style={{ color: "var(--text-2)" }}>{row.recommended_action || "—"}</TableCell>
             </TableRow>
           );
           })}

@@ -24,8 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.variable} ${ibmPlexSans.variable} min-h-screen`}>
+    <html lang="en" data-theme="2030">
+      <body className={`${inter.variable} ${ibmPlexSans.variable} min-h-screen bg-background text-foreground`}>
         {children}
       </body>
     </html>

@@ -247,7 +247,7 @@ export default function LoginPage() {
         <button
           type="submit"
           className="w-full py-3 px-4 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
-          style={{ backgroundColor: 'var(--accent, #1E40AF)', borderRadius: '3px' }}
+          style={{ backgroundColor: 'var(--color-accent, #1E40AF)', borderRadius: '3px' }}
           disabled={loading}
           data-testid="button-signin"
         >
@@ -293,7 +293,7 @@ export default function LoginPage() {
 
       <p className="text-sm text-center" style={{ color: 'var(--text-3, #94A3B8)' }}>
         Don&apos;t have an account?{' '}
-        <a href="/signup" className="underline" style={{ color: 'var(--accent, #1E40AF)' }} data-testid="link-signup">Sign up</a>
+        <a href="/signup" className="underline" style={{ color: 'var(--color-accent, #1E40AF)' }} data-testid="link-signup">Sign up</a>
       </p>
       {process.env.NODE_ENV !== "production" && (
         <p className="text-xs text-center" style={{ color: 'var(--text-3, #94A3B8)' }}>

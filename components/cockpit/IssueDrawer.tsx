@@ -20,8 +20,10 @@ import {
 } from "@/components/ui/table";
 import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle } from "lucide-react";
 import { fetchJson } from "@/lib/coreFetch";
+import { cn } from "@/lib/utils";
 import type { DrilldownRosterItem } from "@/app/api/cockpit/issues/drilldown/route";
 import { COST_ENGINE, formatSekRange } from "@/lib/cockpitCostEngine";
+import { EmployeeDrawer } from "@/components/employees/EmployeeDrawer";
 
 export type CockpitIssueRow = {
   issue_id: string;
@@ -71,6 +73,8 @@ export type IssueDrawerProps = {
   onSwap: () => Promise<void>;
   onEscalate: () => Promise<void>;
   isAcknowledged: boolean;
+  /** When false, roster rows are not clickable (no employee drawer). */
+  sessionOk?: boolean;
 };
 
 const statusVariant = (status: string) => {
@@ -100,39 +104,39 @@ function DecisionImpactBlock({ issue }: { issue: CockpitIssueRow }) {
   const isMitigated = issue.resolved && !isAcceptedRisk;
 
   return (
-    <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Effect</p>
+    <div className="rounded-sm p-3 space-y-3" style={{ border: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))", background: "var(--surface-2, #F9FAFB)" }}>
+      <p className="gov-kicker">Effect</p>
       {issue.resolved ? (
         <>
           {isMitigated && (
-            <div className="rounded border border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/20 p-2.5 space-y-1.5">
+            <div className="rounded-sm border border-green-200 bg-green-50/50 p-2.5 space-y-1.5">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Cost avoided</p>
-                  <p className="font-medium tabular-nums text-green-700 dark:text-green-300">{formatSekRange(range.costMin, range.costMax)}</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Cost avoided</p>
+                  <p className="font-medium tabular-nums text-green-700">{formatSekRange(range.costMin, range.costMax)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Time saved</p>
-                  <p className="font-medium tabular-nums text-green-700 dark:text-green-300">{range.hoursMin}–{range.hoursMax} op·h</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Time saved</p>
+                  <p className="font-medium tabular-nums text-green-700">{range.hoursMin}–{range.hoursMax} op·h</p>
                 </div>
               </div>
             </div>
           )}
           {isAcceptedRisk && (
-            <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 p-2.5 space-y-1.5">
+            <div className="rounded-sm border border-amber-200 bg-amber-50/50 p-2.5 space-y-1.5">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Cost deferred</p>
-                  <p className="font-medium tabular-nums text-amber-700 dark:text-amber-300">{formatSekRange(range.costMin, range.costMax)}</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Cost deferred</p>
+                  <p className="font-medium tabular-nums text-amber-700">{formatSekRange(range.costMin, range.costMax)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Time deferred</p>
-                  <p className="font-medium tabular-nums text-amber-700 dark:text-amber-300">{range.hoursMin}–{range.hoursMax} op·h</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Time deferred</p>
+                  <p className="font-medium tabular-nums text-amber-700">{range.hoursMin}–{range.hoursMax} op·h</p>
                 </div>
               </div>
             </div>
           )}
-          <p className="text-xs text-muted-foreground border-t border-border/50 pt-2 mt-2">
+          <p className="text-xs pt-2 mt-2" style={{ color: "var(--text-3)", borderTop: "1px solid var(--hairline-soft)" }}>
             After: {isAcceptedRisk ? "May recur next 1–2 shifts" : "Next 7 days"}
           </p>
         </>
@@ -140,21 +144,21 @@ function DecisionImpactBlock({ issue }: { issue: CockpitIssueRow }) {
         <>
           <div className="grid grid-cols-3 gap-2 text-sm">
             <div>
-              <p className="text-[10px] text-muted-foreground">Cost</p>
+              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Cost</p>
               <p className="font-medium tabular-nums">{formatSekRange(range.costMin, range.costMax)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Time</p>
+              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Time</p>
               <p className="font-medium tabular-nums">{range.hoursMin}–{range.hoursMax} op·h</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Fragility Δ</p>
-              <p className="font-medium tabular-nums text-green-600 dark:text-green-400">
+              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Fragility Δ</p>
+              <p className="font-medium tabular-nums text-green-700">
                 {severity === "BLOCKING" ? "−25" : "−8"}
               </p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground border-t border-border/50 pt-2 mt-2">
+          <p className="text-xs pt-2 mt-2" style={{ color: "var(--text-3)", borderTop: "1px solid var(--hairline-soft)" }}>
             After: Next 1–2 shifts
           </p>
         </>
@@ -172,11 +176,17 @@ export function IssueDrawer({
   onSwap,
   onEscalate,
   isAcknowledged,
+  sessionOk = true,
 }: IssueDrawerProps) {
   const [submitting, setSubmitting] = useState<"ack" | "plan" | "swap" | "escalate" | null>(null);
   const [drilldown, setDrilldown] = useState<DrilldownState>(null);
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [drilldownError, setDrilldownError] = useState<string | null>(null);
+  const [drilldownErrorStatus, setDrilldownErrorStatus] = useState<number | null>(null);
+  const [employeeDrawerOpen, setEmployeeDrawerOpen] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [resolvingEmployee, setResolvingEmployee] = useState(false);
+  const [rosterResolveError, setRosterResolveError] = useState<string | null>(null);
 
   const fetchDrilldown = useCallback(async () => {
     if (!issue?.station_id || !issue?.date || !issue?.shift_code) {
@@ -186,6 +196,7 @@ export function IssueDrawer({
     }
     setDrilldownLoading(true);
     setDrilldownError(null);
+    setDrilldownErrorStatus(null);
     const params = new URLSearchParams({
       date: issue.date,
       shift_code: issue.shift_code,
@@ -201,16 +212,33 @@ export function IssueDrawer({
       error?: string;
     }>(`/api/cockpit/issues/drilldown?${params.toString()}`);
     if (!res.ok) {
-      setDrilldownError(res.error ?? "Failed to load drilldown");
+      const status = "status" in res ? res.status : 0;
+      setDrilldownError("Could not load station details.");
+      setDrilldownErrorStatus(status);
       setDrilldown(null);
       setDrilldownLoading(false);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[ui] issue-drawer-fetch-error", {
+          stationId: issue.station_id,
+          status,
+          bodySnippet: res.error ?? "(no message)",
+        });
+      }
       return;
     }
     const data = res.data;
     if (!data?.station && !Array.isArray(data?.roster)) {
-      setDrilldownError(data?.error ?? "Failed to load drilldown");
+      setDrilldownError("Could not load station details.");
+      setDrilldownErrorStatus(200);
       setDrilldown(null);
       setDrilldownLoading(false);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[ui] issue-drawer-fetch-error", {
+          stationId: issue.station_id,
+          status: 200,
+          bodySnippet: data?.error ?? "(no message)",
+        });
+      }
       return;
     }
     setDrilldown({
@@ -226,6 +254,13 @@ export function IssueDrawer({
 
   useEffect(() => {
     if (open && issue?.station_id && issue?.date && issue?.shift_code) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[ui] issue-drawer-open", {
+          stationId: issue.station_id,
+          shift_code: issue.shift_code,
+          date: issue.date,
+        });
+      }
       fetchDrilldown();
     } else {
       setDrilldown(null);
@@ -237,6 +272,36 @@ export function IssueDrawer({
   const rosterHeadcount = drilldown?.kpis?.headcount ?? 0;
   const noGoCount = drilldown?.kpis?.no_go ?? 0;
   const warningCount = drilldown?.kpis?.warning ?? 0;
+
+  const handleRosterEmployeeClick = async (r: DrilldownRosterItem & Record<string, unknown>) => {
+    if (!sessionOk) return;
+    setRosterResolveError(null);
+    const eid = r.employee_id ?? r.employeeId ?? null;
+    const empNo = r.employee_number ?? r.employeeNumber ?? r.employee_anst_id ?? null;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[ui] roster-employee-click", { employee_id: eid ?? undefined, employee_number: empNo ?? undefined });
+    }
+    if (eid != null && typeof eid === "string") {
+      setSelectedEmployeeId(eid);
+      setEmployeeDrawerOpen(true);
+      return;
+    }
+    if (empNo != null && String(empNo).trim() !== "") {
+      setResolvingEmployee(true);
+      const res = await fetchJson<{ ok?: boolean; employee_id?: string }>(
+        `/api/employees/resolve?employee_number=${encodeURIComponent(String(empNo).trim())}`
+      );
+      setResolvingEmployee(false);
+      if (res.ok && res.data?.employee_id) {
+        setSelectedEmployeeId(res.data.employee_id);
+        setEmployeeDrawerOpen(true);
+      } else {
+        setRosterResolveError("Could not resolve employee");
+      }
+      return;
+    }
+    setRosterResolveError("Missing employee identifier");
+  };
 
   const handleAcknowledge = async () => {
     setSubmitting("ack");
@@ -307,7 +372,7 @@ export function IssueDrawer({
               </Badge>
             )}
             {issue.resolved && issue.decision_actions?.includes?.("acknowledged") && (
-              <Badge variant="outline" className="text-amber-700 border-amber-400 bg-amber-50 dark:text-amber-300 dark:border-amber-600 dark:bg-amber-950/40 font-medium" title="Risk accepted and logged for audit">
+              <Badge variant="outline" className="text-amber-700 border-amber-400 bg-amber-50 font-medium" title="Risk accepted and logged for audit">
                 Accepted Risk (Logged)
               </Badge>
             )}
@@ -315,16 +380,16 @@ export function IssueDrawer({
 
           <DecisionImpactBlock issue={issue} />
           {issue.resolved && issue.decision_actions?.includes?.("acknowledged") && (
-            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-3" role="status">
-              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Recurrence awareness</p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+            <div className="rounded-sm border border-amber-200 bg-amber-50/50 p-3" role="status">
+              <p className="text-xs font-medium text-amber-800">Recurrence awareness</p>
+              <p className="text-xs text-amber-700 mt-0.5">
                 Accepted risks at this station are likely to reoccur in upcoming shifts unless roster or competence changes. Consider planning for next shift.
               </p>
             </div>
           )}
 
-          <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 p-3 space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Shadow capacity (read-only)</p>
+          <div className="rounded-sm p-3 space-y-2" style={{ border: "1px dashed var(--hairline)", background: "var(--surface-2, #F9FAFB)" }}>
+            <p className="gov-kicker">Shadow capacity (read-only)</p>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Fully qualified (GO)</p>
@@ -353,17 +418,29 @@ export function IssueDrawer({
           </div>
 
           {drilldownError && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 flex items-start gap-2">
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 flex items-start gap-2" role="alert">
               <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
               <div>
-                <p className="text-sm font-medium text-destructive">Could not load roster</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{drilldownError}</p>
+                <p className="text-sm font-medium text-destructive">{drilldownError}</p>
+                {drilldownErrorStatus != null && (
+                  <p className="text-xs text-muted-foreground mt-0.5">Status: {drilldownErrorStatus}</p>
+                )}
               </div>
             </div>
           )}
 
           {!drilldownError && (
             <div>
+              {rosterResolveError && (
+                <div className="mb-2" role="alert">
+                  <p className="text-sm text-destructive">{rosterResolveError}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Employee missing identifier in roster payload.</p>
+                </div>
+              )}
+              {resolvingEmployee && (
+                <p className="text-xs text-muted-foreground mb-2">Resolving employee…</p>
+              )}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Roster</p>
               <p className="text-xs font-semibold text-muted-foreground mb-2">Blockers (NO-GO)</p>
               {drilldownLoading ? (
                 <div className="flex items-center justify-center py-6">
@@ -372,7 +449,15 @@ export function IssueDrawer({
               ) : drilldown && drilldown.blockers.length > 0 ? (
                 <ul className="space-y-2 mb-4">
                   {drilldown.blockers.map((r) => (
-                    <li key={r.employee_anst_id} className="flex items-center justify-between rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+                    <li
+                      key={r.employee_anst_id}
+                      className={cn(
+                        "flex items-center justify-between rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm transition-colors",
+                        sessionOk ? "cursor-pointer hover:bg-destructive/10" : "cursor-not-allowed opacity-60"
+                      )}
+                      onClick={() => handleRosterEmployeeClick(r)}
+                      title={sessionOk ? undefined : "Sign in to interact"}
+                    >
                       <span className="font-medium">{rosterLabel(r)}</span>
                       <span className="text-muted-foreground tabular-nums">
                         {r.actual_level ?? "—"} / {r.required_level}
@@ -388,7 +473,15 @@ export function IssueDrawer({
               {!drilldownLoading && drilldown && drilldown.warnings.length > 0 ? (
                 <ul className="space-y-2">
                   {drilldown.warnings.map((r) => (
-                    <li key={r.employee_anst_id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                    <li
+                      key={r.employee_anst_id}
+                      className={cn(
+                        "flex items-center justify-between rounded border px-3 py-2 text-sm transition-colors",
+                        sessionOk ? "cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60"
+                      )}
+                      onClick={() => handleRosterEmployeeClick(r)}
+                      title={sessionOk ? undefined : "Sign in to interact"}
+                    >
                       <span className="font-medium">{rosterLabel(r)}</span>
                       <span className="text-muted-foreground tabular-nums">
                         {r.actual_level ?? "—"} / {r.required_level}
@@ -413,7 +506,15 @@ export function IssueDrawer({
                     </TableHeader>
                     <TableBody>
                       {drilldown.roster.map((r) => (
-                        <TableRow key={r.employee_anst_id}>
+                        <TableRow
+                          key={r.employee_anst_id}
+                          className={cn(
+                            "transition-colors",
+                            sessionOk ? "cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60"
+                          )}
+                          onClick={() => handleRosterEmployeeClick(r)}
+                          title={sessionOk ? undefined : "Sign in to interact"}
+                        >
                           <TableCell className="font-medium text-sm">{rosterLabel(r)}</TableCell>
                           <TableCell className="tabular-nums text-muted-foreground">
                             {r.actual_level ?? "—"} / {r.required_level}
@@ -448,7 +549,7 @@ export function IssueDrawer({
           {issue.recommended_action && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                Recommended action
+                Recommended actions
               </p>
               <p className="text-sm">{issue.recommended_action}</p>
             </div>
@@ -516,8 +617,8 @@ export function IssueDrawer({
           )}
 
           {isAcknowledged && (
-            <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4">
-              <p className="text-sm text-green-800 dark:text-green-200 flex items-center gap-2">
+            <div className="rounded-sm bg-green-50 border border-green-200 p-4">
+              <p className="text-sm text-green-800 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 Decision recorded
               </p>
@@ -525,6 +626,11 @@ export function IssueDrawer({
           )}
         </div>
       </SheetContent>
+      <EmployeeDrawer
+        open={employeeDrawerOpen}
+        onOpenChange={setEmployeeDrawerOpen}
+        employeeId={selectedEmployeeId}
+      />
     </Sheet>
   );
 }

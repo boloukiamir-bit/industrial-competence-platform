@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertCircle, AlertTriangle, CheckCircle, Loader2, ShieldOff } from "lucide-react";
 import { NoGoResolveDrawer } from "@/components/NoGoResolveDrawer";
 import { useCockpitFilters } from "@/lib/CockpitFilterContext";
+import { useSessionHealth } from "@/lib/SessionHealthContext";
 import { createClient } from "@/utils/supabase/client";
 
 type DecisionRow = {
@@ -23,6 +24,7 @@ type DecisionRow = {
 
 export function ExecutionDecisionPanel() {
   const { date, shiftType, line } = useCockpitFilters();
+  const { hasSession } = useSessionHealth();
   const [rows, setRows] = useState<DecisionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +34,7 @@ export function ExecutionDecisionPanel() {
   const [showResolved, setShowResolved] = useState(false);
 
   const displayedRows = showResolved ? rows : rows.filter((r) => r.severity !== "RESOLVED");
+  const sessionOk = hasSession === true;
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -71,8 +74,9 @@ export function ExecutionDecisionPanel() {
   }, [date, shiftType, line, supabase]);
 
   useEffect(() => {
+    if (!sessionOk) return;
     loadDecisions();
-  }, [loadDecisions]);
+  }, [sessionOk, loadDecisions]);
 
   const handleOpenDrawer = (row: DecisionRow) => {
     setDrawerRow(row);
@@ -113,19 +117,19 @@ export function ExecutionDecisionPanel() {
 
   return (
     <>
-      <div className="mb-4">
-        <Card>
-          <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ShieldOff className="h-4 w-4 text-destructive" />
-              Execution Decisions
-            </CardTitle>
+      <div className="mb-6 mx-4 sm:mx-8">
+        <div className="gov-panel overflow-hidden">
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))" }}>
+            <div className="flex items-center gap-2">
+              <ShieldOff className="h-4 w-4" style={{ color: "var(--nog, hsl(var(--destructive)))" }} />
+              <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>Execution Decisions</span>
+            </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs" style={{ color: "var(--text-3)" }}>
                 {date} · {shiftType} · {line === "all" ? "All Lines" : line || "—"}
               </span>
               <div className="flex items-center gap-2">
-                <Label htmlFor="show-resolved" className="text-xs font-normal text-muted-foreground cursor-pointer">
+                <Label htmlFor="show-resolved" className="text-xs font-normal cursor-pointer" style={{ color: "var(--text-3)" }}>
                   Show resolved
                 </Label>
                 <Switch
@@ -134,12 +138,12 @@ export function ExecutionDecisionPanel() {
                   onCheckedChange={setShowResolved}
                 />
               </div>
-              <Button variant="outline" size="sm" onClick={loadDecisions} disabled={loading}>
+              <Button variant="outline" size="sm" onClick={loadDecisions} disabled={loading || !sessionOk}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="pt-0">
+          </div>
+          <div className="px-5 py-4">
             {error && (
               <div className="flex items-start gap-2 text-sm text-destructive mb-3">
                 <AlertCircle className="h-4 w-4 mt-0.5" />
@@ -148,12 +152,12 @@ export function ExecutionDecisionPanel() {
             )}
 
             {loading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text-2)" }}>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading…
               </div>
             ) : displayedRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>
                 {showResolved ? "No assignments for this selection." : "No issues for this selection."}
               </p>
             ) : (
@@ -161,11 +165,12 @@ export function ExecutionDecisionPanel() {
                 {displayedRows.map((row) => (
                   <div
                     key={row.shift_assignment_id}
-                    className="flex items-center justify-between rounded-md border p-3"
+                    className="flex items-center justify-between rounded-sm p-3"
+                    style={{ border: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))" }}
                   >
                     <div>
-                      <p className="font-medium">{row.station_name}</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="font-medium text-sm" style={{ color: "var(--text)" }}>{row.station_name}</p>
+                      <p className="text-sm" style={{ color: "var(--text-2)" }}>
                         {row.employee_name || "Unassigned"}
                       </p>
                     </div>
@@ -174,8 +179,8 @@ export function ExecutionDecisionPanel() {
                       <Button
                         size="sm"
                         variant={row.severity === "RESOLVED" ? "outline" : "default"}
-                        disabled={row.severity === "RESOLVED"}
-                        onClick={() => handleOpenDrawer(row)}
+                        disabled={row.severity === "RESOLVED" || !sessionOk}
+                        onClick={() => sessionOk && handleOpenDrawer(row)}
                       >
                         Resolve
                       </Button>
@@ -184,8 +189,8 @@ export function ExecutionDecisionPanel() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       <NoGoResolveDrawer

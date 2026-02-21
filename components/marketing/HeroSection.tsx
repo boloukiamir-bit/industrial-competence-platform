@@ -1,36 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { getPrefersReducedMotion } from "@/lib/design/motion";
 
-function PulseDot() {
-  const [reduced, setReduced] = useState(true);
-
-  useEffect(() => {
-    setReduced(getPrefersReducedMotion());
-  }, []);
-
-  return (
-    <motion.span
-      className="inline-block rounded-full"
-      style={{
-        width: "6px",
-        height: "6px",
-        backgroundColor: "#15803D",
-        flexShrink: 0,
-      }}
-      animate={reduced ? {} : { scale: [1, 1.12, 1] }}
-      transition={
-        reduced
-          ? undefined
-          : { duration: 2.4, ease: "easeInOut", repeat: Infinity }
-      }
-      aria-hidden
-    />
-  );
-}
+/* ── Ghost typography layers ── */
 
 function GhostLayer({
   text,
@@ -42,38 +17,28 @@ function GhostLayer({
   driftPx: number;
 }) {
   const [reduced, setReduced] = useState(true);
-
-  useEffect(() => {
-    setReduced(getPrefersReducedMotion());
-  }, []);
-
-  const base: React.CSSProperties = {
-    position: "absolute",
-    fontWeight: 900,
-    lineHeight: 0.85,
-    color: "var(--text, #0F172A)",
-    pointerEvents: "none",
-    userSelect: "none",
-    zIndex: 0,
-    whiteSpace: "nowrap",
-    transform: "translateZ(0)",
-    ...style,
-  };
+  useEffect(() => { setReduced(getPrefersReducedMotion()); }, []);
 
   return (
     <motion.div
       aria-hidden
-      style={base}
+      style={{
+        position: "absolute",
+        fontWeight: 900,
+        lineHeight: 0.85,
+        color: "var(--text, #0F172A)",
+        pointerEvents: "none",
+        userSelect: "none",
+        zIndex: 0,
+        whiteSpace: "nowrap",
+        transform: "translateZ(0)",
+        ...style,
+      }}
       animate={reduced ? {} : { y: [0, driftPx, 0] }}
       transition={
         reduced
           ? undefined
-          : {
-              duration: 14,
-              ease: "easeInOut",
-              repeat: Infinity,
-              repeatType: "mirror" as const,
-            }
+          : { duration: 14, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" as const }
       }
     >
       {text}
@@ -81,14 +46,188 @@ function GhostLayer({
   );
 }
 
-const artifactRows = [
-  { label: "Operational State", value: "ACTIVE" },
-  { label: "Compliance Integrity", value: "100%" },
-  { label: "Execution Authority", value: "VALID" },
-  { label: "Decision Trail", value: "ENABLED" },
-] as const;
+/* ── Instrument panel: 2-state risk→control loop ── */
+
+type InstrumentState = {
+  legitimacy: { label: string; color: string };
+  compliance: string;
+  evidence: string;
+  note: string;
+};
+
+const STATE_RISK: InstrumentState = {
+  legitimacy: { label: "WARNING", color: "#B45309" },
+  compliance: "92%",
+  evidence: "1 item",
+  note: "Verification incomplete",
+};
+
+const STATE_CONTROLLED: InstrumentState = {
+  legitimacy: { label: "VERIFIED", color: "#15803D" },
+  compliance: "100%",
+  evidence: "0 items",
+  note: "Verification complete",
+};
 
 const HAIRLINE = "1px solid rgba(15,23,42,0.07)";
+const ROW_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "16px 28px",
+};
+const LABEL_STYLE: React.CSSProperties = {
+  fontSize: "10px",
+  letterSpacing: "0.18em",
+};
+const VALUE_STYLE: React.CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  fontVariantNumeric: "tabular-nums",
+  color: "var(--text, #0F172A)",
+};
+
+function InstrumentPanel() {
+  const [reduced, setReduced] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
+  const [isRisk, setIsRisk] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+    const r = getPrefersReducedMotion();
+    setReduced(r);
+    if (r) return;
+
+    const startTimeout = setTimeout(() => {
+      setIsRisk(true);
+      const interval = setInterval(() => setIsRisk((v) => !v), 5500);
+      cleanupRef.current = () => clearInterval(interval);
+    }, 1200);
+
+    const cleanupRef = { current: () => {} };
+    return () => {
+      clearTimeout(startTimeout);
+      cleanupRef.current();
+    };
+  }, []);
+
+  const looping = hydrated && !reduced;
+  const s = isRisk ? STATE_RISK : STATE_CONTROLLED;
+
+  const fadeProps = useCallback(
+    () =>
+      !looping
+        ? {}
+        : {
+            initial: { opacity: 0 } as const,
+            animate: { opacity: 1 } as const,
+            exit: { opacity: 0 } as const,
+            transition: { duration: 0.6, ease: "easeInOut" as const },
+          },
+    [looping]
+  );
+
+  return (
+    <div
+      className="gov-panel gov-panel--elevated w-full"
+      style={{ maxWidth: "620px" }}
+    >
+      {/* Header */}
+      <div style={{ padding: "20px 28px 18px", borderBottom: HAIRLINE }}>
+        <p className="gov-kicker" style={{ fontSize: "10px", letterSpacing: "0.22em" }}>
+          Entity
+        </p>
+        <p
+          style={{
+            marginTop: "6px",
+            fontSize: "1.0625rem",
+            fontWeight: 600,
+            letterSpacing: "-0.01em",
+            color: "var(--text, #0F172A)",
+          }}
+        >
+          Northern Energy Grid
+        </p>
+      </div>
+
+      {/* Legitimacy status */}
+      <div style={{ ...ROW_STYLE, borderBottom: HAIRLINE }}>
+        <span className="gov-kicker" style={{ fontSize: "10px", letterSpacing: "0.22em" }}>
+          Legitimacy
+        </span>
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={s.legitimacy.label}
+            {...fadeProps()}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "12px",
+              fontWeight: 700,
+              letterSpacing: "0.10em",
+              color: s.legitimacy.color,
+            }}
+          >
+            <span
+              className="inline-block rounded-full"
+              style={{
+                width: "6px",
+                height: "6px",
+                backgroundColor: s.legitimacy.color,
+                flexShrink: 0,
+              }}
+            />
+            {s.legitimacy.label}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+
+      {/* Compliance Integrity */}
+      <div style={{ ...ROW_STYLE, borderBottom: HAIRLINE }}>
+        <span className="gov-kicker" style={LABEL_STYLE}>Compliance Integrity</span>
+        <AnimatePresence mode="wait">
+          <motion.span key={s.compliance} {...fadeProps()} style={VALUE_STYLE}>
+            {s.compliance}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+
+      {/* Evidence missing */}
+      <div style={{ ...ROW_STYLE, borderBottom: HAIRLINE }}>
+        <span className="gov-kicker" style={LABEL_STYLE}>Evidence Missing</span>
+        <AnimatePresence mode="wait">
+          <motion.span key={s.evidence} {...fadeProps()} style={VALUE_STYLE}>
+            {s.evidence}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+
+      {/* Decision Trail — always ENABLED */}
+      <div style={{ ...ROW_STYLE, borderBottom: HAIRLINE }}>
+        <span className="gov-kicker" style={LABEL_STYLE}>Decision Trail</span>
+        <span style={VALUE_STYLE}>ENABLED</span>
+      </div>
+
+      {/* Note line */}
+      <div style={{ padding: "14px 28px" }}>
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={s.note}
+            {...fadeProps()}
+            className="gov-kicker"
+            style={{ fontSize: "10px", letterSpacing: "0.14em" }}
+          >
+            {s.note}
+          </motion.p>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+/* ── Hero section ── */
 
 export function HeroSection() {
   return (
@@ -97,21 +236,13 @@ export function HeroSection() {
       aria-labelledby="hero-heading"
       style={{ backgroundColor: "var(--bg, #F4F6F8)", overflow: "hidden" }}
     >
-      {/* Governance axis */}
-      <div
-        className="gov-axis hidden lg:block"
-        style={{ left: "72px" }}
-        aria-hidden
-      />
-
-      {/* Atmospheric tonal depth */}
+      <div className="gov-axis hidden lg:block" style={{ left: "72px" }} aria-hidden />
       <div className="hero-atmosphere hidden lg:block" aria-hidden />
 
       <div
         className="arch-container relative"
         style={{ paddingTop: "152px", paddingBottom: "112px" }}
       >
-        {/* Ghost A — LEGITIMACY (primary, brutal) */}
         <GhostLayer
           text="LEGITIMACY"
           driftPx={12}
@@ -123,8 +254,6 @@ export function HeroSection() {
             opacity: 0.045,
           }}
         />
-
-        {/* Ghost B — VALIDATED (echo, quieter) */}
         <GhostLayer
           text="VALIDATED"
           driftPx={-8}
@@ -141,7 +270,6 @@ export function HeroSection() {
           className="arch-grid"
           style={{ alignItems: "center", position: "relative", zIndex: 10 }}
         >
-
           {/* Left: headline block */}
           <div className="arch-col-6 flex flex-col">
             <p className="gov-kicker">Governance Infrastructure</p>
@@ -157,13 +285,10 @@ export function HeroSection() {
                 color: "var(--text, #0F172A)",
               }}
             >
-              <span className="block">Industrial</span>
-              <span className="block">legitimacy.</span>
-              <span
-                className="block"
-                style={{ color: "var(--accent, #1E40AF)" }}
-              >
-                Validated.
+              <span className="block">Legitimacy is</span>
+              <span className="block">not declared.</span>
+              <span className="block" style={{ color: "var(--color-accent, #1E40AF)" }}>
+                It is computed.
               </span>
             </h1>
 
@@ -176,7 +301,7 @@ export function HeroSection() {
                 maxWidth: "440px",
               }}
             >
-              Execution without legitimacy is risk.
+              Execution without verification creates invisible risk.
             </p>
 
             {/* CTA pair */}
@@ -200,7 +325,7 @@ export function HeroSection() {
                   fontWeight: 600,
                   letterSpacing: "0.01em",
                   color: "#fff",
-                  backgroundColor: "var(--accent, #1E40AF)",
+                  backgroundColor: "var(--color-accent, #1E40AF)",
                   borderRadius: "3px",
                   textDecoration: "none",
                   transition: "opacity 0.18s ease",
@@ -212,7 +337,7 @@ export function HeroSection() {
                   ((e.currentTarget as HTMLAnchorElement).style.opacity = "1")
                 }
               >
-                Request Executive Brief
+                See your risk surface
               </Link>
               <a
                 href="#chapter-output"
@@ -225,129 +350,38 @@ export function HeroSection() {
                   textDecoration: "none",
                   paddingBottom: "2px",
                   borderBottom: "1px solid transparent",
-                  transition:
-                    "color 0.15s ease, border-color 0.15s ease",
+                  transition: "color 0.15s ease, border-color 0.15s ease",
                 }}
                 onMouseOver={(e) => {
-                  const el = e.currentTarget;
-                  el.style.color = "var(--text, #0F172A)";
-                  el.style.borderBottomColor = "var(--hairline, rgba(15,23,42,0.10))";
+                  e.currentTarget.style.color = "var(--text, #0F172A)";
+                  e.currentTarget.style.borderBottomColor = "var(--hairline, rgba(15,23,42,0.10))";
                 }}
                 onMouseOut={(e) => {
-                  const el = e.currentTarget;
-                  el.style.color = "var(--text-2, #475569)";
-                  el.style.borderBottomColor = "transparent";
+                  e.currentTarget.style.color = "var(--text-2, #475569)";
+                  e.currentTarget.style.borderBottomColor = "transparent";
                 }}
               >
                 View Command Layer
               </a>
             </div>
-          </div>
 
-          {/* Right: Legitimacy Instrument */}
-          <div
-            className="arch-col-6 flex justify-end"
-            style={{ marginTop: "0" }}
-          >
-            <div
-              className="gov-panel gov-panel--elevated w-full"
-              style={{ maxWidth: "620px" }}
+            {/* Micro-copy */}
+            <p
+              style={{
+                marginTop: "16px",
+                fontSize: "0.75rem",
+                letterSpacing: "0.02em",
+                color: "var(--text-3, #94A3B8)",
+              }}
             >
-              {/* Panel header */}
-              <div
-                style={{
-                  padding: "20px 28px 18px",
-                  borderBottom: HAIRLINE,
-                }}
-              >
-                <p
-                  className="gov-kicker"
-                  style={{ fontSize: "10px", letterSpacing: "0.22em" }}
-                >
-                  Entity
-                </p>
-                <p
-                  style={{
-                    marginTop: "6px",
-                    fontSize: "1.0625rem",
-                    fontWeight: 600,
-                    letterSpacing: "-0.01em",
-                    color: "var(--text, #0F172A)",
-                  }}
-                >
-                  Northern Energy Grid
-                </p>
-              </div>
-
-              {/* Legitimacy status row */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "16px 28px",
-                  borderBottom: HAIRLINE,
-                }}
-              >
-                <span
-                  className="gov-kicker"
-                  style={{ fontSize: "10px", letterSpacing: "0.22em" }}
-                >
-                  Legitimacy
-                </span>
-                <span
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    letterSpacing: "0.10em",
-                    color: "#15803D",
-                  }}
-                >
-                  <PulseDot />
-                  VERIFIED
-                </span>
-              </div>
-
-              {/* Metric rows */}
-              <div>
-                {artifactRows.map((row, i) => (
-                  <div
-                    key={row.label}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "16px 28px",
-                      borderBottom:
-                        i < artifactRows.length - 1 ? HAIRLINE : "none",
-                    }}
-                  >
-                    <span
-                      className="gov-kicker"
-                      style={{ fontSize: "10px", letterSpacing: "0.18em" }}
-                    >
-                      {row.label}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        letterSpacing: "0.08em",
-                        fontVariantNumeric: "tabular-nums",
-                        color: "var(--text, #0F172A)",
-                      }}
-                    >
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+              No marketing. Audit-grade outputs.
+            </p>
           </div>
 
+          {/* Right: Legitimacy Instrument (risk→control loop) */}
+          <div className="arch-col-6 flex justify-end" style={{ marginTop: "0" }}>
+            <InstrumentPanel />
+          </div>
         </div>
       </div>
     </section>

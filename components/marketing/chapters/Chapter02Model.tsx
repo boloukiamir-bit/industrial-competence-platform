@@ -80,7 +80,7 @@ function GovernanceStack() {
                 fontVariantNumeric: "tabular-nums",
                 letterSpacing: "0.08em",
                 color: isLast
-                  ? "var(--accent, #1E40AF)"
+                  ? "var(--color-accent, #1E40AF)"
                   : "var(--text-3, #94A3B8)",
               }}
             >
@@ -95,7 +95,7 @@ function GovernanceStack() {
                   fontWeight: isLast ? 700 : 600,
                   letterSpacing: "-0.01em",
                   color: isLast
-                    ? "var(--accent, #1E40AF)"
+                    ? "var(--color-accent, #1E40AF)"
                     : "var(--text, #0F172A)",
                   margin: 0,
                   lineHeight: 1.3,
@@ -124,7 +124,7 @@ function GovernanceStack() {
                     fontWeight: 700,
                     letterSpacing: "0.14em",
                     textTransform: "uppercase",
-                    color: "var(--accent, #1E40AF)",
+                    color: "var(--color-accent, #1E40AF)",
                   }}
                 >
                   Output

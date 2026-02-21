@@ -26,19 +26,19 @@ interface PriorityFixesWidgetProps {
 }
 
 const typeConfig = {
-  staffing: { icon: Users, label: "Staffing", color: "text-red-600 dark:text-red-400" },
-  compliance: { icon: FileWarning, label: "Compliance", color: "text-orange-600 dark:text-orange-400" },
-  safety: { icon: Shield, label: "Safety", color: "text-amber-600 dark:text-amber-400" },
+  staffing: { icon: Users, label: "Staffing", color: "text-red-600" },
+  compliance: { icon: FileWarning, label: "Compliance", color: "text-orange-600" },
+  safety: { icon: Shield, label: "Safety", color: "text-amber-600" },
 };
 
 export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading, summaryError, date, shiftType }: PriorityFixesWidgetProps) {
   if (items.length > 0) {
     return (
-      <div className="cockpit-card-secondary overflow-hidden">
-        <div className="px-3 py-2 border-b border-border">
-          <h2 className="cockpit-title">Interventions</h2>
+      <div className="gov-panel overflow-hidden">
+        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))" }}>
+          <h2 className="gov-kicker">Interventions</h2>
         </div>
-        <div className="divide-y divide-border">
+        <div className="divide-y" style={{ borderColor: "var(--hairline-soft, rgba(15,23,42,0.06))" }}>
           {items.slice(0, 5).map((item) => {
             const config = typeConfig[item.type];
             const Icon = config.icon;
@@ -88,15 +88,15 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
 
   if (summaryLoading) {
     return (
-      <div className="cockpit-card-secondary flex items-center justify-center py-6">
-        <span className="cockpit-body text-muted-foreground/70">—</span>
+      <div className="gov-panel flex items-center justify-center py-8">
+        <span className="cockpit-body" style={{ color: "var(--text-3)" }}>—</span>
       </div>
     );
   }
 
   if (summaryError) {
     return (
-      <div className="cockpit-card-secondary flex items-center justify-center py-6 border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]">
+      <div className="gov-panel flex items-center justify-center py-8 border-l-[3px] border-l-[hsl(var(--ds-status-at-risk-text))]">
         <p className="cockpit-body cockpit-status-at-risk">Unable to load.</p>
       </div>
     );
@@ -104,7 +104,7 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
 
   if (summary && summary.active_total > 0) {
     return (
-      <div className="cockpit-card-secondary overflow-hidden border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]">
+      <div className="gov-panel overflow-hidden border-l-[3px] border-l-[hsl(var(--ds-status-blocking-text))]">
         <div className="flex flex-col items-center justify-center py-5 px-4">
           <p className="cockpit-body cockpit-status-blocking font-medium">
             {summary.active_blocking} blocking, {summary.active_nonblocking} at risk
@@ -118,13 +118,14 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
   const dateLabel = date ?? "";
 
   return (
-    <div className="cockpit-card-secondary overflow-hidden border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]">
+    <div className="gov-panel overflow-hidden border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]">
       <div className="flex flex-col items-center justify-center py-5 px-4">
         <p className="cockpit-body cockpit-status-ok font-medium">Clear · {dateLabel} {shiftLabel}</p>
         <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
           <Link
             href={date && shiftType ? `/app/tomorrows-gaps?date=${date}&shift=${toQueryShiftType(shiftType as "Day" | "Evening" | "Night")}` : "/app/tomorrows-gaps"}
-            className="inline-flex items-center justify-center h-8 rounded border border-input bg-background px-3 cockpit-body hover:bg-accent"
+            className="inline-flex items-center justify-center h-8 rounded-sm px-3 cockpit-body"
+            style={{ border: "1px solid var(--hairline)", background: "var(--surface)" }}
             data-testid="cockpit-empty-cta-tomorrows-gaps"
           >
             <Calendar className="h-3.5 w-3.5 mr-1.5" />
@@ -132,7 +133,8 @@ export function PriorityFixesWidget({ items, onResolve, summary, summaryLoading,
           </Link>
           <Link
             href={date && shiftType ? `/app/line-overview?date=${date}&shift=${toQueryShiftType(shiftType as "Day" | "Evening" | "Night")}` : "/app/line-overview"}
-            className="inline-flex items-center justify-center h-8 rounded border border-input bg-background px-3 cockpit-body hover:bg-accent"
+            className="inline-flex items-center justify-center h-8 rounded-sm px-3 cockpit-body"
+            style={{ border: "1px solid var(--hairline)", background: "var(--surface)" }}
             data-testid="cockpit-empty-cta-line-overview"
           >
             <ExternalLink className="h-3.5 w-3.5 mr-1.5" />

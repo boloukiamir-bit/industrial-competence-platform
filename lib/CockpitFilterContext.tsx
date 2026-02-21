@@ -19,7 +19,7 @@ function getStockholmToday(): string {
 }
 
 /** Prefer date from URL (searchParams); otherwise today (Europe/Stockholm). */
-export function getInitialCockpitDate(searchParams?: URLSearchParams): string {
+export function getInitialDateFromUrlOrToday(searchParams?: URLSearchParams): string {
   const params =
     searchParams ??
     (typeof window !== "undefined"
@@ -29,6 +29,9 @@ export function getInitialCockpitDate(searchParams?: URLSearchParams): string {
   if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
   return getStockholmToday();
 }
+
+/** Backwards-compatible export. */
+export const getInitialCockpitDate = getInitialDateFromUrlOrToday;
 
 const CockpitFilterContext = createContext<{
   date: string;
@@ -40,7 +43,7 @@ const CockpitFilterContext = createContext<{
 } | null>(null);
 
 export function CockpitFilterProvider({ children }: { children: ReactNode }) {
-  const [date, setDate] = useState<string>(() => getInitialCockpitDate());
+  const [date, setDate] = useState<string>(() => getInitialDateFromUrlOrToday());
   const [shiftType, setShiftType] = useState<string>("Day");
   const [line, setLine] = useState<string>("all");
 

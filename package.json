@@ -15,7 +15,9 @@
     "db:smoke": "npx tsx scripts/db_smoke.ts",
     "gov:audit": "npx tsx scripts/governance_audit.ts",
     "gov:perimeter": "npx tsx scripts/gov_perimeter_audit.ts",
-    "gov:perimeter:live": "BASE_URL=http://127.0.0.1:5001 npx tsx scripts/gov_perimeter_audit.ts --live"
+    "gov:perimeter:live": "BASE_URL=http://127.0.0.1:5001 npx tsx scripts/gov_perimeter_audit.ts --live",
+    "smoke:cockpit": "bash scripts/smoke-cockpit.sh",
+    "verify": "bash scripts/verify.sh"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.0",

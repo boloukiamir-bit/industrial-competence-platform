@@ -1,13 +1,13 @@
 /**
  * GET /api/admin/me
- * Returns current user's email, active_org_id, and membership_role for the active org.
- * Uses org-scoped memberships.role (not profile.role). 403 if no active org or no membership.
+ * Returns current user's email, active_org_id, active_site_id, and membership_role.
+ * Uses getActiveOrgFromSession (bootstraps org/site when missing). 403 if no active org or no membership.
  * In DEVELOPMENT only: Authorization: Bearer <DEV_BEARER_TOKEN> is accepted (no cookies).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getDevBearerContext } from "@/lib/server/auth";
-import { getOrgIdFromSession } from "@/lib/orgSession";
+import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
         if (!devCtx.active_org_id || devCtx.role === null) {
           const { pendingCookies } = await createSupabaseServerClient(request);
           const res = NextResponse.json(
-            { error: devCtx.active_org_id ? "No active membership for this organization" : "No active organization" },
+            {
+              error: devCtx.active_org_id ? "No active membership for this organization" : "No active organization",
+              code: "ORG_CONTEXT_REQUIRED",
+            },
             { status: 403, headers: NO_CACHE_HEADERS }
           );
           applySupabaseCookies(res, pendingCookies);
@@ -41,6 +44,7 @@ export async function GET(request: NextRequest) {
           {
             email: devCtx.email ?? null,
             active_org_id: devCtx.active_org_id,
+            active_site_id: devCtx.active_site_id ?? null,
             membership_role: devCtx.role,
           },
           { headers: NO_CACHE_HEADERS }
@@ -50,32 +54,25 @@ export async function GET(request: NextRequest) {
     }
 
     const { supabase, pendingCookies } = await createSupabaseServerClient(request);
-    const session = await getOrgIdFromSession(request, supabase);
-    if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status, headers: NO_CACHE_HEADERS });
+    const org = await getActiveOrgFromSession(request, supabase);
+    if (!org.ok) {
+      const res = NextResponse.json(
+        { error: org.error, code: org.status === 403 ? "ORG_CONTEXT_REQUIRED" : undefined },
+        { status: org.status, headers: NO_CACHE_HEADERS }
+      );
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("email, active_org_id")
-      .eq("id", session.userId)
+      .select("email")
+      .eq("id", org.userId)
       .single();
 
     if (profileError || !profile) {
       const res = NextResponse.json(
-        { error: "Profile not found" },
-        { status: 403, headers: NO_CACHE_HEADERS }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const activeOrgId = profile.active_org_id as string | null;
-    if (!activeOrgId) {
-      const res = NextResponse.json(
-        { error: "No active organization" },
+        { error: "Profile not found", code: "ORG_CONTEXT_REQUIRED" },
         { status: 403, headers: NO_CACHE_HEADERS }
       );
       applySupabaseCookies(res, pendingCookies);
@@ -85,14 +82,14 @@ export async function GET(request: NextRequest) {
     const { data: membership, error: membershipError } = await supabaseAdmin
       .from("memberships")
       .select("role")
-      .eq("org_id", activeOrgId)
-      .eq("user_id", session.userId)
+      .eq("org_id", org.activeOrgId)
+      .eq("user_id", org.userId)
       .eq("status", "active")
       .maybeSingle();
 
     if (membershipError || !membership) {
       const res = NextResponse.json(
-        { error: "No active membership for this organization" },
+        { error: "No active membership for this organization", code: "ORG_CONTEXT_REQUIRED" },
         { status: 403, headers: NO_CACHE_HEADERS }
       );
       applySupabaseCookies(res, pendingCookies);
@@ -101,9 +98,10 @@ export async function GET(request: NextRequest) {
 
     const res = NextResponse.json(
       {
-        email: profile.email ?? null,
-        active_org_id: activeOrgId,
-        membership_role: membership.role,
+        email: (profile as { email?: string | null }).email ?? null,
+        active_org_id: org.activeOrgId,
+        active_site_id: org.activeSiteId,
+        membership_role: (membership as { role?: string }).role,
       },
       { headers: NO_CACHE_HEADERS }
     );

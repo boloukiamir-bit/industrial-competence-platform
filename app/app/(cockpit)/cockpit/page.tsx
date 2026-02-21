@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
-import { getInitialCockpitDate, useCockpitFilters } from "@/lib/CockpitFilterContext";
+import { getInitialDateFromUrlOrToday, useCockpitFilters } from "@/lib/CockpitFilterContext";
+import { useSessionHealth } from "@/lib/SessionHealthContext";
 import { ActionDrawer } from "@/components/cockpit/ActionDrawer";
 import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal";
 import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
@@ -81,17 +82,17 @@ function CockpitSkeleton() {
   return (
     <PageFrame>
       <div className="animate-pulse">
-        <div className="h-8 w-48 bg-muted rounded mb-2 ds-h1" />
-        <div className="h-4 w-32 bg-muted rounded mb-6 ds-meta" />
-        <div className="h-32 bg-muted rounded-[var(--ds-radius-card)] mb-6" />
+        <div className="h-8 w-48 rounded mb-2" style={{ background: "var(--surface-3, #F2F4F7)" }} />
+        <div className="h-4 w-32 rounded mb-6" style={{ background: "var(--surface-3, #F2F4F7)" }} />
+        <div className="h-32 rounded-sm mb-6" style={{ background: "var(--surface-3, #F2F4F7)" }} />
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 bg-muted rounded-[var(--ds-radius-card)]" />
+            <div key={i} className="h-24 rounded-sm" style={{ background: "var(--surface-3, #F2F4F7)" }} />
           ))}
         </div>
         <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-4 h-64 bg-muted rounded-[var(--ds-radius-card)]" />
-          <div className="col-span-8 h-64 bg-muted rounded-[var(--ds-radius-card)]" />
+          <div className="col-span-4 h-64 rounded-sm" style={{ background: "var(--surface-3, #F2F4F7)" }} />
+          <div className="col-span-8 h-64 rounded-sm" style={{ background: "var(--surface-3, #F2F4F7)" }} />
         </div>
       </div>
     </PageFrame>
@@ -105,6 +106,8 @@ export default function CockpitPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { date, shiftType, line, setDate, setShiftType, setLine } = useCockpitFilters();
+  const { hasSession } = useSessionHealth();
+  const sessionOk = hasSession === true;
   const [isDemo, setIsDemo] = useState(false);
   const [jumpingLatest, setJumpingLatest] = useState(false);
   const urlSyncedRef = useRef(false);
@@ -177,14 +180,16 @@ export default function CockpitPage() {
   useEffect(() => {
     if (urlSyncedRef.current) return;
     const rawDate = searchParams.get("date")?.trim();
-    const hasValidDate = !!rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
-    const initialDate = getInitialCockpitDate(searchParams);
+    const urlDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
+    const initialDate = urlDate ?? getInitialDateFromUrlOrToday(searchParams);
     const qShift = searchParams.get("shift_code")?.trim();
     const qLine = searchParams.get("line")?.trim();
+
     if (date !== initialDate) setDate(initialDate);
     if (qShift === "Day" || qShift === "Evening" || qShift === "Night") setShiftType(qShift);
     if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
-    if (!hasValidDate) {
+
+    if (!urlDate) {
       const p = new URLSearchParams(searchParams.toString());
       p.set("date", initialDate);
       router.replace(`/app/cockpit?${p.toString()}`, { scroll: false });
@@ -232,8 +237,12 @@ export default function CockpitPage() {
     return () => clearInterval(id);
   }, [lastResolvedIssue, undoUntil]);
 
-  // Load cockpit summary (date, shift_code, optional line)
+  // Load cockpit summary (date, shift_code, optional line). Skip when session invalid to avoid 401 spam.
   useEffect(() => {
+    if (!sessionOk) {
+      setSummaryLoading(false);
+      return;
+    }
     let cancelled = false;
     setSummaryLoading(true);
     setSummaryError(null);
@@ -268,7 +277,7 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [summaryUrl, toast]);
+  }, [sessionOk, summaryUrl, toast]);
 
   const handleJumpLatest = async () => {
     if (jumpingLatest || isDemoMode()) return;
@@ -300,7 +309,7 @@ export default function CockpitPage() {
 
   // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
   useEffect(() => {
-    if (isDemoMode()) return;
+    if (isDemoMode() || !sessionOk) return;
     let cancelled = false;
     setGapsLoading(true);
     const params = new URLSearchParams({ date, shift: shiftType.toLowerCase() });
@@ -328,11 +337,11 @@ export default function CockpitPage() {
         if (!cancelled) setGapsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, toast]);
+  }, [date, shiftType, sessionOk, toast]);
 
   // Load Issue Inbox (date, shift_code, optional line)
   useEffect(() => {
-    if (isDemoMode()) return;
+    if (isDemoMode() || !sessionOk) return;
     let cancelled = false;
     setIssuesLoading(true);
     setIssuesError(null);
@@ -359,11 +368,11 @@ export default function CockpitPage() {
         if (!cancelled) setIssuesLoading(false);
       });
     return () => { cancelled = true; };
-  }, [issuesUrl, toast, issuesRefreshKey]);
+  }, [issuesUrl, sessionOk, toast, issuesRefreshKey]);
 
   // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (for blocking/at-risk lists)
   useEffect(() => {
-    if (isDemoMode() || !summary) return;
+    if (isDemoMode() || !sessionOk || !summary) return;
     const status = summary.shift_legitimacy_status;
     if (status !== "ILLEGAL" && status !== "WARNING") {
       setLegitimacyDrilldown(null);
@@ -396,7 +405,7 @@ export default function CockpitPage() {
         if (!cancelled) setLegitimacyDrilldownLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftType, summary?.shift_legitimacy_status, summary != null]);
+  }, [date, shiftType, sessionOk, summary?.shift_legitimacy_status, summary != null]);
 
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
@@ -408,7 +417,7 @@ export default function CockpitPage() {
 
   // Load line options from v_cockpit_station_summary.area for selected date+shift (no legacy codes)
   useEffect(() => {
-    if (isDemoMode()) return;
+    if (isDemoMode() || !sessionOk) return;
     const p = new URLSearchParams({ date, shift_code: shiftType });
     const url = `/api/cockpit/lines?${p.toString()}`;
     fetchJson<{ lines?: string[] }>(url)
@@ -418,7 +427,7 @@ export default function CockpitPage() {
         if ("source" in res.data && res.data.source) console.debug("[cockpit lines] source:", res.data.source);
       })
       .catch((err) => console.error("[cockpit lines]", err));
-  }, [date, shiftType]);
+  }, [date, shiftType, sessionOk]);
 
   useEffect(() => {
     const demo = isDemoMode();
@@ -543,12 +552,20 @@ export default function CockpitPage() {
   };
 
   const handleIssueRowClick = (row: CockpitIssueRow) => {
+    if (!sessionOk) return;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[ui] handleIssueRowClick", {
+        stationId: row.station_id,
+        shift_code: row.shift_code,
+        date: row.date,
+      });
+    }
     setSelectedIssue(row);
     setIssueDrawerOpen(true);
   };
 
   const handleIssueDecision = async (action: "acknowledged" | "plan_training" | "swap" | "escalate") => {
-    if (!selectedIssue?.station_id) return;
+    if (!sessionOk || !selectedIssue?.station_id) return;
     const snapshot = selectedIssue;
     setIssues((prev) => prev.filter((i) => i.issue_id !== snapshot.issue_id));
     setIssueDrawerOpen(false);
@@ -617,7 +634,7 @@ export default function CockpitPage() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="h-8 px-2 rounded-sm border border-input bg-background cockpit-body"
+            className="h-8 px-2 rounded-sm border border-[var(--hairline)] bg-[var(--surface)] text-[var(--text)] cockpit-body"
             data-testid="input-date"
           />
           <Select value={shiftType} onValueChange={(v) => setShiftType(v as typeof shiftType)}>
@@ -646,14 +663,14 @@ export default function CockpitPage() {
               type="checkbox"
               checked={showResolved}
               onChange={(e) => setShowResolved(e.target.checked)}
-              className="rounded-sm border-input"
+              className="rounded-sm border-[var(--hairline)]"
               data-testid="cockpit-show-resolved"
             />
             Show resolved
           </label>
         </div>
         {!summaryLoading && summary != null && (
-          <span className="cockpit-label cockpit-num text-muted-foreground" data-testid="cockpit-active-count">
+          <span className="gov-kicker cockpit-num" data-testid="cockpit-active-count">
             Open decisions: {summary.active_total}
           </span>
         )}
@@ -684,8 +701,8 @@ export default function CockpitPage() {
   return (
     <PageFrame filterBar={filterBar} debugPanel={debugPanel}>
       {summary && summary.active_total === 0 && !summaryLoading && (
-        <div className="mb-4 px-3 py-2 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
-          <span className="cockpit-body text-muted-foreground">No decisions</span>
+        <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
+          <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
             {SHIFT_OPTIONS.map((s) => (
               <Button key={s} variant="outline" size="sm" className="h-7 text-[13px]" onClick={() => setShiftType(s)} data-testid={`empty-shift-${s}`}>
@@ -707,10 +724,10 @@ export default function CockpitPage() {
       )}
 
       {lastResolvedIssue != null && undoUntil > 0 && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]" data-testid="cockpit-resolve-undo-bar">
+        <div className="mb-6 gov-panel flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-l-[3px] border-l-[hsl(var(--ds-status-ok-text))]" data-testid="cockpit-resolve-undo-bar">
           <div className="flex flex-wrap items-center gap-3 cockpit-body">
             <span className="cockpit-status-ok font-medium">Decision recorded.</span>
-            <span className="cockpit-num">Undo ({undoSecondsLeft}s)</span>
+            <span className="cockpit-num" style={{ color: "var(--text-2)" }}>Undo ({undoSecondsLeft}s)</span>
           </div>
           <Button variant="outline" size="sm" className="h-7 text-[13px]" onClick={handleResolveUndo} data-testid="cockpit-resolve-undo-btn">
             Undo
@@ -718,46 +735,51 @@ export default function CockpitPage() {
         </div>
       )}
 
-      {/* Hero: shift legitimacy status (top 70% visual weight) */}
+      {/* Hero: shift legitimacy status */}
       {!summaryLoading && summary != null && (
         <section
-          className={[
-            "flex flex-col items-center justify-center py-24 text-center space-y-6 animate-in fade-in duration-300",
-            summary.shift_legitimacy_status === "GO" && "bg-[hsl(var(--ds-status-ok-text)/0.06)]",
-            summary.shift_legitimacy_status === "WARNING" && "bg-[hsl(var(--ds-status-at-risk-text)/0.07)]",
-            summary.shift_legitimacy_status === "ILLEGAL" && "bg-[hsl(var(--ds-status-blocking-text)/0.06)]",
-          ].filter(Boolean).join(" ")}
+          className="gov-panel gov-panel--elevated py-16 md:py-20 text-center animate-in fade-in duration-300"
           data-testid="cockpit-hero"
         >
-          <h1 className="text-5xl font-bold tracking-tight text-foreground md:text-6xl">
-            {summary.shift_legitimacy_status === "GO" && "SHIFT READY"}
-            {summary.shift_legitimacy_status === "WARNING" && "SHIFT AT RISK"}
-            {summary.shift_legitimacy_status === "ILLEGAL" && "SHIFT NOT LEGALLY READY"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {summary.illegal_count} blockers · {summary.warning_count} expiring soon
-          </p>
+          <div className="space-y-4 px-6">
+            <p className="gov-kicker">Execution Legitimacy</p>
+            <h1
+              className={[
+                "text-4xl font-extrabold tracking-tight md:text-5xl leading-none",
+                summary.shift_legitimacy_status === "GO" && "cockpit-status-ok",
+                summary.shift_legitimacy_status === "WARNING" && "cockpit-status-at-risk",
+                summary.shift_legitimacy_status === "ILLEGAL" && "cockpit-status-blocking",
+              ].filter(Boolean).join(" ")}
+            >
+              {summary.shift_legitimacy_status === "GO" && "SHIFT READY"}
+              {summary.shift_legitimacy_status === "WARNING" && "SHIFT AT RISK"}
+              {summary.shift_legitimacy_status === "ILLEGAL" && "SHIFT NOT LEGALLY READY"}
+            </h1>
+            <p className="text-sm" style={{ color: "var(--text-2)" }}>
+              {summary.illegal_count} blockers · {summary.warning_count} expiring soon
+            </p>
+          </div>
         </section>
       )}
 
       {/* Conditional detail: blocking / at-risk operators */}
       {!summaryLoading && summary != null && (summary.shift_legitimacy_status === "ILLEGAL" || summary.shift_legitimacy_status === "WARNING") && (
-        <section className="mt-8 max-w-2xl mx-auto" data-testid="cockpit-detail">
+        <section className="mt-8 max-w-2xl mx-auto gov-panel p-6" data-testid="cockpit-detail">
           {summary.shift_legitimacy_status === "ILLEGAL" && (
             <>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+              <h2 className="gov-kicker mb-3">
                 Blocking operators
               </h2>
               {legitimacyDrilldownLoading ? (
-                <p className="text-sm text-muted-foreground py-2">Loading…</p>
+                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>Loading…</p>
               ) : legitimacyDrilldown && legitimacyDrilldown.blocking_employees.length > 0 ? (
                 <ul>
                   {legitimacyDrilldown.blocking_employees.map((emp) => (
-                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t border-muted first:border-t-0">
-                      <span className="font-medium text-foreground">{emp.name || "—"}</span>
+                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t first:border-t-0" style={{ borderColor: "var(--hairline-soft)" }}>
+                      <span className="font-medium" style={{ color: "var(--text)" }}>{emp.name || "—"}</span>
                       <div className="flex flex-wrap gap-1.5 justify-end">
                         {emp.reasons.map((r) => (
-                          <span key={r} className="text-xs font-mono text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded">
+                          <span key={r} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ color: "var(--text-2)", background: "var(--surface-2)" }}>
                             {r}
                           </span>
                         ))}
@@ -766,25 +788,25 @@ export default function CockpitPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground py-2">No blocking operators listed.</p>
+                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>No blocking operators listed.</p>
               )}
             </>
           )}
           {summary.shift_legitimacy_status === "WARNING" && (
             <>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+              <h2 className="gov-kicker mb-3">
                 At risk
               </h2>
               {legitimacyDrilldownLoading ? (
-                <p className="text-sm text-muted-foreground py-2">Loading…</p>
+                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>Loading…</p>
               ) : legitimacyDrilldown && legitimacyDrilldown.warning_employees.length > 0 ? (
                 <ul>
                   {legitimacyDrilldown.warning_employees.map((emp) => (
-                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t border-muted first:border-t-0">
-                      <span className="font-medium text-foreground">{emp.name || "—"}</span>
+                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t first:border-t-0" style={{ borderColor: "var(--hairline-soft)" }}>
+                      <span className="font-medium" style={{ color: "var(--text)" }}>{emp.name || "—"}</span>
                       <div className="flex flex-wrap gap-1.5 justify-end">
                         {emp.reasons.map((r) => (
-                          <span key={r} className="text-xs font-mono text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded">
+                          <span key={r} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ color: "var(--text-2)", background: "var(--surface-2)" }}>
                             {r}
                           </span>
                         ))}
@@ -793,7 +815,7 @@ export default function CockpitPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground py-2">No at-risk operators listed.</p>
+                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>No at-risk operators listed.</p>
               )}
             </>
           )}
@@ -802,38 +824,41 @@ export default function CockpitPage() {
 
       {/* Supporting metrics: compact row */}
       {!summaryLoading && summary != null && (
-        <div className="mt-12 pt-8 border-t border-border flex flex-wrap items-baseline gap-8 text-muted-foreground" data-testid="cockpit-metrics">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Open decisions</p>
-            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.active_total}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Blockers</p>
-            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.illegal_count}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Restricted</p>
-            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.restricted_count ?? 0}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Expiring soon</p>
-            <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{summary.warning_count}</p>
-          </div>
-          {!isDemoMode() && (
-            <div title={`Blocking: ${blockingCount} × 25 · Warnings: ${warningCount} × 8`}>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Readiness</p>
-              <p className="text-lg font-medium tabular-nums text-foreground mt-0.5">{fragilityIndex}</p>
+        <div className="mt-10 gov-panel p-6" data-testid="cockpit-metrics">
+          <div className="flex flex-wrap items-baseline gap-10">
+            <div>
+              <p className="gov-kicker">Open decisions</p>
+              <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{summary.active_total}</p>
             </div>
-          )}
+            <div>
+              <p className="gov-kicker">Blockers</p>
+              <p className="text-lg font-semibold tabular-nums mt-1 cockpit-status-blocking">{summary.illegal_count}</p>
+            </div>
+            <div>
+              <p className="gov-kicker">Restricted</p>
+              <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{summary.restricted_count ?? 0}</p>
+            </div>
+            <div>
+              <p className="gov-kicker">Expiring soon</p>
+              <p className="text-lg font-semibold tabular-nums mt-1 cockpit-status-at-risk">{summary.warning_count}</p>
+            </div>
+            {!isDemoMode() && (
+              <div title={`Blocking: ${blockingCount} × 25 · Warnings: ${warningCount} × 8`}>
+                <p className="gov-kicker">Readiness</p>
+                <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{fragilityIndex}</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {!isDemoMode() && (
-        <div className="mt-8">
+        <div className="mt-10">
           <InterventionQueue
             issues={issues}
             markedPlannedIds={markedPlannedIds}
             currentFragility={fragilityIndex}
+            sessionOk={sessionOk}
             onMarkPlanned={(issueId) => setMarkedPlannedIds((prev) => {
               const next = new Set(prev);
               if (next.has(issueId)) next.delete(issueId);
@@ -845,12 +870,13 @@ export default function CockpitPage() {
               setIssueDrawerOpen(true);
             }}
           />
-          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2 mt-4">Decision queue</h2>
+          <h2 className="gov-kicker mb-3 mt-6">Decision queue</h2>
           <IssueTable
             issues={issues}
             loading={issuesLoading}
             error={issuesError}
             onRowClick={handleIssueRowClick}
+            sessionOk={sessionOk}
           />
         </div>
       )}
@@ -891,6 +917,7 @@ export default function CockpitPage() {
         onSwap={() => handleIssueDecision("swap")}
         onEscalate={() => handleIssueDecision("escalate")}
         isAcknowledged={selectedIssue?.resolved ?? false}
+        sessionOk={sessionOk}
       />
     </PageFrame>
   );
