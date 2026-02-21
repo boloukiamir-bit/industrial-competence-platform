@@ -31,10 +31,16 @@ export async function fetchJson<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<FetchJsonResult<T>> {
-  const headers = withDevBearer(normalizeHeaders(options.headers));
+  const isBrowser = typeof window !== "undefined";
+  const defaultHeaders: Record<string, string> = { accept: "application/json" };
+  const headers = withDevBearer({
+    ...defaultHeaders,
+    ...normalizeHeaders(options.headers),
+  });
   const response = await fetch(url, {
     ...options,
-    credentials: options.credentials ?? "include",
+    credentials: isBrowser ? "include" : options.credentials,
+    cache: isBrowser ? "no-store" : options.cache,
     headers,
   });
 
@@ -62,10 +68,16 @@ export async function fetchJsonOrThrow<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const headers = withDevBearer(normalizeHeaders(options.headers));
+  const isBrowser = typeof window !== "undefined";
+  const defaultHeaders: Record<string, string> = { accept: "application/json" };
+  const headers = withDevBearer({
+    ...defaultHeaders,
+    ...normalizeHeaders(options.headers),
+  });
   const response = await fetch(url, {
     ...options,
-    credentials: options.credentials ?? "include",
+    credentials: isBrowser ? "include" : options.credentials,
+    cache: isBrowser ? "no-store" : options.cache,
     headers,
   });
 

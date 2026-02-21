@@ -152,6 +152,7 @@ export default function CockpitPage() {
   const [summary, setSummary] = useState<CockpitSummaryResponse | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [shiftCodesError, setShiftCodesError] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
 
   const [gapsLines, setGapsLines] = useState<GapsLineRow[]>([]);
@@ -217,16 +218,21 @@ export default function CockpitPage() {
 
   // Data-driven shift selector: fetch shift codes for selected date, then validate/fallback shift_code.
   useEffect(() => {
-    if (isDemoMode() || !sessionOk) return;
+    if (isDemoMode()) return;
     let cancelled = false;
     const p = new URLSearchParams({ date });
     fetchJson<{ ok: boolean; shift_codes?: string[] }>(`/api/cockpit/shift-codes?${p.toString()}`)
       .then((res) => {
         if (!res.ok) {
-          throw new Error(res.error || "Failed to load shift codes");
+          if (cancelled) return;
+          const message = res.status === 401 ? "Invalid or expired session" : (res.error || "Failed to load shift codes");
+          setShiftCodesError(message);
+          setAvailableShiftCodes([]);
+          return;
         }
         const codes = uniqueShiftCodes(res.data.shift_codes);
         if (cancelled) return;
+        setShiftCodesError(null);
         setAvailableShiftCodes(codes);
         if (codes.length === 0) {
           if (shiftCode !== "") setShiftCode("");
@@ -246,10 +252,11 @@ export default function CockpitPage() {
       .catch((err) => {
         if (cancelled) return;
         console.error("[cockpit] shift codes", err);
+        setShiftCodesError("Failed to load shift codes");
         setAvailableShiftCodes([]);
       });
     return () => { cancelled = true; };
-  }, [date, sessionOk, searchParams, setShiftCode, shiftCode]);
+  }, [date, sessionOk]);
 
   // URL sync: push date, shift_code, line to URL when they change
   useEffect(() => {
@@ -263,7 +270,7 @@ export default function CockpitPage() {
     const next = p.toString();
     const current = searchParams.toString();
     if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
-  }, [date, shiftCode, line, router, searchParams]);
+  }, [date, shiftCode, line, router]);
 
   // Dev-only safety: warn if URL/date ever diverge after sync
   useEffect(() => {
@@ -716,6 +723,11 @@ export default function CockpitPage() {
               )}
             </SelectContent>
           </Select>
+          {shiftCodesError ? (
+            <span className="cockpit-body text-[11px] text-red-600" data-testid="shift-codes-error">
+              {shiftCodesError}
+            </span>
+          ) : null}
           <Select value={line} onValueChange={setLine}>
             <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-line">
               <SelectValue placeholder="Line" />
