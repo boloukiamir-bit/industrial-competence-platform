@@ -3,13 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 import { getInitialDateFromUrlOrToday, useCockpitFilters } from "@/lib/CockpitFilterContext";
@@ -19,7 +12,17 @@ import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal"
 import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
 import { IssueTable } from "@/components/cockpit/IssueTable";
 import { IssueDrawer } from "@/components/cockpit/IssueDrawer";
-import { InterventionQueue } from "@/components/cockpit/InterventionQueue";
+import { DecisionQueueInlinePanel } from "@/components/cockpit/DecisionQueue";
+import { ExecutiveHeader } from "@/components/cockpit/ExecutiveHeader";
+import { InlinePanelShell } from "@/components/cockpit/InlinePanelShell";
+import { KpiTile } from "@/components/cockpit/KpiTile";
+import { ExpiringSoonPanel, type ExpiringRow } from "@/components/cockpit/panels/ExpiringSoonPanel";
+import {
+  ReadinessPanel,
+  type ReadinessCounts,
+  type ReadinessStatus,
+  type ReadinessTopStationRow,
+} from "@/components/cockpit/panels/ReadinessPanel";
 import type { CockpitIssueRow } from "@/app/api/cockpit/issues/route";
 import { isDemoMode } from "@/lib/demoRuntime";
 import {
@@ -170,6 +173,17 @@ export default function CockpitPage() {
   const [undoUntil, setUndoUntil] = useState<number>(0);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const [markedPlannedIds, setMarkedPlannedIds] = useState<Set<string>>(new Set());
+  const [decisionQueueMode, setDecisionQueueMode] = useState<"GLOBAL" | "SHIFT">("GLOBAL");
+  const [activePanel, setActivePanel] = useState<
+    "none" | "decisions" | "blockers" | "readiness" | "restricted" | "expiring" | "interventions"
+  >("none");
+  const [userName, setUserName] = useState<string | null>(null);
+  const [complianceExpiring, setComplianceExpiring] = useState<{
+    expiredCount: number;
+    expiringCount: number;
+    top10: ExpiringRow[];
+  } | null>(null);
+  const [complianceExpiringLoading, setComplianceExpiringLoading] = useState(false);
 
   const [legitimacyDrilldown, setLegitimacyDrilldown] = useState<ShiftLegitimacyDrilldown | null>(null);
   const [legitimacyDrilldownLoading, setLegitimacyDrilldownLoading] = useState(false);
@@ -501,6 +515,77 @@ export default function CockpitPage() {
       .catch((err) => console.error("[cockpit lines]", err));
   }, [date, shiftCode, sessionOk, hasShiftCode]);
 
+  // Compliance overview for Expiring soon tile + panel (single shared fetch)
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setComplianceExpiringLoading(true);
+    fetchJson<{
+      ok?: boolean;
+      kpis?: Record<string, { valid: number; expiring: number; expired: number; missing: number; waived: number }>;
+      rows?: Array<{
+        employee_id: string;
+        employee_name: string;
+        compliance_name: string;
+        status: string;
+        valid_to: string | null;
+        line: string | null;
+      }>;
+    }>("/api/compliance/overview")
+      .then((res) => {
+        if (!res.ok || !res.data?.ok || cancelled) return;
+        const kpis = res.data.kpis ?? {};
+        const expiredCount = Object.values(kpis).reduce((s, k) => s + (k.expired ?? 0), 0);
+        const expiringCount = Object.values(kpis).reduce((s, k) => s + (k.expiring ?? 0), 0);
+        let rows = (res.data.rows ?? []).filter(
+          (r) => r.status === "expired" || r.status === "expiring"
+        ) as Array<{ employee_id: string; employee_name: string; compliance_name: string; status: string; valid_to: string | null; line: string | null }>;
+        if (line && line !== "all") {
+          rows = rows.filter((r) => (r.line ?? "").trim() === line.trim());
+        }
+        rows.sort((a, b) => {
+          const aExpired = a.status === "expired" ? 0 : 1;
+          const bExpired = b.status === "expired" ? 0 : 1;
+          if (aExpired !== bExpired) return aExpired - bExpired;
+          const va = a.valid_to ?? "";
+          const vb = b.valid_to ?? "";
+          return va.localeCompare(vb);
+        });
+        const top10: ExpiringRow[] = rows.slice(0, 10).map((r) => ({
+          employee_id: r.employee_id,
+          employee_name: r.employee_name,
+          compliance_name: r.compliance_name,
+          valid_to: r.valid_to,
+          status: r.status === "expired" ? "expired" : "expiring",
+        }));
+        if (!cancelled) {
+          setComplianceExpiring({ expiredCount, expiringCount, top10 });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setComplianceExpiring(null);
+      })
+      .finally(() => {
+        if (!cancelled) setComplianceExpiringLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk, line]);
+
+  // Optional: user display name from whoami (existing endpoint)
+  useEffect(() => {
+    if (isDemoMode()) return;
+    fetchJson<{ user?: { email?: string | null }; email?: string | null }>("/api/auth/whoami")
+      .then((res) => {
+        if (!res.ok) return;
+        const email = res.data?.user?.email ?? res.data?.email;
+        if (typeof email === "string" && email.includes("@")) {
+          const part = email.split("@")[0];
+          if (part) setUserName(part.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const demo = isDemoMode();
     setIsDemo(demo);
@@ -667,6 +752,21 @@ export default function CockpitPage() {
     }
   };
 
+  /** Plan action/training: client-only planned state; do not close drawer or remove issue. */
+  const handlePlanAction = () => {
+    if (selectedIssue) {
+      setMarkedPlannedIds((prev) => new Set(prev).add(selectedIssue.issue_id));
+      toast({ title: "Planned" });
+    }
+  };
+
+  const handlePlanTraining = () => {
+    if (selectedIssue) {
+      setMarkedPlannedIds((prev) => new Set(prev).add(selectedIssue.issue_id));
+      toast({ title: "Planned" });
+    }
+  };
+
   const handleResolveUndo = () => {
     if (!lastResolvedIssue) return;
     setIssues((prev) => [...prev, lastResolvedIssue].sort((a, b) => (a.issue_id < b.issue_id ? -1 : 1)));
@@ -677,10 +777,10 @@ export default function CockpitPage() {
   };
 
   // Fragility Index 0–100 from severity (BLOCKING = 25 pts, WARNING = 8 pts). UI-only, no backend.
-  const blockingCount = summary?.active_blocking ?? issues.filter((i) => !i.resolved && i.severity === "BLOCKING").length;
-  const warningCount = summary?.active_nonblocking ?? issues.filter((i) => !i.resolved && i.severity === "WARNING").length;
-  const fragilityBlockingPts = blockingCount * 25;
-  const fragilityWarningPts = warningCount * 8;
+  const _blockingForFragility = issues.filter((i) => i.severity === "BLOCKING").length;
+  const _warningForFragility = issues.filter((i) => i.severity === "WARNING").length;
+  const fragilityBlockingPts = _blockingForFragility * 25;
+  const fragilityWarningPts = _warningForFragility * 8;
   const fragilityIndex = Math.min(100, fragilityBlockingPts + fragilityWarningPts);
 
   // Line options from /api/cockpit/lines only; exclude any legacy display names
@@ -698,66 +798,15 @@ export default function CockpitPage() {
     return <CockpitSkeleton />;
   }
 
-  const filterBar = (
-    <>
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-8 px-2 rounded-sm border border-[var(--hairline)] bg-[var(--surface)] text-[var(--text)] cockpit-body"
-            data-testid="input-date"
-          />
-          <Select value={shiftCode || undefined} onValueChange={setShiftCode} disabled={availableShiftCodes.length === 0}>
-            <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-shift">
-              <SelectValue placeholder="Shift" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableShiftCodes.length > 0 ? (
-                availableShiftCodes.map((code) => (
-                  <SelectItem key={code} value={code}>{code}</SelectItem>
-                ))
-              ) : (
-                <SelectItem value="__no_shift_codes" disabled>No shifts</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-          {shiftCodesError ? (
-            <span className="cockpit-body text-[11px] text-red-600" data-testid="shift-codes-error">
-              {shiftCodesError}
-            </span>
-          ) : null}
-          <Select value={line} onValueChange={setLine}>
-            <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-line">
-              <SelectValue placeholder="Line" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Lines</SelectItem>
-              {lineOptions.map((l) => (
-                <SelectItem key={l} value={l}>{l}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label className="flex items-center gap-1.5 cockpit-body cursor-pointer ml-2">
-            <input
-              type="checkbox"
-              checked={showResolved}
-              onChange={(e) => setShowResolved(e.target.checked)}
-              className="rounded-sm border-[var(--hairline)]"
-              data-testid="cockpit-show-resolved"
-            />
-            Show resolved
-          </label>
-        </div>
-        {!summaryLoading && summary != null && (
-          <span className="gov-kicker cockpit-num" data-testid="cockpit-active-count">
-            Open decisions: {summary.active_total}
-          </span>
-        )}
-      </header>
-    </>
-  );
+  const handleTileClick = (id: typeof activePanel) => {
+    setActivePanel((current) => (current === id ? "none" : id));
+  };
+
+  function getRootCausePrimary(issue: CockpitIssueRow): string {
+    const rc = issue.root_cause as Record<string, unknown> | null | undefined;
+    const primary = rc?.primary;
+    return typeof primary === "string" ? primary : "—";
+  }
 
   const debugPanel = (
     <div data-testid="cockpit-debug-panel">
@@ -779,8 +828,62 @@ export default function CockpitPage() {
     </div>
   );
 
+  // Deterministic readiness from issues[] (no backend change)
+  const totalActive = issues.length;
+  const blockingCount = issues.filter((i) => i.severity === "BLOCKING").length;
+  const warningCount = issues.filter((i) => i.severity === "WARNING").length;
+  const illegalCount = issues.filter((i) => (i.issue_type ?? (i as { type?: string }).type) === "ILLEGAL").length;
+  const unstaffedCount = issues.filter((i) => (i.issue_type ?? (i as { type?: string }).type) === "UNSTAFFED").length;
+  const blockingIssues = issues.filter((i) => i.severity === "BLOCKING");
+  const warningIssues = issues.filter((i) => i.severity === "WARNING");
+  const uniqueStationsBlocking = new Set(blockingIssues.map((i) => i.station_id ?? i.station_name ?? "")).size;
+  const uniqueStationsWarning = new Set(warningIssues.map((i) => i.station_id ?? i.station_name ?? "")).size;
+  const readinessStatus: ReadinessStatus =
+    illegalCount > 0 ? "NO-GO" : blockingCount > 0 ? "NO-GO" : warningCount > 0 ? "WARNING" : "GO";
+  const readinessSubtitle =
+    readinessStatus === "NO-GO"
+      ? `${blockingCount} blocking issue(s) across ${uniqueStationsBlocking} station(s)`
+      : readinessStatus === "WARNING"
+        ? `${warningCount} warning(s) across ${uniqueStationsWarning} station(s)`
+        : "No active issues";
+  const issueTypeOrder = (t: string) => (t === "ILLEGAL" ? 0 : t === "UNSTAFFED" ? 1 : t === "NO_GO" ? 2 : 3);
+  const topStations: ReadinessTopStationRow[] = [...issues]
+    .sort((a, b) => {
+      if (a.severity !== b.severity) return a.severity === "BLOCKING" ? -1 : 1;
+      return issueTypeOrder((a.issue_type ?? (a as { type?: string }).type) ?? "") - issueTypeOrder((b.issue_type ?? (b as { type?: string }).type) ?? "");
+    })
+    .slice(0, 8)
+    .map((issue) => ({
+      station_name: issue.station_name ?? issue.station_code ?? "",
+      station_id: issue.station_id ?? "",
+      issue_type: (issue.issue_type ?? (issue as { type?: string }).type) ?? "",
+      root_cause_primary: getRootCausePrimary(issue),
+      shift_code: issue.shift_code ?? "",
+      date: issue.date ?? "",
+      issue,
+    }));
+  const readinessCounts: ReadinessCounts = {
+    totalActive,
+    blockingCount,
+    warningCount,
+    illegalCount,
+    unstaffedCount,
+  };
+  const blockersCount = blockingCount;
+
+  const emptyStatePanel = (
+    <div className="py-8 text-center">
+      <p className="text-sm" style={{ color: "var(--text-2)" }}>
+        Not configured yet for this pilot dataset.
+      </p>
+      <Button disabled className="mt-3" size="sm" variant="outline">
+        Configure
+      </Button>
+    </div>
+  );
+
   return (
-    <PageFrame filterBar={filterBar} debugPanel={debugPanel}>
+    <PageFrame debugPanel={debugPanel}>
       {summary && summary.active_total === 0 && !summaryLoading && (
         <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
@@ -816,147 +919,187 @@ export default function CockpitPage() {
         </div>
       )}
 
-      {/* Hero: shift legitimacy status */}
-      {!summaryLoading && summary != null && (
-        <section
-          className="gov-panel gov-panel--elevated py-16 md:py-20 text-center animate-in fade-in duration-300"
-          data-testid="cockpit-hero"
-        >
-          <div className="space-y-4 px-6">
-            <p className="gov-kicker">Execution Legitimacy</p>
-            <h1
-              className={[
-                "text-4xl font-extrabold tracking-tight md:text-5xl leading-none",
-                summary.shift_legitimacy_status === "GO" && "cockpit-status-ok",
-                summary.shift_legitimacy_status === "WARNING" && "cockpit-status-at-risk",
-                summary.shift_legitimacy_status === "ILLEGAL" && "cockpit-status-blocking",
-              ].filter(Boolean).join(" ")}
-            >
-              {summary.shift_legitimacy_status === "GO" && "SHIFT READY"}
-              {summary.shift_legitimacy_status === "WARNING" && "SHIFT AT RISK"}
-              {summary.shift_legitimacy_status === "ILLEGAL" && "SHIFT NOT LEGALLY READY"}
-            </h1>
-            <p className="text-sm" style={{ color: "var(--text-2)" }}>
-              {summary.illegal_count} blockers · {summary.warning_count} expiring soon
-            </p>
-          </div>
-        </section>
-      )}
+      {/* Executive Overview */}
+      {!isDemoMode() && (
+        <>
+          <ExecutiveHeader
+            userName={userName}
+            date={date}
+            onDateChange={setDate}
+            shiftCode={shiftCode}
+            onShiftCodeChange={setShiftCode}
+            availableShiftCodes={availableShiftCodes}
+            shiftCodesError={shiftCodesError}
+            line={line}
+            onLineChange={setLine}
+            lineOptions={lineOptions}
+            showResolved={showResolved}
+            onShowResolvedChange={setShowResolved}
+          />
 
-      {/* Conditional detail: blocking / at-risk operators */}
-      {!summaryLoading && summary != null && (summary.shift_legitimacy_status === "ILLEGAL" || summary.shift_legitimacy_status === "WARNING") && (
-        <section className="mt-8 max-w-2xl mx-auto gov-panel p-6" data-testid="cockpit-detail">
-          {summary.shift_legitimacy_status === "ILLEGAL" && (
-            <>
-              <h2 className="gov-kicker mb-3">
-                Blocking operators
-              </h2>
-              {legitimacyDrilldownLoading ? (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>Loading…</p>
-              ) : legitimacyDrilldown && legitimacyDrilldown.blocking_employees.length > 0 ? (
-                <ul>
-                  {legitimacyDrilldown.blocking_employees.map((emp) => (
-                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t first:border-t-0" style={{ borderColor: "var(--hairline-soft)" }}>
-                      <span className="font-medium" style={{ color: "var(--text)" }}>{emp.name || "—"}</span>
-                      <div className="flex flex-wrap gap-1.5 justify-end">
-                        {emp.reasons.map((r) => (
-                          <span key={r} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ color: "var(--text-2)", background: "var(--surface-2)" }}>
-                            {r}
-                          </span>
-                        ))}
-                      </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="kpi-tile-grid">
+            <KpiTile
+              tileId="kpi-readiness"
+              title="Readiness"
+              primaryValue={readinessStatus}
+              secondaryLabel={readinessStatus === "NO-GO" ? "Blocking" : readinessStatus === "WARNING" ? "Warnings" : "Active"}
+              secondaryValue={readinessStatus === "NO-GO" ? blockingCount : readinessStatus === "WARNING" ? warningCount : 0}
+              statusChip={readinessStatus === "NO-GO" ? "NO-GO" : readinessStatus === "WARNING" ? "AT RISK" : "GO"}
+              statusChipVariant={
+                readinessStatus === "NO-GO" ? "blocking" : readinessStatus === "WARNING" ? "warning" : "ok"
+              }
+              onClick={() => handleTileClick("readiness")}
+            />
+            <KpiTile
+              tileId="kpi-blockers"
+              title="Blockers"
+              primaryValue={blockersCount}
+              onClick={() => handleTileClick("blockers")}
+            />
+            <KpiTile
+              tileId="kpi-restricted"
+              title="Restricted"
+              primaryValue="—"
+              onClick={() => handleTileClick("restricted")}
+            />
+            <KpiTile
+              tileId="kpi-expiring"
+              title="Expiring soon"
+              primaryValue={complianceExpiring?.expiringCount ?? "—"}
+              secondaryLabel="Expired"
+              secondaryValue={complianceExpiring?.expiredCount}
+              statusChip={
+                (complianceExpiring?.expiredCount ?? 0) > 0
+                  ? "EXPIRED"
+                  : (complianceExpiring?.expiringCount ?? 0) > 0
+                    ? "EXPIRING"
+                    : "OK"
+              }
+              statusChipVariant={
+                (complianceExpiring?.expiredCount ?? 0) > 0
+                  ? "blocking"
+                  : (complianceExpiring?.expiringCount ?? 0) > 0
+                    ? "warning"
+                    : "ok"
+              }
+              onClick={() => handleTileClick("expiring")}
+            />
+            <KpiTile
+              tileId="kpi-decisions"
+              title="Open Decisions"
+              primaryValue={issues.length}
+              onClick={() => handleTileClick("decisions")}
+            />
+            <KpiTile
+              tileId="kpi-interventions"
+              title="Intervention Queue"
+              primaryValue={issues.length}
+              onClick={() => handleTileClick("interventions")}
+            />
+          </div>
+
+          <DecisionQueueInlinePanel
+            open={activePanel === "decisions"}
+            issues={issues}
+            markedPlannedIds={markedPlannedIds}
+            mode={decisionQueueMode}
+            onModeChange={setDecisionQueueMode}
+            shiftCode={shiftCode}
+            availableShiftCodes={availableShiftCodes}
+            onShiftCodeChange={setShiftCode}
+            onRowClick={handleIssueRowClick}
+            onClose={() => setActivePanel("none")}
+            sessionOk={sessionOk}
+          />
+
+          <InlinePanelShell
+            open={activePanel === "blockers"}
+            title="Blockers"
+            subtitle="Blocking issues requiring review."
+            onClose={() => setActivePanel("none")}
+            dataTestId="blockers-panel"
+          >
+            {(() => {
+              const blockingList = issues.filter((i) => !i.resolved && i.severity === "BLOCKING");
+              if (blockingList.length === 0) {
+                return <p className="text-sm py-4" style={{ color: "var(--text-2)" }}>No blocking issues.</p>;
+              }
+              return (
+                <ul className="space-y-0">
+                  {blockingList.map((issue) => (
+                    <li key={issue.issue_id}>
+                      <button
+                        type="button"
+                        onClick={() => sessionOk && handleIssueRowClick(issue)}
+                        disabled={!sessionOk}
+                        className="w-full flex items-center gap-4 py-3 px-0 text-left rounded-md transition-colors border-b border-[var(--hairline-soft)] last:border-b-0 hover:bg-[var(--surface-2)] cursor-pointer"
+                        data-testid={`blockers-row-${issue.issue_id}`}
+                      >
+                        <span className="min-w-0 flex-1 truncate font-medium" style={{ color: "var(--text)" }}>
+                          {issue.station_name ?? issue.station_code ?? issue.station_id ?? "—"}
+                        </span>
+                        <span className="min-w-0 max-w-[50%] truncate text-sm" style={{ color: "var(--text-2)" }}>
+                          {getRootCausePrimary(issue)}
+                        </span>
+                        <span className="text-xs cockpit-status-blocking font-medium shrink-0">Review</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>No blocking operators listed.</p>
-              )}
-            </>
-          )}
-          {summary.shift_legitimacy_status === "WARNING" && (
-            <>
-              <h2 className="gov-kicker mb-3">
-                At risk
-              </h2>
-              {legitimacyDrilldownLoading ? (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>Loading…</p>
-              ) : legitimacyDrilldown && legitimacyDrilldown.warning_employees.length > 0 ? (
-                <ul>
-                  {legitimacyDrilldown.warning_employees.map((emp) => (
-                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t first:border-t-0" style={{ borderColor: "var(--hairline-soft)" }}>
-                      <span className="font-medium" style={{ color: "var(--text)" }}>{emp.name || "—"}</span>
-                      <div className="flex flex-wrap gap-1.5 justify-end">
-                        {emp.reasons.map((r) => (
-                          <span key={r} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ color: "var(--text-2)", background: "var(--surface-2)" }}>
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>No at-risk operators listed.</p>
-              )}
-            </>
-          )}
-        </section>
-      )}
+              );
+            })()}
+          </InlinePanelShell>
 
-      {/* Supporting metrics: compact row */}
-      {!summaryLoading && summary != null && (
-        <div className="mt-10 gov-panel p-6" data-testid="cockpit-metrics">
-          <div className="flex flex-wrap items-baseline gap-10">
-            <div>
-              <p className="gov-kicker">Open decisions</p>
-              <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{summary.active_total}</p>
-            </div>
-            <div>
-              <p className="gov-kicker">Blockers</p>
-              <p className="text-lg font-semibold tabular-nums mt-1 cockpit-status-blocking">{summary.illegal_count}</p>
-            </div>
-            <div>
-              <p className="gov-kicker">Restricted</p>
-              <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{summary.restricted_count ?? 0}</p>
-            </div>
-            <div>
-              <p className="gov-kicker">Expiring soon</p>
-              <p className="text-lg font-semibold tabular-nums mt-1 cockpit-status-at-risk">{summary.warning_count}</p>
-            </div>
-            {!isDemoMode() && (
-              <div title={`Blocking: ${blockingCount} × 25 · Warnings: ${warningCount} × 8`}>
-                <p className="gov-kicker">Readiness</p>
-                <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{fragilityIndex}</p>
-              </div>
-            )}
-          </div>
-        </div>
+          <ReadinessPanel
+            open={activePanel === "readiness"}
+            title="Readiness"
+            onClose={() => setActivePanel("none")}
+            status={readinessStatus}
+            subtitle={readinessSubtitle}
+            counts={readinessCounts}
+            topStations={topStations}
+            onRowClick={handleIssueRowClick}
+            sessionOk={sessionOk}
+          />
+          <InlinePanelShell
+            open={activePanel === "restricted"}
+            title="Restricted"
+            subtitle="Restricted coverage."
+            onClose={() => setActivePanel("none")}
+            dataTestId="restricted-panel"
+          >
+            {emptyStatePanel}
+          </InlinePanelShell>
+          <ExpiringSoonPanel
+            open={activePanel === "expiring"}
+            title="Expiring soon"
+            onClose={() => setActivePanel("none")}
+            expiredCount={complianceExpiring?.expiredCount ?? 0}
+            expiringCount={complianceExpiring?.expiringCount ?? 0}
+            top10={complianceExpiring?.top10 ?? []}
+            sessionOk={sessionOk}
+            loading={complianceExpiringLoading}
+          />
+          <InlinePanelShell
+            open={activePanel === "interventions"}
+            title="Intervention Queue"
+            subtitle="Actions that require follow-up."
+            onClose={() => setActivePanel("none")}
+            dataTestId="interventions-panel"
+          >
+            {emptyStatePanel}
+          </InlinePanelShell>
+        </>
       )}
 
       {!isDemoMode() && (
-        <div className="mt-10">
-          <InterventionQueue
-            issues={issues}
-            markedPlannedIds={markedPlannedIds}
-            currentFragility={fragilityIndex}
-            sessionOk={sessionOk}
-            onMarkPlanned={(issueId) => setMarkedPlannedIds((prev) => {
-              const next = new Set(prev);
-              if (next.has(issueId)) next.delete(issueId);
-              else next.add(issueId);
-              return next;
-            })}
-            onViewDecision={(issue) => {
-              setSelectedIssue(issue);
-              setIssueDrawerOpen(true);
-            }}
-          />
-          <h2 className="gov-kicker mb-3 mt-6">Decision queue</h2>
+        <div className="mt-10" data-testid="cockpit-issues-section">
           <IssueTable
             issues={issues}
             loading={issuesLoading}
             error={issuesError}
             onRowClick={handleIssueRowClick}
+            markedPlannedIds={markedPlannedIds}
             sessionOk={sessionOk}
           />
         </div>
@@ -994,10 +1137,13 @@ export default function CockpitPage() {
         onOpenChange={setIssueDrawerOpen}
         issue={selectedIssue}
         onAcknowledge={() => handleIssueDecision("acknowledged")}
-        onPlanTraining={() => handleIssueDecision("plan_training")}
+        onPlanAction={handlePlanAction}
+        onPlanTraining={handlePlanTraining}
         onSwap={() => handleIssueDecision("swap")}
         onEscalate={() => handleIssueDecision("escalate")}
+        onResolve={() => handleIssueDecision("acknowledged")}
         isAcknowledged={selectedIssue?.resolved ?? false}
+        planned={selectedIssue ? markedPlannedIds.has(selectedIssue.issue_id) : false}
         sessionOk={sessionOk}
       />
     </PageFrame>

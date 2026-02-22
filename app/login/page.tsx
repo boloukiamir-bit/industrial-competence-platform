@@ -1,15 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmail, getSession } from '@/services/auth';
 import { isSupabaseReady, supabase } from '@/lib/supabaseClient';
-import { getRoleRedirectPath } from '@/hooks/useProfile';
 import { Loader2 } from 'lucide-react';
 import { LoginShell2030 } from '@/components/auth/LoginShell2030';
 
-export default function LoginPage() {
+/** Default landing after login. */
+const DEFAULT_POST_LOGIN_PATH = '/app/cockpit';
+
+/**
+ * Resolve redirect path after login: honor next= if safe, else cockpit.
+ * Prevents redirect to /login (infinite loop) and allows only app paths.
+ */
+function getRedirectAfterLogin(next: string | null): string {
+  const raw = next?.trim();
+  if (!raw || raw === '/login' || raw.startsWith('/login?')) return DEFAULT_POST_LOGIN_PATH;
+  if (!raw.startsWith('/')) return DEFAULT_POST_LOGIN_PATH;
+  if (raw.includes('//') || raw.startsWith('http')) return DEFAULT_POST_LOGIN_PATH;
+  return raw;
+}
+
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,6 +34,8 @@ export default function LoginPage() {
   const [bootstrapStatus, setBootstrapStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [bootstrapMessage, setBootstrapMessage] = useState<string | null>(null);
   const [showBootstrap, setShowBootstrap] = useState(false);
+
+  const nextParam = useMemo(() => searchParams.get('next'), [searchParams]);
 
   useEffect(() => {
     const configured = isSupabaseReady();
@@ -44,12 +61,7 @@ export default function LoginPage() {
             }),
             credentials: 'include',
           });
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-          const redirectPath = getRoleRedirectPath(profile?.role || null);
+          const redirectPath = getRedirectAfterLogin(nextParam);
           router.replace(redirectPath);
         } else {
           setCheckingSession(false);
@@ -60,7 +72,7 @@ export default function LoginPage() {
       }
     }
     checkExistingSession();
-  }, [router]);
+  }, [router, nextParam]);
 
   async function checkBootstrapStatus(userId: string): Promise<{ needsBootstrap: boolean; role: string | null }> {
     try {
@@ -129,8 +141,7 @@ export default function LoginPage() {
           return;
         }
 
-        // Redirect based on role
-        const redirectPath = getRoleRedirectPath(role);
+        const redirectPath = getRedirectAfterLogin(nextParam);
         router.replace(redirectPath);
       }
     } catch (error: unknown) {
@@ -301,5 +312,22 @@ export default function LoginPage() {
         </p>
       )}
     </LoginShell2030>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <LoginShell2030>
+          <div className="flex items-center justify-center gap-2 text-muted-foreground py-12">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <p className="text-sm">Loading...</p>
+          </div>
+        </LoginShell2030>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

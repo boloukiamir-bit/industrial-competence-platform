@@ -18,11 +18,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle } from "lucide-react";
+import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle, ClipboardList } from "lucide-react";
 import { fetchJson } from "@/lib/coreFetch";
 import { cn } from "@/lib/utils";
 import type { DrilldownRosterItem } from "@/app/api/cockpit/issues/drilldown/route";
-import { COST_ENGINE, formatSekRange } from "@/lib/cockpitCostEngine";
 import { EmployeeDrawer } from "@/components/employees/EmployeeDrawer";
 
 export type CockpitIssueRow = {
@@ -69,10 +68,14 @@ export type IssueDrawerProps = {
   onOpenChange: (open: boolean) => void;
   issue: CockpitIssueRow | null;
   onAcknowledge: () => Promise<void>;
-  onPlanTraining: () => Promise<void>;
+  onPlanAction?: () => void | Promise<void>;
+  onPlanTraining?: () => void | Promise<void>;
   onSwap: () => Promise<void>;
   onEscalate: () => Promise<void>;
+  onResolve?: () => Promise<void>;
   isAcknowledged: boolean;
+  /** True when issue is marked as planned (action or training) — shows PLANNED badge, keeps issue visible. */
+  planned?: boolean;
   /** When false, roster rows are not clickable (no employee drawer). */
   sessionOk?: boolean;
 };
@@ -97,88 +100,21 @@ function rosterLabel(r: DrilldownRosterItem): string {
   return r.employee_anst_id;
 }
 
-function DecisionImpactBlock({ issue }: { issue: CockpitIssueRow }) {
-  const severity = issue.severity;
-  const range = COST_ENGINE[severity];
-  const isAcceptedRisk = issue.resolved && issue.decision_actions?.includes?.("acknowledged");
-  const isMitigated = issue.resolved && !isAcceptedRisk;
-
-  return (
-    <div className="rounded-sm p-3 space-y-3" style={{ border: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))", background: "var(--surface-2, #F9FAFB)" }}>
-      <p className="gov-kicker">Effect</p>
-      {issue.resolved ? (
-        <>
-          {isMitigated && (
-            <div className="rounded-sm border border-green-200 bg-green-50/50 p-2.5 space-y-1.5">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Cost avoided</p>
-                  <p className="font-medium tabular-nums text-green-700">{formatSekRange(range.costMin, range.costMax)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Time saved</p>
-                  <p className="font-medium tabular-nums text-green-700">{range.hoursMin}–{range.hoursMax} op·h</p>
-                </div>
-              </div>
-            </div>
-          )}
-          {isAcceptedRisk && (
-            <div className="rounded-sm border border-amber-200 bg-amber-50/50 p-2.5 space-y-1.5">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Cost deferred</p>
-                  <p className="font-medium tabular-nums text-amber-700">{formatSekRange(range.costMin, range.costMax)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Time deferred</p>
-                  <p className="font-medium tabular-nums text-amber-700">{range.hoursMin}–{range.hoursMax} op·h</p>
-                </div>
-              </div>
-            </div>
-          )}
-          <p className="text-xs pt-2 mt-2" style={{ color: "var(--text-3)", borderTop: "1px solid var(--hairline-soft)" }}>
-            After: {isAcceptedRisk ? "May recur next 1–2 shifts" : "Next 7 days"}
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            <div>
-              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Cost</p>
-              <p className="font-medium tabular-nums">{formatSekRange(range.costMin, range.costMax)}</p>
-            </div>
-            <div>
-              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Time</p>
-              <p className="font-medium tabular-nums">{range.hoursMin}–{range.hoursMax} op·h</p>
-            </div>
-            <div>
-              <p className="text-[10px]" style={{ color: "var(--text-3)" }}>Fragility Δ</p>
-              <p className="font-medium tabular-nums text-green-700">
-                {severity === "BLOCKING" ? "−25" : "−8"}
-              </p>
-            </div>
-          </div>
-          <p className="text-xs pt-2 mt-2" style={{ color: "var(--text-3)", borderTop: "1px solid var(--hairline-soft)" }}>
-            After: Next 1–2 shifts
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
-
 export function IssueDrawer({
   open,
   onOpenChange,
   issue,
   onAcknowledge,
+  onPlanAction,
   onPlanTraining,
   onSwap,
   onEscalate,
+  onResolve,
   isAcknowledged,
+  planned = false,
   sessionOk = true,
 }: IssueDrawerProps) {
-  const [submitting, setSubmitting] = useState<"ack" | "plan" | "swap" | "escalate" | null>(null);
+  const [submitting, setSubmitting] = useState<"ack" | "plan_action" | "plan_training" | "swap" | "escalate" | "resolve" | null>(null);
   const [drilldown, setDrilldown] = useState<DrilldownState>(null);
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [drilldownError, setDrilldownError] = useState<string | null>(null);
@@ -313,10 +249,33 @@ export function IssueDrawer({
     }
   };
 
+  const handlePlanAction = async () => {
+    if (!onPlanAction) return;
+    setSubmitting("plan_action");
+    try {
+      await onPlanAction();
+      // Planned: do NOT close drawer; parent sets planned state and keeps issue visible
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
   const handlePlanTraining = async () => {
-    setSubmitting("plan");
+    if (!onPlanTraining) return;
+    setSubmitting("plan_training");
     try {
       await onPlanTraining();
+      // Planned: do NOT close drawer; parent sets planned state and keeps issue visible
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!onResolve) return;
+    setSubmitting("resolve");
+    try {
+      await onResolve();
       onOpenChange(false);
     } finally {
       setSubmitting(null);
@@ -350,72 +309,70 @@ export function IssueDrawer({
   const stationName = issue.station_name ?? issue.station_code ?? issue.station_id?.slice(0, 8) ?? "—";
   const showActions = !isAcknowledged && issue.station_id && issue.shift_code;
 
+  const statusBadge = (issue.issue_type ?? issue.type ?? issue.severity) as string;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Station coverage decision</SheetTitle>
-          <SheetDescription>
-            {issue.area ?? issue.line ?? "—"} • {stationName} • {issue.shift_code}
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="mt-6 space-y-6">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant={issue.severity === "BLOCKING" ? "destructive" : "secondary"}>
-              {issue.severity}
-            </Badge>
-            <Badge variant="outline">{issue.type}</Badge>
-            {issue.resolved && (
-              <Badge variant="outline" className="text-green-600 border-green-300">
-                Closed
+      <SheetContent className="sm:max-w-lg flex flex-col p-0 gap-0 h-full max-h-[100dvh]" aria-describedby={undefined}>
+        <div className="flex-none shrink-0 border-b bg-background pl-6 pr-14 py-4">
+          <SheetHeader className="space-y-1 text-left">
+            <SheetTitle className="text-base font-semibold leading-tight">
+              {stationName} · {issue.shift_code}
+            </SheetTitle>
+            <SheetDescription className="text-sm text-muted-foreground">
+              {issue.area ?? issue.line ?? "—"}
+            </SheetDescription>
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <Badge variant={issue.severity === "BLOCKING" ? "destructive" : "secondary"}>
+                {statusBadge === "NO_GO" ? "NO-GO" : statusBadge === "UNSTAFFED" ? "UNSTAFFED" : statusBadge === "ILLEGAL" ? "ILLEGAL" : statusBadge}
               </Badge>
-            )}
-            {issue.resolved && issue.decision_actions?.includes?.("acknowledged") && (
-              <Badge variant="outline" className="text-amber-700 border-amber-400 bg-amber-50 font-medium" title="Risk accepted and logged for audit">
-                Accepted Risk (Logged)
-              </Badge>
-            )}
-          </div>
-
-          <DecisionImpactBlock issue={issue} />
-          {issue.resolved && issue.decision_actions?.includes?.("acknowledged") && (
-            <div className="rounded-sm border border-amber-200 bg-amber-50/50 p-3" role="status">
-              <p className="text-xs font-medium text-amber-800">Recurrence awareness</p>
-              <p className="text-xs text-amber-700 mt-0.5">
-                Accepted risks at this station are likely to reoccur in upcoming shifts unless roster or competence changes. Consider planning for next shift.
-              </p>
+              {issue.resolved && (
+                <Badge variant="outline" className="text-green-600 border-green-300">Closed</Badge>
+              )}
+              {issue.resolved && issue.decision_actions?.includes?.("acknowledged") && (
+                <Badge variant="outline" className="text-amber-700 border-amber-400 bg-amber-50 font-medium" title="Risk accepted and logged for audit">
+                  Accepted Risk
+                </Badge>
+              )}
+              {planned && (
+                <Badge variant="secondary" className="text-muted-foreground font-normal">PLANNED</Badge>
+              )}
             </div>
+          </SheetHeader>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
+          {primary && (
+            <section>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Summary</p>
+              <p className="text-sm leading-snug">{primary}</p>
+            </section>
           )}
 
-          <div className="rounded-sm p-3 space-y-2" style={{ border: "1px dashed var(--hairline)", background: "var(--surface-2, #F9FAFB)" }}>
-            <p className="gov-kicker">Shadow capacity (read-only)</p>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">Fully qualified (GO)</p>
-                <p className="font-medium tabular-nums">{drilldown?.kpis?.go ?? 0}</p>
+          <section>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Evidence</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Blocking</p>
+                <p className="text-lg font-bold tabular-nums mt-0.5 text-destructive">{noGoCount}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total roster</p>
-                <p className="font-medium tabular-nums">{rosterHeadcount}</p>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Warnings</p>
+                <p className="text-lg font-bold tabular-nums mt-0.5 text-amber-600">{warningCount}</p>
+              </div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Roster</p>
+                <p className="text-lg font-bold tabular-nums mt-0.5">{rosterHeadcount}</p>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg border p-3 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Roster</p>
-              <p className="text-xl font-bold tabular-nums mt-0.5">{rosterHeadcount}</p>
-            </div>
-            <div className="rounded-lg border p-3 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">NO-GO</p>
-              <p className="text-xl font-bold tabular-nums mt-0.5 text-destructive">{noGoCount}</p>
-            </div>
-            <div className="rounded-lg border p-3 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Warning</p>
-              <p className="text-xl font-bold tabular-nums mt-0.5 text-amber-600">{warningCount}</p>
-            </div>
-          </div>
+          {issue.recommended_action && (
+            <section>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Recommended action</p>
+              <p className="text-sm">{issue.recommended_action}</p>
+            </section>
+          )}
 
           {drilldownError && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 flex items-start gap-2" role="alert">
@@ -429,201 +386,113 @@ export function IssueDrawer({
             </div>
           )}
 
-          {!drilldownError && (
-            <div>
+          {!drilldownError && (drilldown?.blockers?.length ?? 0) + (drilldown?.warnings?.length ?? 0) > 0 && (
+            <section>
               {rosterResolveError && (
-                <div className="mb-2" role="alert">
-                  <p className="text-sm text-destructive">{rosterResolveError}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Employee missing identifier in roster payload.</p>
-                </div>
+                <p className="text-sm text-destructive mb-2" role="alert">{rosterResolveError}</p>
               )}
-              {resolvingEmployee && (
-                <p className="text-xs text-muted-foreground mb-2">Resolving employee…</p>
-              )}
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Roster</p>
-              <p className="text-xs font-semibold text-muted-foreground mb-2">Blockers (NO-GO)</p>
+              {resolvingEmployee && <p className="text-xs text-muted-foreground mb-2">Resolving employee…</p>}
               {drilldownLoading ? (
-                <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
-              ) : drilldown && drilldown.blockers.length > 0 ? (
-                <ul className="space-y-2 mb-4">
-                  {drilldown.blockers.map((r) => (
-                    <li
-                      key={r.employee_anst_id}
-                      className={cn(
-                        "flex items-center justify-between rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm transition-colors",
-                        sessionOk ? "cursor-pointer hover:bg-destructive/10" : "cursor-not-allowed opacity-60"
-                      )}
-                      onClick={() => handleRosterEmployeeClick(r)}
-                      title={sessionOk ? undefined : "Sign in to interact"}
-                    >
-                      <span className="font-medium">{rosterLabel(r)}</span>
-                      <span className="text-muted-foreground tabular-nums">
-                        {r.actual_level ?? "—"} / {r.required_level}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : drilldown && !drilldownLoading ? (
-                <p className="text-sm text-muted-foreground py-2">None</p>
-              ) : null}
-
-              <p className="text-xs font-semibold text-muted-foreground mb-2 mt-4">Warnings</p>
-              {!drilldownLoading && drilldown && drilldown.warnings.length > 0 ? (
-                <ul className="space-y-2">
-                  {drilldown.warnings.map((r) => (
-                    <li
-                      key={r.employee_anst_id}
-                      className={cn(
-                        "flex items-center justify-between rounded border px-3 py-2 text-sm transition-colors",
-                        sessionOk ? "cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60"
-                      )}
-                      onClick={() => handleRosterEmployeeClick(r)}
-                      title={sessionOk ? undefined : "Sign in to interact"}
-                    >
-                      <span className="font-medium">{rosterLabel(r)}</span>
-                      <span className="text-muted-foreground tabular-nums">
-                        {r.actual_level ?? "—"} / {r.required_level}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : !drilldownLoading && drilldown ? (
-                <p className="text-sm text-muted-foreground py-2">None</p>
-              ) : null}
-
-              {!drilldownLoading && drilldown && drilldown.roster.length > 0 && (
-                <>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2 mt-4">All roster</p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Person</TableHead>
-                        <TableHead>Actual / Required</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {drilldown.roster.map((r) => (
-                        <TableRow
-                          key={r.employee_anst_id}
-                          className={cn(
-                            "transition-colors",
-                            sessionOk ? "cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60"
-                          )}
-                          onClick={() => handleRosterEmployeeClick(r)}
-                          title={sessionOk ? undefined : "Sign in to interact"}
-                        >
-                          <TableCell className="font-medium text-sm">{rosterLabel(r)}</TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {r.actual_level ?? "—"} / {r.required_level}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={statusVariant(r.status)} className="text-[10px]">
-                              {r.status.replace("_", "-")}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </>
+              ) : (
+                <div className="space-y-3">
+                  {drilldown && drilldown.blockers.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Blockers (NO-GO)</p>
+                      <ul className="space-y-1">
+                        {drilldown.blockers.map((r) => (
+                          <li
+                            key={r.employee_anst_id}
+                            className={cn(
+                              "flex items-center justify-between rounded border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-sm",
+                              sessionOk && "cursor-pointer hover:bg-destructive/10"
+                            )}
+                            onClick={() => handleRosterEmployeeClick(r)}
+                            title={sessionOk ? undefined : "Sign in to interact"}
+                          >
+                            <span className="font-medium truncate">{rosterLabel(r)}</span>
+                            <span className="text-muted-foreground tabular-nums text-xs">{r.actual_level ?? "—"} / {r.required_level}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {drilldown && drilldown.warnings.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Warnings</p>
+                      <ul className="space-y-1">
+                        {drilldown.warnings.map((r) => (
+                          <li
+                            key={r.employee_anst_id}
+                            className={cn(
+                              "flex items-center justify-between rounded border px-2.5 py-1.5 text-sm",
+                              sessionOk && "cursor-pointer hover:bg-muted/50"
+                            )}
+                            onClick={() => handleRosterEmployeeClick(r)}
+                            title={sessionOk ? undefined : "Sign in to interact"}
+                          >
+                            <span className="font-medium truncate">{rosterLabel(r)}</span>
+                            <span className="text-muted-foreground tabular-nums text-xs">{r.actual_level ?? "—"} / {r.required_level}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
-
-              {!drilldownLoading && drilldown && drilldown.roster.length === 0 && !drilldownError && (
-                <p className="text-sm text-muted-foreground py-4">No roster data for this station/shift.</p>
-              )}
-            </div>
-          )}
-
-          {primary && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                Root cause
-              </p>
-              <p className="text-sm">{primary}</p>
-            </div>
-          )}
-
-          {issue.recommended_action && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                Recommended actions
-              </p>
-              <p className="text-sm">{issue.recommended_action}</p>
-            </div>
-          )}
-
-          {showActions && (
-            <div className="flex flex-col gap-2 pt-4 border-t">
-              <Button
-                onClick={handleAcknowledge}
-                disabled={!!submitting}
-                variant="outline"
-                className="w-full"
-                data-testid="btn-acknowledge"
-              >
-                {submitting === "ack" ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                )}
-                Record decision
-              </Button>
-              <Button
-                onClick={handlePlanTraining}
-                disabled={!!submitting}
-                variant="outline"
-                className="w-full"
-                data-testid="btn-plan-training"
-              >
-                {submitting === "plan" ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <GraduationCap className="h-4 w-4 mr-2" />
-                )}
-                Plan training
-              </Button>
-              <Button
-                onClick={handleSwap}
-                disabled={!!submitting}
-                variant="outline"
-                className="w-full"
-                data-testid="btn-swap"
-              >
-                {submitting === "swap" ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <ArrowLeftRight className="h-4 w-4 mr-2" />
-                )}
-                Swap
-              </Button>
-              <Button
-                onClick={handleEscalate}
-                disabled={!!submitting}
-                variant="outline"
-                className="w-full"
-                data-testid="btn-escalate"
-              >
-                {submitting === "escalate" ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 mr-2" />
-                )}
-                Escalate
-              </Button>
-            </div>
+            </section>
           )}
 
           {isAcknowledged && (
-            <div className="rounded-sm bg-green-50 border border-green-200 p-4">
+            <div className="rounded-sm bg-green-50 border border-green-200 p-3">
               <p className="text-sm text-green-800 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 Decision recorded
               </p>
             </div>
           )}
+        </div>
+
+        <div className="flex-none shrink-0 sticky bottom-0 border-t bg-background px-6 py-4">
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} data-testid="btn-close">
+              Close
+            </Button>
+            {onPlanAction && showActions && (
+              <Button onClick={handlePlanAction} disabled={!!submitting} variant="outline" data-testid="btn-plan-action">
+                {submitting === "plan_action" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardList className="h-4 w-4 mr-2" />}
+                Plan action
+              </Button>
+            )}
+            {onPlanTraining && showActions && (
+              <Button onClick={handlePlanTraining} disabled={!!submitting} variant="outline" data-testid="btn-plan-training">
+                {submitting === "plan_training" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <GraduationCap className="h-4 w-4 mr-2" />}
+                Plan training
+              </Button>
+            )}
+            {showActions && (
+              <Button onClick={handleAcknowledge} disabled={!!submitting} variant="default" data-testid="btn-acknowledge">
+                {submitting === "ack" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                Record decision
+              </Button>
+            )}
+            {onResolve && showActions && !issue.resolved && (
+              <Button onClick={handleResolve} disabled={!!submitting} variant="destructive" data-testid="btn-resolve">
+                {submitting === "resolve" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Resolve
+              </Button>
+            )}
+            <Button onClick={handleSwap} disabled={!!submitting} variant="outline" data-testid="btn-swap">
+              {submitting === "swap" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ArrowLeftRight className="h-4 w-4 mr-2" />}
+              Swap
+            </Button>
+            <Button onClick={handleEscalate} disabled={!!submitting} variant="outline" data-testid="btn-escalate">
+              {submitting === "escalate" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <AlertTriangle className="h-4 w-4 mr-2" />}
+              Escalate
+            </Button>
+          </div>
         </div>
       </SheetContent>
       <EmployeeDrawer

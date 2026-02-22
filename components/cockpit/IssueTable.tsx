@@ -19,6 +19,8 @@ export type IssueTableProps = {
   loading: boolean;
   error: string | null;
   onRowClick: (row: CockpitIssueRow) => void | Promise<void>;
+  /** Issue IDs marked as planned (client-only); show "Planned" pill on row. */
+  markedPlannedIds?: Set<string>;
   /** When false, rows are non-interactive (disabled cursor + tooltip). */
   sessionOk?: boolean;
 };
@@ -35,6 +37,7 @@ export function IssueTable({
   loading,
   error,
   onRowClick,
+  markedPlannedIds,
   sessionOk = true,
 }: IssueTableProps) {
   if (loading) {
@@ -111,6 +114,9 @@ export function IssueTable({
                     )}
                     {isAcceptedRisk && (
                       <span className="cockpit-label cockpit-status-at-risk">Accepted</span>
+                    )}
+                    {markedPlannedIds?.has(row.issue_id) && (
+                      <span className="cockpit-label text-muted-foreground border border-[var(--hairline-soft)]">Planned</span>
                     )}
                 </div>
               </TableCell>

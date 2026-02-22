@@ -84,20 +84,24 @@ export default function HrTemplatesPage() {
         const res = await fetch("/api/hr/workflows", { credentials: "include" });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
+          const msg = Array.isArray(data) ? "Failed to load workflows" : (data.error as string) || "Failed to load workflows";
           setWorkflows([]);
-          setError(Array.isArray(data) ? null : (data.error as string) || "Failed to load workflows");
+          setError(msg);
+          toast({ title: msg, variant: "destructive" });
           return;
         }
         setWorkflows(Array.isArray(data) ? data : []);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load workflows");
+        const msg = err instanceof Error ? err.message : "Failed to load workflows";
+        setError(msg);
         setWorkflows([]);
+        toast({ title: msg, variant: "destructive" });
       } finally {
         setLoading(false);
       }
     },
-    [currentOrg?.id]
+    [currentOrg?.id, toast]
   );
 
   useEffect(() => {
@@ -175,9 +179,15 @@ export default function HrTemplatesPage() {
             Checklists and workflows: Onboarding, Offboarding, Medical, Contract
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/app/hr/templates/compliance-actions">Compliance templates</Link>
+          </Button>
           <Button size="sm" variant="outline" asChild>
             <Link href="/app/hr/templates/action-packs">Action packs</Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/app/hr/workflows">HR Workflows</Link>
           </Button>
           <Button size="sm" variant="outline" asChild>
             <Link href="/app/hr">Go to HR Inbox</Link>
