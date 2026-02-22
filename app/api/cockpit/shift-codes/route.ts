@@ -18,6 +18,14 @@ type ShiftRow = {
   site_id?: string | null;
 };
 
+type RowFetchResult = {
+  rows: ShiftRow[];
+  error: PostgrestError | null;
+  source_table: string;
+  selected_columns: string;
+  site_scope_supported: boolean;
+};
+
 function sortShiftCodes(codes: string[]): string[] {
   return [...codes].sort((a, b) => {
     const i = PREFERRED_ORDER.indexOf(a);
@@ -58,9 +66,18 @@ function applySiteScopeQuery<T>(
   return (query as { or: (expr: string) => T }).or(`site_id.is.null,site_id.eq.${activeSiteId}`);
 }
 
-function hasMissingColumn(error: PostgrestError | null, column: "shift_code" | "shift_type"): boolean {
+function hasMissingColumn(error: PostgrestError | null, column: string): boolean {
   const message = (error?.message ?? "").toLowerCase();
   return message.includes(column) && message.includes("column");
+}
+
+function isMissingRelation(error: PostgrestError | null, relation: string): boolean {
+  const message = (error?.message ?? "").toLowerCase();
+  return (
+    message.includes(relation.toLowerCase()) &&
+    (message.includes("relation") || message.includes("table")) &&
+    (message.includes("does not exist") || message.includes("schema cache"))
+  );
 }
 
 async function fetchShiftRows(params: {
@@ -129,7 +146,101 @@ async function fetchShiftRows(params: {
   };
 }
 
-/** Distinct shift_code values from canonical shifts table for date, org and active site scope. */
+async function fetchScheduleRows(orgId: string): Promise<RowFetchResult> {
+  const primary = await supabaseAdmin
+    .from("shift_rules")
+    .select("site_id, shift_code, shift_type")
+    .eq("org_id", orgId);
+
+  if (!primary.error) {
+    return {
+      rows: Array.isArray(primary.data) ? (primary.data as ShiftRow[]) : [],
+      error: null,
+      source_table: "shift_rules",
+      selected_columns: "site_id, shift_code, shift_type",
+      site_scope_supported: true,
+    };
+  }
+
+  if (isMissingRelation(primary.error, "shift_rules")) {
+    const legacy = await supabaseAdmin
+      .from("pl_shift_templates")
+      .select("shift_code, shift_type")
+      .eq("org_id", orgId);
+    if (!legacy.error) {
+      return {
+        rows: Array.isArray(legacy.data) ? (legacy.data as ShiftRow[]) : [],
+        error: null,
+        source_table: "pl_shift_templates",
+        selected_columns: "shift_code, shift_type",
+        site_scope_supported: false,
+      };
+    }
+    const legacyFallback = await supabaseAdmin
+      .from("pl_shift_templates")
+      .select("shift_type")
+      .eq("org_id", orgId);
+    return {
+      rows: Array.isArray(legacyFallback.data) ? (legacyFallback.data as ShiftRow[]) : [],
+      error: legacyFallback.error,
+      source_table: "pl_shift_templates",
+      selected_columns: "shift_type",
+      site_scope_supported: false,
+    };
+  }
+
+  const missingSiteId = hasMissingColumn(primary.error, "site_id");
+  const missingShiftCode = hasMissingColumn(primary.error, "shift_code");
+  const missingShiftType = hasMissingColumn(primary.error, "shift_type");
+
+  const fallbackColumns: string[] = [];
+  if (!missingSiteId) fallbackColumns.push("site_id");
+  if (!missingShiftCode) fallbackColumns.push("shift_code");
+  if (!missingShiftType) fallbackColumns.push("shift_type");
+  if (!fallbackColumns.includes("shift_code") && !fallbackColumns.includes("shift_type")) {
+    fallbackColumns.push("shift_type");
+  }
+
+  const fallbackSelect = fallbackColumns.join(", ");
+  const fallback = await supabaseAdmin
+    .from("shift_rules")
+    .select(fallbackSelect)
+    .eq("org_id", orgId);
+
+  if (!fallback.error) {
+    return {
+      rows: Array.isArray(fallback.data) ? (fallback.data as ShiftRow[]) : [],
+      error: null,
+      source_table: "shift_rules",
+      selected_columns: fallbackSelect,
+      site_scope_supported: fallbackColumns.includes("site_id"),
+    };
+  }
+
+  const minimal = await supabaseAdmin
+    .from("shift_rules")
+    .select("shift_type")
+    .eq("org_id", orgId);
+  if (!minimal.error) {
+    return {
+      rows: Array.isArray(minimal.data) ? (minimal.data as ShiftRow[]) : [],
+      error: null,
+      source_table: "shift_rules",
+      selected_columns: "shift_type",
+      site_scope_supported: false,
+    };
+  }
+
+  return {
+    rows: [],
+    error: minimal.error ?? fallback.error ?? primary.error,
+    source_table: "shift_rules",
+    selected_columns: "shift_type",
+    site_scope_supported: false,
+  };
+}
+
+/** Distinct shift_code values from schedule config + date shift instances, org/site scoped. */
 export async function GET(request: NextRequest) {
   try {
     const debugMode = request.nextUrl.searchParams.get("debug") === "1";
@@ -149,14 +260,18 @@ export async function GET(request: NextRequest) {
           active_org_id: org.activeOrgId,
           active_site_id: org.activeSiteId ?? null,
           requested_date: date ?? null,
-          source_table: "shifts",
-          selected_columns: "site_id, shift_code, shift_type (auto-fallback when needed)",
+          source_table: "shift_rules + shifts",
           reason: "missing_date_param",
           intermediate_counts: {
+            schedule_org_total_rows: 0,
+            schedule_org_site_total_rows: org.activeSiteId ? 0 : null,
+            schedule_org_site_scope_total_rows: 0,
+            schedule_derived_code_counts: {},
             org_date_total_shifts: 0,
             org_site_date_total_shifts: org.activeSiteId ? 0 : null,
             org_site_scope_total_shifts: 0,
             before_gating_derived_code_counts: {},
+            union_total_shift_codes: 0,
           },
           gating_steps: [],
           final_shift_codes: [],
@@ -168,29 +283,50 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
+    const scheduleResult = await fetchScheduleRows(org.activeOrgId);
+    if (scheduleResult.error) {
+      console.error("[cockpit/shift-codes] schedule query error:", scheduleResult.error);
+    }
+    const scheduleRows = scheduleResult.error ? [] : scheduleResult.rows;
+    const scheduleSiteScopedRows =
+      scheduleResult.site_scope_supported && org.activeSiteId
+        ? scheduleRows.filter((r) => r.site_id == null || r.site_id === org.activeSiteId)
+        : scheduleRows;
+    const scheduleDistinctCodes = [
+      ...new Set(
+        scheduleSiteScopedRows
+          .map((r) => deriveShiftCode(r))
+          .filter((v): v is string => v.length > 0)
+      ),
+    ];
+
     if (!debugMode) {
-      const { rows, error } = await fetchShiftRows({
+      const shiftsResult = await fetchShiftRows({
         orgId: org.activeOrgId,
         date,
         activeSiteId: org.activeSiteId,
         applySiteScope: true,
       });
 
-      if (error) {
-        console.error("[cockpit/shift-codes] shifts query error:", error);
-        const res = NextResponse.json({ ok: true, shift_codes: [] });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+      if (shiftsResult.error) {
+        console.error("[cockpit/shift-codes] shifts query error:", shiftsResult.error);
       }
 
-      const raw = [
+      const dateDistinctCodes = shiftsResult.error
+        ? []
+        : [
+            ...new Set(
+              shiftsResult.rows
+                .map((r) => deriveShiftCode(r))
+                .filter((v): v is string => v.length > 0)
+            ),
+          ];
+
+      const shift_codes = sortShiftCodes([
         ...new Set(
-          rows
-            .map((r) => deriveShiftCode(r))
-            .filter((v): v is string => v.length > 0)
+          [...scheduleDistinctCodes, ...dateDistinctCodes]
         ),
-      ];
-      const shift_codes = sortShiftCodes(raw);
+      ]);
       const res = NextResponse.json({ ok: true, shift_codes });
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -205,39 +341,30 @@ export async function GET(request: NextRequest) {
 
     if (shiftsDebugQuery.error) {
       console.error("[cockpit/shift-codes] shifts query error:", shiftsDebugQuery.error);
-      const debug = {
-        active_org_id: org.activeOrgId,
-        active_site_id: org.activeSiteId ?? null,
-        requested_date: date,
-        source_table: "shifts",
-        selected_columns: shiftsDebugQuery.selected_columns,
-        query_error: shiftsDebugQuery.error.message,
-        intermediate_counts: {
-          org_date_total_shifts: 0,
-          org_site_date_total_shifts: org.activeSiteId ? 0 : null,
-          org_site_scope_total_shifts: 0,
-          before_gating_derived_code_counts: {},
-        },
-        gating_steps: [],
-        comparison: null,
-        final_shift_codes: [],
-      };
-      console.log("[cockpit/shift-codes][debug]", debug);
-      const res = NextResponse.json({ ok: true, shift_codes: [], debug });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
     }
 
-    const rows = shiftsDebugQuery.rows;
-    const siteScopedRows = org.activeSiteId
-      ? rows.filter((r) => r.site_id == null || r.site_id === org.activeSiteId)
-      : rows;
-    const siteOnlyRows = org.activeSiteId
-      ? rows.filter((r) => r.site_id === org.activeSiteId)
+    const shiftRows = shiftsDebugQuery.error ? [] : shiftsDebugQuery.rows;
+    const shiftSiteScopedRows = org.activeSiteId
+      ? shiftRows.filter((r) => r.site_id == null || r.site_id === org.activeSiteId)
+      : shiftRows;
+    const shiftSiteOnlyRows = org.activeSiteId
+      ? shiftRows.filter((r) => r.site_id === org.activeSiteId)
       : null;
-    const nonEmptyRows = siteScopedRows.filter((r) => deriveShiftCode(r).length > 0);
-    const distinctRaw = [...new Set(nonEmptyRows.map((r) => deriveShiftCode(r)).filter((v) => v.length > 0))];
-    const shift_codes = sortShiftCodes(distinctRaw);
+    const nonEmptyShiftRows = shiftSiteScopedRows.filter((r) => deriveShiftCode(r).length > 0);
+    const dateDistinctCodes = [
+      ...new Set(nonEmptyShiftRows.map((r) => deriveShiftCode(r)).filter((v) => v.length > 0)),
+    ];
+
+    const scheduleSiteOnlyRows =
+      scheduleResult.site_scope_supported && org.activeSiteId
+        ? scheduleRows.filter((r) => r.site_id === org.activeSiteId)
+        : null;
+
+    const shift_codes = sortShiftCodes([
+      ...new Set(
+        [...scheduleDistinctCodes, ...dateDistinctCodes]
+      ),
+    ]);
 
     const viewQuery = await supabaseAdmin
       .from("v_cockpit_station_summary")
@@ -253,36 +380,61 @@ export async function GET(request: NextRequest) {
       active_org_id: org.activeOrgId,
       active_site_id: org.activeSiteId ?? null,
       requested_date: date,
-      source_table: "shifts",
-      selected_columns: shiftsDebugQuery.selected_columns,
+      source_table: "shift_rules + shifts",
+      source_tables: {
+        schedule: {
+          table: scheduleResult.source_table,
+          selected_columns: scheduleResult.selected_columns,
+          site_scope_supported: scheduleResult.site_scope_supported,
+          query_error: scheduleResult.error?.message ?? null,
+        },
+        shifts: {
+          table: "shifts",
+          selected_columns: shiftsDebugQuery.selected_columns,
+          site_scope_supported: true,
+          query_error: shiftsDebugQuery.error?.message ?? null,
+        },
+      },
       intermediate_counts: {
-        org_date_total_shifts: rows.length,
-        org_site_date_total_shifts: siteOnlyRows ? siteOnlyRows.length : null,
-        org_site_scope_total_shifts: siteScopedRows.length,
-        before_gating_derived_code_counts: countByDerivedCode(siteScopedRows),
+        schedule_org_total_rows: scheduleRows.length,
+        schedule_org_site_total_rows: scheduleSiteOnlyRows ? scheduleSiteOnlyRows.length : null,
+        schedule_org_site_scope_total_rows: scheduleSiteScopedRows.length,
+        schedule_derived_code_counts: countByDerivedCode(scheduleSiteScopedRows),
+        org_date_total_shifts: shiftRows.length,
+        org_site_date_total_shifts: shiftSiteOnlyRows ? shiftSiteOnlyRows.length : null,
+        org_site_scope_total_shifts: shiftSiteScopedRows.length,
+        before_gating_derived_code_counts: countByDerivedCode(shiftSiteScopedRows),
+        union_total_shift_codes: shift_codes.length,
       },
       gating_steps: [
         {
           step: "site_scope_filter(site_id is null OR active_site_id)",
           applied: Boolean(org.activeSiteId),
-          input_rows: rows.length,
-          output_rows: siteScopedRows.length,
-          dropped_rows: rows.length - siteScopedRows.length,
+          input_rows: shiftRows.length,
+          output_rows: shiftSiteScopedRows.length,
+          dropped_rows: shiftRows.length - shiftSiteScopedRows.length,
         },
         {
           step: "derived_code_non_empty_filter(prefer shift_code, fallback shift_type)",
           applied: true,
-          input_rows: siteScopedRows.length,
-          output_rows: nonEmptyRows.length,
-          dropped_rows: siteScopedRows.length - nonEmptyRows.length,
-          output_derived_code_counts: countByDerivedCode(nonEmptyRows),
+          input_rows: shiftSiteScopedRows.length,
+          output_rows: nonEmptyShiftRows.length,
+          dropped_rows: shiftSiteScopedRows.length - nonEmptyShiftRows.length,
+          output_derived_code_counts: countByDerivedCode(nonEmptyShiftRows),
         },
         {
           step: "distinct_shift_code_projection",
           applied: true,
-          input_rows: nonEmptyRows.length,
+          input_rows: nonEmptyShiftRows.length,
+          output_rows: dateDistinctCodes.length,
+          dropped_rows: nonEmptyShiftRows.length - dateDistinctCodes.length,
+        },
+        {
+          step: "union_with_schedule_codes",
+          applied: true,
+          input_rows: dateDistinctCodes.length,
           output_rows: shift_codes.length,
-          dropped_rows: nonEmptyRows.length - shift_codes.length,
+          added_rows: Math.max(0, shift_codes.length - dateDistinctCodes.length),
         },
         {
           step: "seeded_or_pilot_or_s1_gate",
