@@ -206,7 +206,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Predicate: true when role can see HR Tools (Compliance Summary, Action Inbox, etc.). Same as /api/admin/me membership_role semantics. */
+/** Predicate: true when role can see HR Tools (HR Templates, Compliance Summary, Action Inbox, etc.). Includes admin and hr. Same as /api/admin/me membership_role semantics. */
 function canSeeHrTools(role: string | null | undefined): boolean {
   return isHrAdmin((role ?? "").toLowerCase());
 }

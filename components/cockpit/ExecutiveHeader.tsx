@@ -9,8 +9,12 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+export type CockpitMode = "global" | "shift";
+
 export type ExecutiveHeaderProps = {
   userName?: string | null;
+  mode: CockpitMode;
+  onModeChange: (mode: CockpitMode) => void;
   date: string;
   onDateChange: (date: string) => void;
   shiftCode: string;
@@ -27,6 +31,8 @@ export type ExecutiveHeaderProps = {
 
 export function ExecutiveHeader({
   userName,
+  mode,
+  onModeChange,
   date,
   onDateChange,
   shiftCode,
@@ -42,6 +48,7 @@ export function ExecutiveHeader({
 }: ExecutiveHeaderProps) {
   const name = (userName ?? "").trim();
   const greeting = name ? `Welcome, ${name}` : "Welcome";
+  const isShift = mode === "shift";
 
   return (
     <header
@@ -57,6 +64,34 @@ export function ExecutiveHeader({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <div className="flex rounded-md border border-[var(--hairline)] overflow-hidden">
+          <button
+            type="button"
+            onClick={() => onModeChange("global")}
+            className={cn(
+              "h-8 px-3 text-[13px] font-medium transition-colors",
+              mode === "global"
+                ? "bg-[var(--text)] text-white"
+                : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+            )}
+            data-testid="cockpit-mode-global"
+          >
+            GLOBAL
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange("shift")}
+            className={cn(
+              "h-8 px-3 text-[13px] font-medium border-l border-[var(--hairline)] transition-colors",
+              mode === "shift"
+                ? "bg-[var(--text)] text-white"
+                : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+            )}
+            data-testid="cockpit-mode-shift"
+          >
+            SHIFT
+          </button>
+        </div>
         <input
           type="date"
           value={date}
@@ -64,23 +99,27 @@ export function ExecutiveHeader({
           className="h-8 px-2 rounded-md border border-[var(--hairline)] bg-white text-[var(--text)] text-sm"
           data-testid="input-date"
         />
-        <Select value={shiftCode || undefined} onValueChange={onShiftCodeChange} disabled={availableShiftCodes.length === 0}>
-          <SelectTrigger className="h-8 w-[110px] px-2 text-[13px] border-[var(--hairline)] bg-white" data-testid="select-shift">
-            <SelectValue placeholder="Shift" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableShiftCodes.length > 0 ? (
-              availableShiftCodes.map((code) => (
-                <SelectItem key={code} value={code}>{code}</SelectItem>
-              ))
-            ) : (
-              <SelectItem value="__no_shift_codes" disabled>No shifts</SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-        {shiftCodesError ? (
-          <span className="text-[11px] text-red-600" data-testid="shift-codes-error">{shiftCodesError}</span>
-        ) : null}
+        {isShift && (
+          <>
+            <Select value={shiftCode || undefined} onValueChange={onShiftCodeChange} disabled={availableShiftCodes.length === 0}>
+              <SelectTrigger className="h-8 w-[110px] px-2 text-[13px] border-[var(--hairline)] bg-white" data-testid="select-shift">
+                <SelectValue placeholder="Shift" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableShiftCodes.length > 0 ? (
+                  availableShiftCodes.map((code) => (
+                    <SelectItem key={code} value={code}>{code}</SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="__no_shift_codes" disabled>No shifts</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            {shiftCodesError ? (
+              <span className="text-[11px] text-red-600" data-testid="shift-codes-error">{shiftCodesError}</span>
+            ) : null}
+          </>
+        )}
         <Select value={line} onValueChange={onLineChange}>
           <SelectTrigger className="h-8 w-[110px] px-2 text-[13px] border-[var(--hairline)] bg-white" data-testid="select-line">
             <SelectValue placeholder="Line" />

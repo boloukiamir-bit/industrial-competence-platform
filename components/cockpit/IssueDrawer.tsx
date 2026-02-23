@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Sheet,
   SheetContent,
@@ -18,8 +19,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle, ClipboardList } from "lucide-react";
+import { CheckCircle2, GraduationCap, Loader2, ArrowLeftRight, AlertTriangle, AlertCircle, ClipboardList, ExternalLink } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { fetchJson } from "@/lib/coreFetch";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { DrilldownRosterItem } from "@/app/api/cockpit/issues/drilldown/route";
 import { EmployeeDrawer } from "@/components/employees/EmployeeDrawer";
@@ -40,6 +51,8 @@ export type CockpitIssueRow = {
   area?: string | null;
   resolved?: boolean;
   decision_actions?: string[];
+  decision_type?: string | null;
+  decision_created_at?: string | null;
 };
 
 export type DrilldownRow = {
@@ -74,10 +87,14 @@ export type IssueDrawerProps = {
   onEscalate: () => Promise<void>;
   onResolve?: () => Promise<void>;
   isAcknowledged: boolean;
+  /** After recording a decision, call to refresh cockpit issues list. */
+  onDecisionRecorded?: () => void | Promise<void>;
   /** True when issue is marked as planned (action or training) — shows PLANNED badge, keeps issue visible. */
   planned?: boolean;
   /** When false, roster rows are not clickable (no employee drawer). */
   sessionOk?: boolean;
+  /** When "global", Record decision / Swap / Escalate / Resolve are disabled; Plan action/training only if roster loaded. */
+  cockpitMode?: "global" | "shift";
 };
 
 const statusVariant = (status: string) => {
@@ -111,11 +128,27 @@ export function IssueDrawer({
   onEscalate,
   onResolve,
   isAcknowledged,
+  onDecisionRecorded,
   planned = false,
   sessionOk = true,
+  cockpitMode = "shift",
 }: IssueDrawerProps) {
+  const isGlobal = cockpitMode === "global";
+  const canRecordDecision = !isGlobal;
+  const router = useRouter();
+  const { toast } = useToast();
   const [submitting, setSubmitting] = useState<"ack" | "plan_action" | "plan_training" | "swap" | "escalate" | "resolve" | null>(null);
+  const [showDecisionForm, setShowDecisionForm] = useState(false);
+  const [decisionType, setDecisionType] = useState<"ACKNOWLEDGED" | "OVERRIDDEN" | "DEFERRED" | "RESOLVED">("ACKNOWLEDGED");
+  const [decisionNote, setDecisionNote] = useState("");
+  const [lastCreatedJobId, setLastCreatedJobId] = useState<string | null>(null);
+  const [lastCreatedJobTitle, setLastCreatedJobTitle] = useState<string | null>(null);
+  const [decisionRecorded, setDecisionRecorded] = useState<{ type: string; at: string } | null>(null);
   const [drilldown, setDrilldown] = useState<DrilldownState>(null);
+  const hasConcreteEmployee = Boolean(
+    drilldown && ((drilldown.blockers?.length ?? 0) + (drilldown.warnings?.length ?? 0) + (drilldown.roster?.length ?? 0) > 0)
+  );
+  const canPlanInGlobal = isGlobal ? hasConcreteEmployee : true;
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [drilldownError, setDrilldownError] = useState<string | null>(null);
   const [drilldownErrorStatus, setDrilldownErrorStatus] = useState<number | null>(null);
@@ -202,6 +235,11 @@ export function IssueDrawer({
       setDrilldown(null);
       setDrilldownError(null);
       setDrilldownLoading(false);
+      if (!open) {
+        setShowDecisionForm(false);
+        setLastCreatedJobId(null);
+        setLastCreatedJobTitle(null);
+      }
     }
   }, [open, issue?.station_id, issue?.date, issue?.shift_code, fetchDrilldown]);
 
@@ -249,23 +287,150 @@ export function IssueDrawer({
     }
   };
 
+  const getTemplateCodeForIssue = (): string => {
+    const t = (issue?.issue_type ?? issue?.type ?? "").toUpperCase();
+    if (t === "UNSTAFFED") return "STAFFING_ACTION";
+    if (t === "ILLEGAL") return "COMPLIANCE_ACTION";
+    return "TRAINING_ACTION";
+  };
+
+  const getFirstRosterEmployeeAnstId = (): string | null => {
+    if (!drilldown) return null;
+    const first = drilldown.blockers?.[0] ?? drilldown.warnings?.[0] ?? drilldown.roster?.[0];
+    return first?.employee_anst_id ?? null;
+  };
+
   const handlePlanAction = async () => {
-    if (!onPlanAction) return;
     setSubmitting("plan_action");
     try {
-      await onPlanAction();
-      // Planned: do NOT close drawer; parent sets planned state and keeps issue visible
+      const anstId = getFirstRosterEmployeeAnstId();
+      if (!anstId?.trim()) {
+        toast({ title: "Load roster first or add a station assignee", variant: "destructive" });
+        return;
+      }
+      const resolveRes = await fetchJson<{ ok?: boolean; employee_id?: string }>(
+        `/api/employees/resolve?employee_number=${encodeURIComponent(anstId.trim())}`
+      );
+      if (!resolveRes.ok || !resolveRes.data?.employee_id) {
+        toast({ title: "Could not resolve assignee (employee number or site context)", variant: "destructive" });
+        return;
+      }
+      const rc = issue?.root_cause as Record<string, unknown> | null | undefined;
+      const rootCausePrimary = rc && typeof rc.primary === "string" ? rc.primary : "";
+      const jobRes = await fetchJson<{ id?: string }>("/api/hr/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template_code: getTemplateCodeForIssue(),
+          employee_id: resolveRes.data.employee_id,
+          metadata: {
+            station_name: issue?.station_name ?? issue?.station_code ?? issue?.station_id ?? "",
+            station_id: issue?.station_id ?? "",
+            date: issue?.date ?? "",
+            shift_code: issue?.shift_code ?? "",
+            line: issue?.line ?? "",
+            issue_type: (issue?.issue_type ?? issue?.type ?? "").toUpperCase(),
+            root_cause_primary: rootCausePrimary,
+          },
+        }),
+      });
+      if (!jobRes.ok || !jobRes.data?.id) {
+        toast({ title: !jobRes.ok ? jobRes.error : "Failed to create intervention", variant: "destructive" });
+        return;
+      }
+      onPlanAction?.();
+      setLastCreatedJobId(jobRes.data.id);
+      setLastCreatedJobTitle("Intervention");
+      toast({ title: "Intervention created. Record a decision to link it, or open the job below." });
+      // Optional: router.push(`/app/hr/jobs/${jobRes.data.id}`);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create intervention", variant: "destructive" });
     } finally {
       setSubmitting(null);
     }
   };
 
   const handlePlanTraining = async () => {
-    if (!onPlanTraining) return;
     setSubmitting("plan_training");
     try {
-      await onPlanTraining();
-      // Planned: do NOT close drawer; parent sets planned state and keeps issue visible
+      const anstId = getFirstRosterEmployeeAnstId();
+      if (!anstId?.trim()) {
+        toast({ title: "Load roster first or add a station assignee", variant: "destructive" });
+        return;
+      }
+      const resolveRes = await fetchJson<{ ok?: boolean; employee_id?: string }>(
+        `/api/employees/resolve?employee_number=${encodeURIComponent(anstId.trim())}`
+      );
+      if (!resolveRes.ok || !resolveRes.data?.employee_id) {
+        toast({ title: "Could not resolve assignee (employee number or site context)", variant: "destructive" });
+        return;
+      }
+      const rc = issue?.root_cause as Record<string, unknown> | null | undefined;
+      const rootCausePrimary = rc && typeof rc.primary === "string" ? rc.primary : "";
+      const jobRes = await fetchJson<{ id?: string }>("/api/hr/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template_code: "TRAINING_ACTION",
+          employee_id: resolveRes.data.employee_id,
+          metadata: {
+            station_name: issue?.station_name ?? issue?.station_code ?? issue?.station_id ?? "",
+            station_id: issue?.station_id ?? "",
+            date: issue?.date ?? "",
+            shift_code: issue?.shift_code ?? "",
+            line: issue?.line ?? "",
+            issue_type: (issue?.issue_type ?? issue?.type ?? "").toUpperCase(),
+            root_cause_primary: rootCausePrimary,
+          },
+        }),
+      });
+      if (!jobRes.ok || !jobRes.data?.id) {
+        toast({ title: !jobRes.ok ? jobRes.error : "Failed to create intervention", variant: "destructive" });
+        return;
+      }
+      onPlanTraining?.();
+      setLastCreatedJobId(jobRes.data.id);
+      setLastCreatedJobTitle("Intervention");
+      toast({ title: "Intervention created. Record a decision to link it, or open the job below." });
+      // Optional: router.push(`/app/hr/jobs/${jobRes.data.id}`);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create intervention", variant: "destructive" });
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const handleSubmitDecision = async () => {
+    if (!issue?.station_id || !issue?.date || !issue?.shift_code) return;
+    setSubmitting("ack");
+    try {
+      const issueType = (issue?.issue_type ?? issue?.type ?? "NO_GO").toString().toUpperCase();
+      const res = await fetchJson<{ ok?: boolean; error?: string }>("/api/cockpit/issues/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          station_id: issue.station_id,
+          date: issue.date,
+          shift_code: issue.shift_code,
+          issue_type: issueType,
+          decision_type: decisionType,
+          resolved: decisionType === "RESOLVED",
+          note: decisionNote.trim() || undefined,
+          ...(lastCreatedJobId && { linked_job_id: lastCreatedJobId }),
+        }),
+      });
+      if (!res.ok) {
+        toast({ title: !res.ok && "error" in res ? res.error : "Failed to record decision", variant: "destructive" });
+        return;
+      }
+      setDecisionRecorded({ type: decisionType, at: new Date().toISOString() });
+      setShowDecisionForm(false);
+      setDecisionNote("");
+      setLastCreatedJobId(null);
+      setLastCreatedJobTitle(null);
+      toast({ title: "Decision recorded" });
+      await onDecisionRecorded?.();
+      if (decisionType === "RESOLVED") onOpenChange(false);
     } finally {
       setSubmitting(null);
     }
@@ -308,6 +473,8 @@ export function IssueDrawer({
   const primary = rc && typeof rc.primary === "string" ? rc.primary : "";
   const stationName = issue.station_name ?? issue.station_code ?? issue.station_id?.slice(0, 8) ?? "—";
   const showActions = !isAcknowledged && issue.station_id && issue.shift_code;
+  const recordDecisionTooltip = canRecordDecision ? undefined : "Switch to SHIFT to record a decision.";
+  const planTooltip = canPlanInGlobal ? undefined : (isGlobal ? "Load roster first or switch to SHIFT to plan an action for this shift." : undefined);
 
   const statusBadge = (issue.issue_type ?? issue.type ?? issue.severity) as string;
 
@@ -336,6 +503,11 @@ export function IssueDrawer({
               )}
               {planned && (
                 <Badge variant="secondary" className="text-muted-foreground font-normal">PLANNED</Badge>
+              )}
+              {(decisionRecorded || (issue.decision_created_at && issue.decision_type)) && (
+                <Badge variant="outline" className="text-green-700 border-green-400 bg-green-50 font-medium" title="Decision recorded for audit">
+                  DECISION RECORDED · {decisionRecorded?.type ?? issue.decision_type ?? "—"} · {decisionRecorded?.at ? new Date(decisionRecorded.at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : issue.decision_created_at ? new Date(issue.decision_created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : ""}
+                </Badge>
               )}
             </div>
           </SheetHeader>
@@ -445,6 +617,38 @@ export function IssueDrawer({
             </section>
           )}
 
+          {showDecisionForm && (
+            <section className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Record decision</p>
+              <div className="space-y-2">
+                <Label htmlFor="decision-type">Decision type</Label>
+                <Select value={decisionType} onValueChange={(v) => setDecisionType(v as "ACKNOWLEDGED" | "OVERRIDDEN" | "DEFERRED" | "RESOLVED")}>
+                  <SelectTrigger id="decision-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACKNOWLEDGED">Acknowledged</SelectItem>
+                    <SelectItem value="OVERRIDDEN">Overridden</SelectItem>
+                    <SelectItem value="DEFERRED">Deferred</SelectItem>
+                    <SelectItem value="RESOLVED">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="decision-note">Note (optional)</Label>
+                <Textarea id="decision-note" value={decisionNote} onChange={(e) => setDecisionNote(e.target.value)} placeholder="Add context for audit…" rows={2} className="resize-none" />
+              </div>
+              {lastCreatedJobId && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+                  <span>Linked intervention: {lastCreatedJobTitle ?? "Intervention"}.</span>
+                  <Button type="button" variant="ghost" size="sm" className="p-0 h-auto text-primary underline hover:no-underline" onClick={() => router.push(`/app/hr/jobs/${lastCreatedJobId}`)}>
+                    View job <ExternalLink className="h-3 w-3 inline ml-0.5" />
+                  </Button>
+                </p>
+              )}
+            </section>
+          )}
+
           {isAcknowledged && (
             <div className="rounded-sm bg-green-50 border border-green-200 p-3">
               <p className="text-sm text-green-800 flex items-center gap-2">
@@ -460,35 +664,89 @@ export function IssueDrawer({
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} data-testid="btn-close">
               Close
             </Button>
-            {onPlanAction && showActions && (
-              <Button onClick={handlePlanAction} disabled={!!submitting} variant="outline" data-testid="btn-plan-action">
-                {submitting === "plan_action" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardList className="h-4 w-4 mr-2" />}
-                Plan action
-              </Button>
-            )}
-            {onPlanTraining && showActions && (
-              <Button onClick={handlePlanTraining} disabled={!!submitting} variant="outline" data-testid="btn-plan-training">
-                {submitting === "plan_training" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <GraduationCap className="h-4 w-4 mr-2" />}
-                Plan training
-              </Button>
+            {showActions && (
+              <>
+                <Button
+                  onClick={handlePlanAction}
+                  disabled={!!submitting || !canPlanInGlobal}
+                  variant="outline"
+                  data-testid="btn-plan-action"
+                  title={planTooltip}
+                >
+                  {submitting === "plan_action" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardList className="h-4 w-4 mr-2" />}
+                  Plan action
+                </Button>
+                <Button
+                  onClick={handlePlanTraining}
+                  disabled={!!submitting || !canPlanInGlobal}
+                  variant="outline"
+                  data-testid="btn-plan-training"
+                  title={planTooltip}
+                >
+                  {submitting === "plan_training" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <GraduationCap className="h-4 w-4 mr-2" />}
+                  Plan training
+                </Button>
+              </>
             )}
             {showActions && (
-              <Button onClick={handleAcknowledge} disabled={!!submitting} variant="default" data-testid="btn-acknowledge">
-                {submitting === "ack" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                Record decision
-              </Button>
+              showDecisionForm ? (
+                <>
+                  <Button type="button" variant="secondary" onClick={() => setShowDecisionForm(false)} disabled={!!submitting}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmitDecision}
+                    disabled={!!submitting || !canRecordDecision}
+                    variant="default"
+                    data-testid="btn-decision-submit"
+                    title={recordDecisionTooltip}
+                  >
+                    {submitting === "ack" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                    Submit decision
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => setShowDecisionForm(true)}
+                  disabled={!!submitting || !canRecordDecision}
+                  variant="default"
+                  data-testid="btn-acknowledge"
+                  title={recordDecisionTooltip}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Record decision
+                </Button>
+              )
             )}
             {onResolve && showActions && !issue.resolved && (
-              <Button onClick={handleResolve} disabled={!!submitting} variant="destructive" data-testid="btn-resolve">
+              <Button
+                onClick={handleResolve}
+                disabled={!!submitting || !canRecordDecision}
+                variant="destructive"
+                data-testid="btn-resolve"
+                title={recordDecisionTooltip}
+              >
                 {submitting === "resolve" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Resolve
               </Button>
             )}
-            <Button onClick={handleSwap} disabled={!!submitting} variant="outline" data-testid="btn-swap">
+            <Button
+              onClick={handleSwap}
+              disabled={!!submitting || !canRecordDecision}
+              variant="outline"
+              data-testid="btn-swap"
+              title={recordDecisionTooltip}
+            >
               {submitting === "swap" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ArrowLeftRight className="h-4 w-4 mr-2" />}
               Swap
             </Button>
-            <Button onClick={handleEscalate} disabled={!!submitting} variant="outline" data-testid="btn-escalate">
+            <Button
+              onClick={handleEscalate}
+              disabled={!!submitting || !canRecordDecision}
+              variant="outline"
+              data-testid="btn-escalate"
+              title={recordDecisionTooltip}
+            >
               {submitting === "escalate" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <AlertTriangle className="h-4 w-4 mr-2" />}
               Escalate
             </Button>

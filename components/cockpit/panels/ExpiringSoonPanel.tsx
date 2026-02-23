@@ -1,9 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { InlinePanelShell } from "@/components/cockpit/InlinePanelShell";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 export type ExpiringRow = {
   employee_id: string;
@@ -35,6 +39,44 @@ export function ExpiringSoonPanel({
   sessionOk = true,
   loading = false,
 }: ExpiringSoonPanelProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [creatingKey, setCreatingKey] = useState<string | null>(null);
+
+  const rowKey = (row: ExpiringRow) => `${row.employee_id}-${row.compliance_name}-${row.valid_to ?? ""}`;
+
+  const handleCreateAction = async (row: ExpiringRow) => {
+    const key = rowKey(row);
+    setCreatingKey(key);
+    try {
+      const res = await fetch("/api/hr/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          template_code: "CERTIFICATE_RENEWAL",
+          employee_id: row.employee_id,
+          metadata: {
+            compliance_name: row.compliance_name,
+            valid_to: row.valid_to ?? "",
+            status: row.status,
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: (data.error as string) || "Failed to create action", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Action job created." });
+      router.push(`/app/hr/jobs/${data.id}`);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create action", variant: "destructive" });
+    } finally {
+      setCreatingKey(null);
+    }
+  };
+
   return (
     <InlinePanelShell
       open={open}
@@ -91,6 +133,20 @@ export function ExpiringSoonPanel({
                   >
                     {row.status === "expired" ? "EXPIRED" : "EXPIRING"}
                   </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 text-xs shrink-0"
+                    disabled={creatingKey === rowKey(row)}
+                    onClick={() => handleCreateAction(row)}
+                    data-testid={`expiring-create-action-${row.employee_id}`}
+                  >
+                    {creatingKey === rowKey(row) ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Create Action"
+                    )}
+                  </Button>
                   <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" asChild>
                     <Link href="/app/compliance">Open</Link>
                   </Button>

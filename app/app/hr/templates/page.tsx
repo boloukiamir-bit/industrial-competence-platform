@@ -180,6 +180,9 @@ export default function HrTemplatesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button size="sm" asChild>
+            <Link href="/app/hr/templates/new">Create Job</Link>
+          </Button>
           <Button size="sm" variant="outline" asChild>
             <Link href="/app/hr/templates/compliance-actions">Compliance templates</Link>
           </Button>

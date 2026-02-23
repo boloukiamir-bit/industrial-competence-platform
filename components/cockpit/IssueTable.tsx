@@ -109,14 +109,26 @@ export function IssueTable({
               <TableCell className="px-3 py-2.5">
                 <div className="flex items-center gap-1 flex-wrap">
                     <SeverityText severity={row.severity} />
-                    {row.resolved && (
+                    {row.resolved && row.decision_type !== "RESOLVED" && (
                       <span className="cockpit-label cockpit-status-ok">Closed</span>
+                    )}
+                    {row.resolved && row.decision_type === "RESOLVED" && (
+                      <span className="cockpit-label cockpit-status-ok" title="Decision recorded">Resolved</span>
                     )}
                     {isAcceptedRisk && (
                       <span className="cockpit-label cockpit-status-at-risk">Accepted</span>
                     )}
                     {markedPlannedIds?.has(row.issue_id) && (
                       <span className="cockpit-label text-muted-foreground border border-[var(--hairline-soft)]">Planned</span>
+                    )}
+                    {!row.resolved && row.decision_type === "ACKNOWLEDGED" && (
+                      <span className="cockpit-label text-muted-foreground border border-[var(--hairline-soft)]" title="Acknowledged">ACK</span>
+                    )}
+                    {!row.resolved && row.decision_type === "DEFERRED" && (
+                      <span className="cockpit-label text-muted-foreground border border-[var(--hairline-soft)]" title="Deferred">DEFER</span>
+                    )}
+                    {!row.resolved && row.decision_type === "OVERRIDDEN" && (
+                      <span className="cockpit-label text-muted-foreground border border-[var(--hairline-soft)]" title="Overridden">OVERRIDE</span>
                     )}
                 </div>
               </TableCell>

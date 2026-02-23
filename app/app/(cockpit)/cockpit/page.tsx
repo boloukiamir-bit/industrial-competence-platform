@@ -17,6 +17,7 @@ import { ExecutiveHeader } from "@/components/cockpit/ExecutiveHeader";
 import { InlinePanelShell } from "@/components/cockpit/InlinePanelShell";
 import { KpiTile } from "@/components/cockpit/KpiTile";
 import { ExpiringSoonPanel, type ExpiringRow } from "@/components/cockpit/panels/ExpiringSoonPanel";
+import { InterventionPanel, type InterventionJobRow } from "@/components/cockpit/panels/InterventionPanel";
 import {
   ReadinessPanel,
   type ReadinessCounts,
@@ -173,7 +174,7 @@ export default function CockpitPage() {
   const [undoUntil, setUndoUntil] = useState<number>(0);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const [markedPlannedIds, setMarkedPlannedIds] = useState<Set<string>>(new Set());
-  const [decisionQueueMode, setDecisionQueueMode] = useState<"GLOBAL" | "SHIFT">("GLOBAL");
+  const [mode, setMode] = useState<"global" | "shift">("global");
   const [activePanel, setActivePanel] = useState<
     "none" | "decisions" | "blockers" | "readiness" | "restricted" | "expiring" | "interventions"
   >("none");
@@ -184,12 +185,29 @@ export default function CockpitPage() {
     top10: ExpiringRow[];
   } | null>(null);
   const [complianceExpiringLoading, setComplianceExpiringLoading] = useState(false);
+  const [interventions, setInterventions] = useState<InterventionJobRow[]>([]);
+  const [interventionsLoading, setInterventionsLoading] = useState(false);
 
   const [legitimacyDrilldown, setLegitimacyDrilldown] = useState<ShiftLegitimacyDrilldown | null>(null);
   const [legitimacyDrilldownLoading, setLegitimacyDrilldownLoading] = useState(false);
+  const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
+  const shiftReady = isGlobal || (date && hasShiftCode);
 
-  // Only query params: date, shift_code, optional line, optional show_resolved=1. Default show_resolved OFF.
+  // GLOBAL: mode=global, date optional (API uses today if omitted). SHIFT: mode=shift, date + shift_code required.
+  const issuesParams = (() => {
+    const p = new URLSearchParams();
+    p.set("mode", mode);
+    if (isGlobal) {
+      if (date) p.set("date", date);
+    } else {
+      p.set("date", date);
+      if (shiftCode) p.set("shift_code", shiftCode);
+    }
+    if (line && line !== "all") p.set("line", line);
+    if (showResolved) p.set("show_resolved", "1");
+    return p;
+  })();
   const summaryParams = (() => {
     const p = new URLSearchParams();
     if (date) p.set("date", date);
@@ -198,20 +216,16 @@ export default function CockpitPage() {
     if (showResolved) p.set("show_resolved", "1");
     return p;
   })();
-  const issuesParams = (() => {
-    const p = new URLSearchParams();
-    if (date) p.set("date", date);
-    if (shiftCode) p.set("shift_code", shiftCode);
-    if (line && line !== "all") p.set("line", line);
-    if (showResolved) p.set("show_resolved", "1");
-    return p;
-  })();
-  const summaryUrl = `/api/cockpit/summary?${summaryParams.toString()}`;
   const issuesUrl = `/api/cockpit/issues?${issuesParams.toString()}`;
+  const summaryUrl = `/api/cockpit/summary?${summaryParams.toString()}`;
 
-  // URL sync: read date, shift_code, line from URL on mount
+  // URL sync: read mode, date, shift_code, line from URL on mount; default mode=global
   useEffect(() => {
     if (urlSyncedRef.current) return;
+    const qMode = searchParams.get("mode")?.toLowerCase();
+    const initialMode = qMode === "shift" ? "shift" : "global";
+    setMode(initialMode);
+
     const rawDate = searchParams.get("date")?.trim();
     const urlDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
     const initialDate = urlDate ?? getInitialDateFromUrlOrToday(searchParams);
@@ -222,17 +236,22 @@ export default function CockpitPage() {
     if (qShift) setShiftCode(qShift);
     if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
 
-    if (!urlDate) {
-      const p = new URLSearchParams(searchParams.toString());
-      p.set("date", initialDate);
-      router.replace(`/app/cockpit?${p.toString()}`, { scroll: false });
-    }
+    const p = new URLSearchParams(searchParams.toString());
+    if (!p.get("mode")) p.set("mode", "global");
+    if (!urlDate) p.set("date", initialDate);
+    const next = p.toString();
+    const current = searchParams.toString();
+    if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
     urlSyncedRef.current = true;
   }, [searchParams, setDate, setShiftCode, setLine, router, date]);
 
-  // Data-driven shift selector: fetch shift codes for selected date, then validate/fallback shift_code.
+  const handleModeChange = (newMode: "global" | "shift") => {
+    setMode(newMode);
+  };
+
+  // Data-driven shift selector: fetch shift codes for selected date (SHIFT mode only).
   useEffect(() => {
-    if (isDemoMode()) return;
+    if (isDemoMode() || isGlobal) return;
     let cancelled = false;
     const p = new URLSearchParams({ date });
     fetchJson<{ ok: boolean; shift_codes?: string[] }>(`/api/cockpit/shift-codes?${p.toString()}`)
@@ -270,12 +289,13 @@ export default function CockpitPage() {
         setAvailableShiftCodes([]);
       });
     return () => { cancelled = true; };
-  }, [date, sessionOk]);
+  }, [date, sessionOk, isGlobal]);
 
-  // URL sync: push date, shift_code, line to URL when they change
+  // URL sync: push mode, date, shift_code, line to URL when they change
   useEffect(() => {
     if (!urlSyncedRef.current) return;
     const p = new URLSearchParams(searchParams.toString());
+    p.set("mode", mode);
     p.set("date", date);
     if (shiftCode) p.set("shift_code", shiftCode);
     else p.delete("shift_code");
@@ -284,7 +304,7 @@ export default function CockpitPage() {
     const next = p.toString();
     const current = searchParams.toString();
     if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
-  }, [date, shiftCode, line, router]);
+  }, [mode, date, shiftCode, line, searchParams, router]);
 
   // Dev-only safety: warn if URL/date ever diverge after sync
   useEffect(() => {
@@ -314,9 +334,9 @@ export default function CockpitPage() {
     return () => clearInterval(id);
   }, [lastResolvedIssue, undoUntil]);
 
-  // Load cockpit summary (date, shift_code, optional line). Skip when session invalid to avoid 401 spam.
+  // Load cockpit summary (SHIFT mode only; date + shift required). GLOBAL uses issues[] for counts.
   useEffect(() => {
-    if (!sessionOk || !hasShiftCode) {
+    if (!sessionOk || isGlobal || !hasShiftCode) {
       setSummary(null);
       setSummaryLoading(false);
       return;
@@ -355,10 +375,10 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionOk, hasShiftCode, summaryUrl, toast]);
+  }, [sessionOk, hasShiftCode, isGlobal, summaryUrl, toast]);
 
   const handleJumpLatest = async () => {
-    if (jumpingLatest || isDemoMode() || !hasShiftCode) return;
+    if (jumpingLatest || isDemoMode() || isGlobal || !hasShiftCode) return;
     setJumpingLatest(true);
     try {
       const searchBack = async (fromDate: string, daysLeft: number): Promise<string | null> => {
@@ -385,9 +405,18 @@ export default function CockpitPage() {
     }
   };
 
-  // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
+  // When SHIFT mode but date/shift not ready, clear issues so we don't show stale data
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (!isGlobal && !shiftReady) {
+      setIssues([]);
+      setIssuesLoading(false);
+      setIssuesError(null);
+    }
+  }, [isGlobal, shiftReady]);
+
+  // Load Tomorrow's Gaps (top risks) for same date/shift — SHIFT mode only
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk || isGlobal || !hasShiftCode) return;
     if (!isLegacyShiftType(shiftCode)) {
       setGapsLines([]);
       setGapsLoading(false);
@@ -420,11 +449,12 @@ export default function CockpitPage() {
         if (!cancelled) setGapsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftCode, sessionOk, hasShiftCode, toast]);
+  }, [date, shiftCode, sessionOk, hasShiftCode, isGlobal, toast]);
 
-  // Load Issue Inbox (date, shift_code, optional line)
+  // Load Issue Inbox: GLOBAL (mode=global, no shift required); SHIFT (date + shift required).
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (isDemoMode() || !sessionOk) return;
+    if (!isGlobal && !shiftReady) return;
     let cancelled = false;
     setIssuesLoading(true);
     setIssuesError(null);
@@ -451,11 +481,11 @@ export default function CockpitPage() {
         if (!cancelled) setIssuesLoading(false);
       });
     return () => { cancelled = true; };
-  }, [issuesUrl, sessionOk, hasShiftCode, toast, issuesRefreshKey]);
+  }, [issuesUrl, sessionOk, isGlobal, shiftReady, toast, issuesRefreshKey]);
 
-  // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (for blocking/at-risk lists)
+  // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (SHIFT mode only)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !summary || !hasShiftCode) return;
+    if (isDemoMode() || !sessionOk || !summary || isGlobal || !hasShiftCode) return;
     const status = summary.shift_legitimacy_status;
     if (status !== "ILLEGAL" && status !== "WARNING") {
       setLegitimacyDrilldown(null);
@@ -491,7 +521,7 @@ export default function CockpitPage() {
         if (!cancelled) setLegitimacyDrilldownLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftCode, line, sessionOk, hasShiftCode, summary?.shift_legitimacy_status, summary != null]);
+  }, [date, shiftCode, line, sessionOk, hasShiftCode, isGlobal, summary?.shift_legitimacy_status, summary != null]);
 
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
@@ -501,9 +531,9 @@ export default function CockpitPage() {
     })
     .slice(0, 5);
 
-  // Load line options from v_cockpit_station_summary.area for selected date+shift (no legacy codes)
+  // Load line options from v_cockpit_station_summary.area for selected date+shift (SHIFT mode only)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (isDemoMode() || !sessionOk || isGlobal || !hasShiftCode) return;
     const p = new URLSearchParams({ date, shift_code: shiftCode });
     const url = `/api/cockpit/lines?${p.toString()}`;
     fetchJson<{ lines?: string[] }>(url)
@@ -513,7 +543,7 @@ export default function CockpitPage() {
         if ("source" in res.data && res.data.source) console.debug("[cockpit lines] source:", res.data.source);
       })
       .catch((err) => console.error("[cockpit lines]", err));
-  }, [date, shiftCode, sessionOk, hasShiftCode]);
+  }, [date, shiftCode, sessionOk, hasShiftCode, isGlobal]);
 
   // Compliance overview for Expiring soon tile + panel (single shared fetch)
   useEffect(() => {
@@ -570,6 +600,29 @@ export default function CockpitPage() {
       });
     return () => { cancelled = true; };
   }, [sessionOk, line]);
+
+  // Active HR jobs for Intervention Queue (CREATED, SENT, SIGNED)
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setInterventionsLoading(true);
+    fetchJson<InterventionJobRow[]>("/api/hr/jobs?active=true")
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && Array.isArray(res.data)) {
+          setInterventions(res.data);
+        } else {
+          setInterventions([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInterventions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setInterventionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
 
   // Optional: user display name from whoami (existing endpoint)
   useEffect(() => {
@@ -884,7 +937,7 @@ export default function CockpitPage() {
 
   return (
     <PageFrame debugPanel={debugPanel}>
-      {summary && summary.active_total === 0 && !summaryLoading && (
+      {!isGlobal && summary && summary.active_total === 0 && !summaryLoading && (
         <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
@@ -919,11 +972,22 @@ export default function CockpitPage() {
         </div>
       )}
 
+      {/* SHIFT mode guardrail: require date + shift before fetching */}
+      {!isDemoMode() && !isGlobal && !shiftReady && (
+        <div className="mb-6 gov-panel px-5 py-4 border-l-[3px] border-l-amber-500" data-testid="cockpit-shift-warning">
+          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+            Select date and shift to load shift-scoped data.
+          </p>
+        </div>
+      )}
+
       {/* Executive Overview */}
       {!isDemoMode() && (
         <>
           <ExecutiveHeader
             userName={userName}
+            mode={mode}
+            onModeChange={handleModeChange}
             date={date}
             onDateChange={setDate}
             shiftCode={shiftCode}
@@ -993,7 +1057,42 @@ export default function CockpitPage() {
             <KpiTile
               tileId="kpi-interventions"
               title="Intervention Queue"
-              primaryValue={issues.length}
+              primaryValue={interventions.length}
+              secondaryLabel={
+                interventions.some((j) => (j.status ?? "").toUpperCase() === "SENT")
+                  ? "Awaiting signature"
+                  : interventions.some((j) => (j.status ?? "").toUpperCase() === "CREATED")
+                    ? "Planned"
+                    : undefined
+              }
+              statusChip={
+                interventions.some((j) => {
+                  const s = (j.status ?? "").toUpperCase();
+                  if (s !== "SENT") return false;
+                  const created = new Date(j.createdAt).getTime();
+                  return Date.now() - created > 7 * 24 * 60 * 60 * 1000;
+                })
+                  ? "OVERDUE"
+                  : interventions.some((j) => (j.status ?? "").toUpperCase() === "CREATED")
+                    ? "PLANNED"
+                    : interventions.length > 0
+                      ? "ACTIVE"
+                      : undefined
+              }
+              statusChipVariant={
+                interventions.some((j) => {
+                  const s = (j.status ?? "").toUpperCase();
+                  if (s !== "SENT") return false;
+                  const created = new Date(j.createdAt).getTime();
+                  return Date.now() - created > 7 * 24 * 60 * 60 * 1000;
+                })
+                  ? "blocking"
+                  : interventions.some((j) => (j.status ?? "").toUpperCase() === "CREATED")
+                    ? "warning"
+                    : interventions.length > 0
+                      ? "ok"
+                      : "default"
+              }
               onClick={() => handleTileClick("interventions")}
             />
           </div>
@@ -1002,8 +1101,7 @@ export default function CockpitPage() {
             open={activePanel === "decisions"}
             issues={issues}
             markedPlannedIds={markedPlannedIds}
-            mode={decisionQueueMode}
-            onModeChange={setDecisionQueueMode}
+            mode={isGlobal ? "GLOBAL" : "SHIFT"}
             shiftCode={shiftCode}
             availableShiftCodes={availableShiftCodes}
             onShiftCodeChange={setShiftCode}
@@ -1080,15 +1178,14 @@ export default function CockpitPage() {
             sessionOk={sessionOk}
             loading={complianceExpiringLoading}
           />
-          <InlinePanelShell
+          <InterventionPanel
             open={activePanel === "interventions"}
             title="Intervention Queue"
-            subtitle="Actions that require follow-up."
             onClose={() => setActivePanel("none")}
-            dataTestId="interventions-panel"
-          >
-            {emptyStatePanel}
-          </InlinePanelShell>
+            jobs={interventions}
+            loading={interventionsLoading}
+            sessionOk={sessionOk}
+          />
         </>
       )}
 
@@ -1143,8 +1240,10 @@ export default function CockpitPage() {
         onEscalate={() => handleIssueDecision("escalate")}
         onResolve={() => handleIssueDecision("acknowledged")}
         isAcknowledged={selectedIssue?.resolved ?? false}
+        onDecisionRecorded={() => setIssuesRefreshKey((k) => k + 1)}
         planned={selectedIssue ? markedPlannedIds.has(selectedIssue.issue_id) : false}
         sessionOk={sessionOk}
+        cockpitMode={mode}
       />
     </PageFrame>
   );

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const { activeOrgId, activeSiteId } = org;
   try {
     const result = await pool.query(
-      `SELECT code, name, category, content
+      `SELECT id, code, name, category, content
        FROM hr_templates
        WHERE org_id = $1 AND is_active = true
          AND ($2::uuid IS NULL OR site_id IS NULL OR site_id = $2)
@@ -29,10 +29,11 @@ export async function GET(request: NextRequest) {
       [activeOrgId, activeSiteId]
     );
 
-    const byCategory = new Map<string, { code: string; name: string; content: unknown }[]>();
+    const byCategory = new Map<string, { id: string; code: string; name: string; content: unknown }[]>();
     for (const row of result.rows) {
       const list = byCategory.get(row.category) ?? [];
       list.push({
+        id: row.id,
         code: row.code,
         name: row.name,
         content: row.content ?? {},

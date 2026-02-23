@@ -74,7 +74,8 @@ export type DecisionQueueInlinePanelProps = {
   /** Issue IDs marked as planned (client-only); show "Planned" pill on row. */
   markedPlannedIds?: Set<string>;
   mode: DecisionQueueMode;
-  onModeChange: (mode: DecisionQueueMode) => void;
+  /** Omitted when cockpit uses single system mode (toggle in ExecutiveHeader only). */
+  onModeChange?: (mode: DecisionQueueMode) => void;
   shiftCode?: string;
   availableShiftCodes?: string[];
   onShiftCodeChange?: (code: string) => void;
@@ -112,6 +113,7 @@ export function DecisionQueueInlinePanel({
   onClose,
   sessionOk = true,
 }: DecisionQueueInlinePanelProps) {
+  const showModeToggle = onModeChange != null;
   const filtered =
     mode === "SHIFT" && shiftCode
       ? issues.filter((i) => (i.shift_code ?? "").trim().toLowerCase() === shiftCode.trim().toLowerCase())
@@ -159,34 +161,36 @@ export function DecisionQueueInlinePanel({
                 </SelectContent>
               </Select>
             )}
-            <div className="flex rounded-md border border-[var(--hairline)] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => onModeChange("GLOBAL")}
-                className={cn(
-                  "h-8 px-3 text-[13px] font-medium transition-colors",
-                  mode === "GLOBAL"
-                    ? "bg-[var(--text)] text-white"
-                    : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
-                )}
-                data-testid="decision-queue-mode-global"
-              >
-                GLOBAL
-              </button>
-              <button
-                type="button"
-                onClick={() => onModeChange("SHIFT")}
-                className={cn(
-                  "h-8 px-3 text-[13px] font-medium border-l border-[var(--hairline)] transition-colors",
-                  mode === "SHIFT"
-                    ? "bg-[var(--text)] text-white"
-                    : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
-                )}
-                data-testid="decision-queue-mode-shift"
-              >
-                SHIFT
-              </button>
-            </div>
+            {showModeToggle && onModeChange && (
+              <div className="flex rounded-md border border-[var(--hairline)] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => onModeChange("GLOBAL")}
+                  className={cn(
+                    "h-8 px-3 text-[13px] font-medium transition-colors",
+                    mode === "GLOBAL"
+                      ? "bg-[var(--text)] text-white"
+                      : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                  )}
+                  data-testid="decision-queue-mode-global"
+                >
+                  GLOBAL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onModeChange("SHIFT")}
+                  className={cn(
+                    "h-8 px-3 text-[13px] font-medium border-l border-[var(--hairline)] transition-colors",
+                    mode === "SHIFT"
+                      ? "bg-[var(--text)] text-white"
+                      : "bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                  )}
+                  data-testid="decision-queue-mode-shift"
+                >
+                  SHIFT
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div className="max-h-[420px] overflow-y-auto">
