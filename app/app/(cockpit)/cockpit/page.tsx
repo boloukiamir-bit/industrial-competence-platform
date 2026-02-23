@@ -1019,25 +1019,26 @@ export default function CockpitPage() {
     return typeof primary === "string" ? primary : "—";
   }
 
-  const debugPanel = (
-    <div data-testid="cockpit-debug-panel">
-      <p className="font-semibold text-muted-foreground mb-1">Debug (dev only)</p>
-      <p><span className="text-muted-foreground">Summary:</span> {typeof window !== "undefined" ? `${window.location.origin}${summaryUrl}` : summaryUrl}</p>
-      <p><span className="text-muted-foreground">Decisions API:</span> {typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl}</p>
-      <Button
-        size="sm"
-        variant="outline"
-        className="mt-2"
-        onClick={() => {
-          const full = typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl;
-          void navigator.clipboard.writeText(full);
-          toast({ title: "Copied decisions API URL" });
-        }}
-      >
-        Copy decisions API URL
-      </Button>
-    </div>
-  );
+  const debugPanel =
+    process.env.NODE_ENV === "production" ? null : (
+      <div data-testid="cockpit-debug-panel" className="text-xs opacity-70 text-muted-foreground">
+        <p className="font-semibold mb-1">Debug (dev only)</p>
+        <p><span>Summary:</span> {typeof window !== "undefined" ? `${window.location.origin}${summaryUrl}` : summaryUrl}</p>
+        <p><span>Decisions API:</span> {typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2"
+          onClick={() => {
+            const full = typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl;
+            void navigator.clipboard.writeText(full);
+            toast({ title: "Copied decisions API URL" });
+          }}
+        >
+          Copy decisions API URL
+        </Button>
+      </div>
+    );
 
   // Deterministic readiness from issues[] (no backend change)
   const totalActive = issues.length;
@@ -1098,160 +1099,118 @@ export default function CockpitPage() {
       {/* Executive KPI row + Birthdays (roadmap B) — first section */}
       {!isDemoMode() && (
         <div className="mb-6 space-y-4" data-testid="cockpit-executive-kpi-section">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Overall Grade card */}
-            <div
-              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
-              data-testid="exec-kpi-overall"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
-                  Overall
-                </span>
-                {executiveKpis && !executiveKpis.supported && (
-                  <span className="text-[10px] font-medium uppercase text-[var(--text-2)]" title={executiveKpis.reasons?.join(", ")}>
-                    Partial data
-                  </span>
-                )}
+          {/* Single Industrial Readiness card — Overall + 3 pillar rows */}
+          <div
+            className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-md transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--hairline)] focus-visible:ring-offset-2 outline-none"
+            data-testid="exec-kpi-overall"
+            tabIndex={0}
+          >
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Industrial Readiness</h3>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>Executive readiness status (global)</p>
               </div>
-              <div className="flex items-baseline gap-2 flex-wrap">
-                {executiveKpisLoading ? (
-                  <span className="text-sm text-[var(--text-2)]">…</span>
-                ) : executiveKpis ? (
-                  <>
+              {executiveKpis && !executiveKpis.supported && (
+                <span
+                  className="text-[10px] font-medium uppercase text-[var(--text-2)] shrink-0"
+                  title={executiveKpis.reasons?.length ? executiveKpis.reasons.join(", ") : "Some pillars are unavailable"}
+                >
+                  Partial data
+                </span>
+              )}
+            </div>
+            {(executiveKpisLoading || !executiveKpis) ? (
+              <>
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="h-7 w-10 rounded animate-pulse bg-[var(--surface-3)]" />
+                  <div className="h-5 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                </div>
+                <div className="mt-1 h-3 w-full rounded-full bg-[var(--surface-3)] overflow-hidden animate-pulse" />
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="mt-3 flex items-center justify-between gap-2">
+                    <div className="h-4 w-16 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="flex-1 max-w-[60%] ml-2 h-1.5 rounded-full bg-[var(--surface-3)] animate-pulse" />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                {/* Overall row — dominant */}
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-2 flex-wrap">
                     {executiveKpis.grade != null && (
-                      <span className="text-2xl font-bold tabular-nums" style={{ color: "var(--text)" }}>
+                      <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
                         {executiveKpis.grade}
                       </span>
                     )}
-                    <span className="text-lg tabular-nums" style={{ color: "var(--text-2)" }}>
-                      {executiveKpis.overall_percent != null ? `${executiveKpis.overall_percent}%` : "—"}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-                )}
-              </div>
-              {executiveKpis && (
-                <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                  <div className={["h-full rounded-full", barClassFor(executiveKpis.overall_percent)].join(" ")} style={{ width: `${executiveKpis.overall_percent != null ? Math.min(100, Math.max(0, executiveKpis.overall_percent)) : 0}%` }} />
+                    <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Overall</span>
+                  </div>
+                  <span className="text-lg tabular-nums" style={{ color: "var(--text-2)" }}>
+                    {executiveKpis.overall_percent != null ? `${executiveKpis.overall_percent}%` : "—"}
+                  </span>
                 </div>
-              )}
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>Global readiness score</p>
-            </div>
-            {/* Safety */}
-            <div
-              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
-              data-testid="exec-kpi-safety"
-            >
-              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Safety</span>
-              {executiveKpisLoading ? (
-                <span className="text-sm text-[var(--text-2)]">…</span>
-              ) : executiveKpis ? (
-                executiveKpis.pillars.safety != null ? (
-                  <>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.safety}%</span>
-                      {gradeFor(executiveKpis.pillars.safety) != null && (
-                        <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-2)" }}>{gradeFor(executiveKpis.pillars.safety)}</span>
+                <div className="mt-1 h-3 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                  <div
+                    className={["h-full rounded-full shadow-sm transition-all duration-500 ease-out", barClassFor(executiveKpis.overall_percent)].join(" ")}
+                    style={{ width: `${executiveKpis.overall_percent != null ? Math.min(100, Math.max(0, executiveKpis.overall_percent)) : 0}%` }}
+                  />
+                </div>
+                {/* Pillar rows */}
+                {(["safety", "technical", "compliance"] as const).map((pillar) => {
+                  const pct = executiveKpis.pillars[pillar];
+                  const label = pillar.charAt(0).toUpperCase() + pillar.slice(1);
+                  return (
+                    <div key={pillar} className="mt-3 flex items-center gap-2 flex-wrap" data-testid={`exec-kpi-${pillar}`}>
+                      <span className="text-xs font-medium uppercase tracking-wider w-20 shrink-0" style={{ color: "var(--text-2)" }}>{label}</span>
+                      {pct != null ? (
+                        <>
+                          {gradeFor(pct) != null && (
+                            <span className="text-xs font-medium tabular-nums shrink-0" style={{ color: "var(--text-2)" }} title={`Grade ${gradeFor(pct)} based on percent thresholds`}>{gradeFor(pct)}</span>
+                          )}
+                          <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{pct}%</span>
+                          <div className="flex-1 min-w-0 max-w-[60%] h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                            <div className={["h-full rounded-full", barClassFor(pct)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-sm shrink-0" style={{ color: "var(--text-2)" }}>—</span>
+                          <div className="flex-1 min-w-0 max-w-[60%] h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                            <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
+                          </div>
+                        </>
                       )}
                     </div>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                      <div className={["h-full rounded-full", barClassFor(executiveKpis.pillars.safety)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, executiveKpis.pillars.safety))}%` }} />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                      <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
-                    </div>
-                  </>
-                )
-              ) : (
-                <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-              )}
-            </div>
-            {/* Technical */}
-            <div
-              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
-              data-testid="exec-kpi-technical"
-            >
-              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Technical</span>
-              {executiveKpisLoading ? (
-                <span className="text-sm text-[var(--text-2)]">…</span>
-              ) : executiveKpis ? (
-                executiveKpis.pillars.technical != null ? (
-                  <>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.technical}%</span>
-                      {gradeFor(executiveKpis.pillars.technical) != null && (
-                        <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-2)" }}>{gradeFor(executiveKpis.pillars.technical)}</span>
-                      )}
-                    </div>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                      <div className={["h-full rounded-full", barClassFor(executiveKpis.pillars.technical)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, executiveKpis.pillars.technical))}%` }} />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                      <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
-                    </div>
-                  </>
-                )
-              ) : (
-                <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-              )}
-            </div>
-            {/* Compliance */}
-            <div
-              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
-              data-testid="exec-kpi-compliance"
-            >
-              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Compliance</span>
-              {executiveKpisLoading ? (
-                <span className="text-sm text-[var(--text-2)]">…</span>
-              ) : executiveKpis ? (
-                executiveKpis.pillars.compliance != null ? (
-                  <>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.compliance}%</span>
-                      {gradeFor(executiveKpis.pillars.compliance) != null && (
-                        <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-2)" }}>{gradeFor(executiveKpis.pillars.compliance)}</span>
-                      )}
-                    </div>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                      <div className={["h-full rounded-full", barClassFor(executiveKpis.pillars.compliance)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, executiveKpis.pillars.compliance))}%` }} />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                      <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
-                    </div>
-                  </>
-                )
-              ) : (
-                <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
-              )}
-            </div>
+                  );
+                })}
+              </>
+            )}
           </div>
-          {/* Regulatory Radar — only when supported and signals.length > 0 */}
-          {regulatoryRadar?.supported && (regulatoryRadar?.signals?.length ?? 0) > 0 && (
+          {/* Regulatory Radar — skeleton when loading; content when supported and signals.length > 0 */}
+          {(regulatoryRadarLoading || (regulatoryRadar?.supported && (regulatoryRadar?.signals?.length ?? 0) > 0)) && (
             <div
               className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
               data-testid="cockpit-regulatory-radar-block"
             >
               <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Regulatory Radar</h3>
               <p className="text-xs mt-0.5 mb-3" style={{ color: "var(--text-2)" }}>External regulatory signals impacting operations</p>
+              {regulatoryRadarLoading ? (
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="h-5 w-14 rounded animate-pulse bg-[var(--surface-3)] shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="h-4 rounded animate-pulse bg-[var(--surface-3)]" style={{ width: "80%" }} />
+                    <div className="h-3 rounded animate-pulse bg-[var(--surface-3)]" style={{ width: "33%" }} />
+                  </div>
+                </div>
+              ) : (
+                <>
               <ul className="space-y-3">
-                {(regulatoryRadar.signals ?? []).map((s) => (
+                {(regulatoryRadar?.signals ?? []).map((s) => (
                   <li key={s.id} className="flex flex-wrap items-start gap-2">
                     <span
                       className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shrink-0"
+                      title={`Impact level: ${s.impact_level}`}
                       style={{
                         background:
                           s.impact_level === "HIGH"
@@ -1280,6 +1239,8 @@ export default function CockpitPage() {
               <Button disabled className="mt-3" size="sm" variant="outline">
                 Create Action Draft
               </Button>
+                </>
+              )}
             </div>
           )}
           {/* Birthdays block */}
@@ -1289,7 +1250,15 @@ export default function CockpitPage() {
           >
             <h3 className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-2)" }}>Upcoming birthdays</h3>
             {birthdaysLoading ? (
-              <p className="text-sm" style={{ color: "var(--text-2)" }}>Loading…</p>
+              <ul className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2">
+                    <div className="h-4 w-24 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-16 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-20 rounded animate-pulse bg-[var(--surface-3)]" />
+                  </li>
+                ))}
+              </ul>
             ) : !birthdays?.supported ? (
               <p className="text-sm" style={{ color: "var(--text-2)" }}>Birthdays require DOB on employee records.</p>
             ) : (birthdays?.birthdays?.length ?? 0) === 0 ? (
