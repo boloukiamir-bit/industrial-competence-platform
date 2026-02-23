@@ -190,6 +190,31 @@ export default function CockpitPage() {
 
   const [legitimacyDrilldown, setLegitimacyDrilldown] = useState<ShiftLegitimacyDrilldown | null>(null);
   const [legitimacyDrilldownLoading, setLegitimacyDrilldownLoading] = useState(false);
+
+  const [executiveKpis, setExecutiveKpis] = useState<{
+    ok: boolean;
+    overall_percent: number;
+    grade: string;
+    pillars: { safety: number; technical: number; compliance: number };
+    supported: boolean;
+    reasons?: string[];
+  } | null>(null);
+  const [executiveKpisLoading, setExecutiveKpisLoading] = useState(false);
+  const [birthdays, setBirthdays] = useState<{
+    ok: boolean;
+    supported: boolean;
+    birthdays: Array<{
+      employee_id: string;
+      employee_name: string;
+      employee_number: string;
+      line: string | null;
+      date: string;
+      days_left: number;
+    }>;
+    reasons?: string[];
+  } | null>(null);
+  const [birthdaysLoading, setBirthdaysLoading] = useState(false);
+
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
   const shiftReady = isGlobal || (date && hasShiftCode);
@@ -624,6 +649,63 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [sessionOk]);
 
+  // Executive KPIs (global row) — roadmap B
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setExecutiveKpisLoading(true);
+    fetchJson<{
+      ok: boolean;
+      overall_percent: number;
+      grade: string;
+      pillars: { safety: number; technical: number; compliance: number };
+      supported: boolean;
+      reasons?: string[];
+    }>("/api/cockpit/executive-kpis")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setExecutiveKpis(res.data);
+        else if (!cancelled) setExecutiveKpis(null);
+      })
+      .catch(() => {
+        if (!cancelled) setExecutiveKpis(null);
+      })
+      .finally(() => {
+        if (!cancelled) setExecutiveKpisLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Upcoming birthdays — roadmap B
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setBirthdaysLoading(true);
+    fetchJson<{
+      ok: boolean;
+      supported: boolean;
+      birthdays: Array<{
+        employee_id: string;
+        employee_name: string;
+        employee_number: string;
+        line: string | null;
+        date: string;
+        days_left: number;
+      }>;
+      reasons?: string[];
+    }>("/api/cockpit/birthdays?days=14")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setBirthdays(res.data);
+        else if (!cancelled) setBirthdays(null);
+      })
+      .catch(() => {
+        if (!cancelled) setBirthdays(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBirthdaysLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
   // Optional: user display name from whoami (existing endpoint)
   useEffect(() => {
     if (isDemoMode()) return;
@@ -937,6 +1019,129 @@ export default function CockpitPage() {
 
   return (
     <PageFrame debugPanel={debugPanel}>
+      {/* Executive KPI row + Birthdays (roadmap B) — first section */}
+      {!isDemoMode() && (
+        <div className="mb-6 space-y-4" data-testid="cockpit-executive-kpi-section">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Overall Grade card */}
+            <div
+              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
+              data-testid="exec-kpi-overall"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+                  Overall
+                </span>
+                {executiveKpis && !executiveKpis.supported && (
+                  <span className="text-[10px] font-medium uppercase text-[var(--text-2)]" title={executiveKpis.reasons?.join(", ")}>
+                    Partial data
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                {executiveKpisLoading ? (
+                  <span className="text-sm text-[var(--text-2)]">…</span>
+                ) : executiveKpis ? (
+                  <>
+                    <span className="text-2xl font-bold tabular-nums" style={{ color: "var(--text)" }}>
+                      {executiveKpis.grade}
+                    </span>
+                    <span className="text-lg tabular-nums" style={{ color: "var(--text-2)" }}>
+                      {executiveKpis.overall_percent}%
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+                )}
+              </div>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>Global readiness score</p>
+            </div>
+            {/* Safety */}
+            <div
+              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
+              data-testid="exec-kpi-safety"
+            >
+              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Safety</span>
+              {executiveKpisLoading ? (
+                <span className="text-sm text-[var(--text-2)]">…</span>
+              ) : executiveKpis ? (
+                <>
+                  <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.safety}%</span>
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                    <div className="h-full rounded-full bg-[var(--ds-status-ok)]" style={{ width: `${Math.min(100, executiveKpis.pillars.safety)}%` }} />
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+              )}
+            </div>
+            {/* Technical */}
+            <div
+              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
+              data-testid="exec-kpi-technical"
+            >
+              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Technical</span>
+              {executiveKpisLoading ? (
+                <span className="text-sm text-[var(--text-2)]">…</span>
+              ) : executiveKpis ? (
+                <>
+                  <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.technical}%</span>
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                    <div className="h-full rounded-full bg-[var(--ds-status-ok)]" style={{ width: `${Math.min(100, executiveKpis.pillars.technical)}%` }} />
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+              )}
+            </div>
+            {/* Compliance */}
+            <div
+              className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm min-h-[88px] flex flex-col justify-between"
+              data-testid="exec-kpi-compliance"
+            >
+              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Compliance</span>
+              {executiveKpisLoading ? (
+                <span className="text-sm text-[var(--text-2)]">…</span>
+              ) : executiveKpis ? (
+                <>
+                  <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.compliance}%</span>
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                    <div className="h-full rounded-full bg-[var(--ds-status-ok)]" style={{ width: `${Math.min(100, executiveKpis.pillars.compliance)}%` }} />
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+              )}
+            </div>
+          </div>
+          {/* Birthdays block */}
+          <div
+            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
+            data-testid="cockpit-birthdays-block"
+          >
+            <h3 className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-2)" }}>Upcoming birthdays</h3>
+            {birthdaysLoading ? (
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>Loading…</p>
+            ) : !birthdays?.supported ? (
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>Birthdays require DOB on employee records.</p>
+            ) : (birthdays?.birthdays?.length ?? 0) === 0 ? (
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>No birthdays in the next 14 days.</p>
+            ) : (
+              <ul className="space-y-2">
+                {(birthdays?.birthdays ?? []).slice(0, 5).map((b) => (
+                  <li key={b.employee_id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium" style={{ color: "var(--text)" }}>{b.employee_name}</span>
+                    {b.line && <span className="text-[var(--text-2)]">· {b.line}</span>}
+                    <span className="text-[var(--text-2)]">in {b.days_left} day{b.days_left !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-[var(--text-2)]">{b.date}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {!isGlobal && summary && summary.active_total === 0 && !summaryLoading && (
         <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
