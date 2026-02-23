@@ -108,6 +108,10 @@
   --ds-status-at-risk-text: 38 68% 38%;
   --ds-status-ok-bg: 142 50% 94%;
   --ds-status-ok-text: 142 60% 32%;
+  /* Bar fill colors for executive KPI progress (ok / warn / bad) */
+  --ds-status-ok: hsl(142, 60%, 32%);
+  --ds-status-warn: hsl(38, 68%, 38%);
+  --ds-status-bad: hsl(0, 72%, 40%);
 }
 
 /* Design Foundation 2030 — Light Corporate Premium (marketing /2030 + login) */

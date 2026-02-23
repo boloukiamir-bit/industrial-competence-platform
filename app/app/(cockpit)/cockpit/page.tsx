@@ -82,6 +82,28 @@ type GapsLineRow = {
   recommended_action: "assign" | "call_in" | "swap";
 };
 
+/** Same mapping as backend executive-kpis: A..H from percent; null -> null. */
+function gradeFor(pct: number | null): string | null {
+  if (pct === null) return null;
+  if (pct >= 95) return "A";
+  if (pct >= 90) return "B";
+  if (pct >= 85) return "C";
+  if (pct >= 80) return "D";
+  if (pct >= 75) return "E";
+  if (pct >= 70) return "F";
+  if (pct >= 60) return "G";
+  return "H";
+}
+
+/** Deterministic bar fill color: null/0 -> neutral grey; A/B -> ok; C/D/E/F -> warn; G/H -> bad. */
+function barClassFor(pct: number | null): string {
+  if (pct === null || pct === 0) return "bg-[var(--surface-3)]";
+  const g = gradeFor(pct);
+  if (g === "A" || g === "B") return "bg-[var(--ds-status-ok)]";
+  if (g === "C" || g === "D" || g === "E" || g === "F") return "bg-[var(--ds-status-warn)]";
+  return "bg-[var(--ds-status-bad)]";
+}
+
 function CockpitSkeleton() {
   return (
     <PageFrame>
@@ -193,9 +215,9 @@ export default function CockpitPage() {
 
   const [executiveKpis, setExecutiveKpis] = useState<{
     ok: boolean;
-    overall_percent: number;
-    grade: string;
-    pillars: { safety: number; technical: number; compliance: number };
+    overall_percent: number | null;
+    grade: string | null;
+    pillars: { safety: number | null; technical: number | null; compliance: number | null };
     supported: boolean;
     reasons?: string[];
   } | null>(null);
@@ -656,9 +678,9 @@ export default function CockpitPage() {
     setExecutiveKpisLoading(true);
     fetchJson<{
       ok: boolean;
-      overall_percent: number;
-      grade: string;
-      pillars: { safety: number; technical: number; compliance: number };
+      overall_percent: number | null;
+      grade: string | null;
+      pillars: { safety: number | null; technical: number | null; compliance: number | null };
       supported: boolean;
       reasons?: string[];
     }>("/api/cockpit/executive-kpis")
@@ -1043,17 +1065,24 @@ export default function CockpitPage() {
                   <span className="text-sm text-[var(--text-2)]">…</span>
                 ) : executiveKpis ? (
                   <>
-                    <span className="text-2xl font-bold tabular-nums" style={{ color: "var(--text)" }}>
-                      {executiveKpis.grade}
-                    </span>
+                    {executiveKpis.grade != null && (
+                      <span className="text-2xl font-bold tabular-nums" style={{ color: "var(--text)" }}>
+                        {executiveKpis.grade}
+                      </span>
+                    )}
                     <span className="text-lg tabular-nums" style={{ color: "var(--text-2)" }}>
-                      {executiveKpis.overall_percent}%
+                      {executiveKpis.overall_percent != null ? `${executiveKpis.overall_percent}%` : "—"}
                     </span>
                   </>
                 ) : (
                   <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
                 )}
               </div>
+              {executiveKpis && (
+                <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                  <div className={["h-full rounded-full", barClassFor(executiveKpis.overall_percent)].join(" ")} style={{ width: `${executiveKpis.overall_percent != null ? Math.min(100, Math.max(0, executiveKpis.overall_percent)) : 0}%` }} />
+                </div>
+              )}
               <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>Global readiness score</p>
             </div>
             {/* Safety */}
@@ -1065,12 +1094,26 @@ export default function CockpitPage() {
               {executiveKpisLoading ? (
                 <span className="text-sm text-[var(--text-2)]">…</span>
               ) : executiveKpis ? (
-                <>
-                  <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.safety}%</span>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                    <div className="h-full rounded-full bg-[var(--ds-status-ok)]" style={{ width: `${Math.min(100, executiveKpis.pillars.safety)}%` }} />
-                  </div>
-                </>
+                executiveKpis.pillars.safety != null ? (
+                  <>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.safety}%</span>
+                      {gradeFor(executiveKpis.pillars.safety) != null && (
+                        <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-2)" }}>{gradeFor(executiveKpis.pillars.safety)}</span>
+                      )}
+                    </div>
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                      <div className={["h-full rounded-full", barClassFor(executiveKpis.pillars.safety)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, executiveKpis.pillars.safety))}%` }} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                      <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
+                    </div>
+                  </>
+                )
               ) : (
                 <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
               )}
@@ -1084,12 +1127,26 @@ export default function CockpitPage() {
               {executiveKpisLoading ? (
                 <span className="text-sm text-[var(--text-2)]">…</span>
               ) : executiveKpis ? (
-                <>
-                  <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.technical}%</span>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                    <div className="h-full rounded-full bg-[var(--ds-status-ok)]" style={{ width: `${Math.min(100, executiveKpis.pillars.technical)}%` }} />
-                  </div>
-                </>
+                executiveKpis.pillars.technical != null ? (
+                  <>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.technical}%</span>
+                      {gradeFor(executiveKpis.pillars.technical) != null && (
+                        <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-2)" }}>{gradeFor(executiveKpis.pillars.technical)}</span>
+                      )}
+                    </div>
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                      <div className={["h-full rounded-full", barClassFor(executiveKpis.pillars.technical)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, executiveKpis.pillars.technical))}%` }} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                      <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
+                    </div>
+                  </>
+                )
               ) : (
                 <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
               )}
@@ -1103,12 +1160,26 @@ export default function CockpitPage() {
               {executiveKpisLoading ? (
                 <span className="text-sm text-[var(--text-2)]">…</span>
               ) : executiveKpis ? (
-                <>
-                  <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.compliance}%</span>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
-                    <div className="h-full rounded-full bg-[var(--ds-status-ok)]" style={{ width: `${Math.min(100, executiveKpis.pillars.compliance)}%` }} />
-                  </div>
-                </>
+                executiveKpis.pillars.compliance != null ? (
+                  <>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-lg font-bold tabular-nums" style={{ color: "var(--text)" }}>{executiveKpis.pillars.compliance}%</span>
+                      {gradeFor(executiveKpis.pillars.compliance) != null && (
+                        <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-2)" }}>{gradeFor(executiveKpis.pillars.compliance)}</span>
+                      )}
+                    </div>
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                      <div className={["h-full rounded-full", barClassFor(executiveKpis.pillars.compliance)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, executiveKpis.pillars.compliance))}%` }} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                      <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
+                    </div>
+                  </>
+                )
               ) : (
                 <span className="text-sm" style={{ color: "var(--text-2)" }}>—</span>
               )}
