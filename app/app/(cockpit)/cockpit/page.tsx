@@ -237,6 +237,25 @@ export default function CockpitPage() {
   } | null>(null);
   const [birthdaysLoading, setBirthdaysLoading] = useState(false);
 
+  const [regulatoryRadar, setRegulatoryRadar] = useState<{
+    ok: boolean;
+    supported: boolean;
+    signals: Array<{
+      id: string;
+      source_type: "AUTO" | "MANUAL";
+      impact_level: "LOW" | "MEDIUM" | "HIGH";
+      title: string;
+      summary: string | null;
+      source_name: string | null;
+      source_url: string | null;
+      effective_date: string | null;
+      time_to_impact_days: number | null;
+      relevance_score: number;
+      created_at: string;
+    }>;
+  } | null>(null);
+  const [regulatoryRadarLoading, setRegulatoryRadarLoading] = useState(false);
+
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
   const shiftReady = isGlobal || (date && hasShiftCode);
@@ -728,6 +747,41 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [sessionOk]);
 
+  // Regulatory Radar — read-only; do not render block on failure or supported=false
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setRegulatoryRadarLoading(true);
+    fetchJson<{
+      ok: boolean;
+      supported: boolean;
+      signals: Array<{
+        id: string;
+        source_type: "AUTO" | "MANUAL";
+        impact_level: "LOW" | "MEDIUM" | "HIGH";
+        title: string;
+        summary: string | null;
+        source_name: string | null;
+        source_url: string | null;
+        effective_date: string | null;
+        time_to_impact_days: number | null;
+        relevance_score: number;
+        created_at: string;
+      }>;
+    }>("/api/cockpit/regulatory-radar")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setRegulatoryRadar(res.data);
+        else if (!cancelled) setRegulatoryRadar(null);
+      })
+      .catch(() => {
+        if (!cancelled) setRegulatoryRadar(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRegulatoryRadarLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
   // Optional: user display name from whoami (existing endpoint)
   useEffect(() => {
     if (isDemoMode()) return;
@@ -1185,6 +1239,49 @@ export default function CockpitPage() {
               )}
             </div>
           </div>
+          {/* Regulatory Radar — only when supported and signals.length > 0 */}
+          {regulatoryRadar?.supported && (regulatoryRadar?.signals?.length ?? 0) > 0 && (
+            <div
+              className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
+              data-testid="cockpit-regulatory-radar-block"
+            >
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Regulatory Radar</h3>
+              <p className="text-xs mt-0.5 mb-3" style={{ color: "var(--text-2)" }}>External regulatory signals impacting operations</p>
+              <ul className="space-y-3">
+                {(regulatoryRadar.signals ?? []).map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-start gap-2">
+                    <span
+                      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shrink-0"
+                      style={{
+                        background:
+                          s.impact_level === "HIGH"
+                            ? "var(--ds-status-bad)"
+                            : s.impact_level === "MEDIUM"
+                              ? "var(--ds-status-warn)"
+                              : "var(--surface-3)",
+                        color: s.impact_level === "LOW" ? "var(--text-2)" : undefined,
+                      }}
+                    >
+                      {s.impact_level}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{s.title}</span>
+                      {s.effective_date && (
+                        <span className="text-xs ml-2" style={{ color: "var(--text-2)" }}>{s.effective_date}</span>
+                      )}
+                      {s.time_to_impact_days != null && (
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>In {s.time_to_impact_days} days</p>
+                      )}
+                      <p className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>Relevance {s.relevance_score}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Button disabled className="mt-3" size="sm" variant="outline">
+                Create Action Draft
+              </Button>
+            </div>
+          )}
           {/* Birthdays block */}
           <div
             className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
