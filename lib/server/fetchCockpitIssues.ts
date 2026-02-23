@@ -58,7 +58,7 @@ export type CockpitIssue = {
   decision_actions?: string[];
   decision_created_at?: string | null;
   decision_type?: string | null;
-  /** Set only for issue_type === "UNSTAFFED" in SHIFT mode. */
+  /** Set only for issue_type === "UNSTAFFED" (SHIFT or GLOBAL). */
   unstaffed_reason?: "NO_ROSTER_ROW" | "HAS_ROSTER_ROW";
 };
 
@@ -140,6 +140,11 @@ export type FetchCockpitIssuesGlobalDebugInfo = {
   site_id: string | null;
   latest_date: string | null;
   raw_count: number;
+  /** Shift code used for roster lookup (most frequent on latest_date; tie = lexicographically smallest). */
+  global_roster_shift_code_used?: string;
+  unstaffed_total?: number;
+  unstaffed_no_roster_row?: number;
+  unstaffed_has_roster_row?: number;
 };
 
 export async function fetchCockpitIssuesGlobal(
@@ -204,6 +209,34 @@ export async function fetchCockpitIssuesGlobal(
     (r.warning_count ?? 0) > 0;
   const rawList = include_go ? allRows : allRows.filter(statusMatch);
 
+  // Deterministic: most frequent shift_code for this date; tie = lexicographically smallest
+  const shiftCounts = new Map<string, number>();
+  for (const r of allRows) {
+    const sc = (r.shift_code ?? "").trim();
+    if (sc) shiftCounts.set(sc, (shiftCounts.get(sc) ?? 0) + 1);
+  }
+  let rosterShiftCode = "";
+  let maxCount = 0;
+  for (const [sc, count] of shiftCounts) {
+    if (count > maxCount || (count === maxCount && (rosterShiftCode === "" || sc < rosterShiftCode))) {
+      maxCount = count;
+      rosterShiftCode = sc;
+    }
+  }
+
+  let rosterStationCodes = new Set<string>();
+  if (rosterShiftCode) {
+    const normalizedShift = normalizeRosterShiftCode(rosterShiftCode);
+    const { data: rosterRows } = await supabaseAdmin
+      .from("stg_roster_v1")
+      .select("station_code")
+      .eq("shift_code", normalizedShift);
+    for (const row of rosterRows ?? []) {
+      const c = (row as { station_code: string | null }).station_code;
+      if (c != null && String(c).trim() !== "") rosterStationCodes.add(String(c).trim());
+    }
+  }
+
   const BLOCKING_STATUSES = new Set<string>(["NO_GO", "UNSTAFFED", "ILLEGAL"]);
   const issues: CockpitIssue[] = [];
   for (const r of rawList) {
@@ -214,7 +247,7 @@ export async function fetchCockpitIssuesGlobal(
 
     const issueId = toIssueId(org_id, site_id, latestDate, shiftCode, lineVal, r.station_id, issueType);
 
-    const primaryLabel =
+    let primaryLabel =
       r.station_shift_status === "NO_GO"
         ? "NO-GO: competence gap"
         : r.station_shift_status === "WARNING"
@@ -224,6 +257,18 @@ export async function fetchCockpitIssuesGlobal(
             : r.station_shift_status === "ILLEGAL"
               ? "ILLEGAL: roster violation"
               : "WARNING: competence gap";
+
+    let unstaffedReason: "NO_ROSTER_ROW" | "HAS_ROSTER_ROW" | undefined;
+    if (issueType === "UNSTAFFED") {
+      const hasRosterRow = r.station_code != null && rosterStationCodes.has(r.station_code.trim());
+      if (!hasRosterRow) {
+        primaryLabel = "UNSTAFFED: no roster row";
+        unstaffedReason = "NO_ROSTER_ROW";
+      } else {
+        unstaffedReason = "HAS_ROSTER_ROW";
+      }
+    }
+
     const rootCause = {
       type: "station_issue",
       primary: primaryLabel,
@@ -263,11 +308,25 @@ export async function fetchCockpitIssuesGlobal(
       decision_actions: undefined,
       decision_created_at: undefined,
       decision_type: undefined,
+      ...(unstaffedReason !== undefined && { unstaffed_reason: unstaffedReason }),
     });
   }
 
   const debugInfo: FetchCockpitIssuesGlobalDebugInfo | undefined = debug
-    ? { org_id, site_id, latest_date: latestDate, raw_count: issues.length }
+    ? {
+        org_id,
+        site_id,
+        latest_date: latestDate,
+        raw_count: issues.length,
+        global_roster_shift_code_used: rosterShiftCode || undefined,
+        unstaffed_total: issues.filter((i) => i.issue_type === "UNSTAFFED").length,
+        unstaffed_no_roster_row: issues.filter(
+          (i) => i.issue_type === "UNSTAFFED" && i.unstaffed_reason === "NO_ROSTER_ROW"
+        ).length,
+        unstaffed_has_roster_row: issues.filter(
+          (i) => i.issue_type === "UNSTAFFED" && i.unstaffed_reason === "HAS_ROSTER_ROW"
+        ).length,
+      }
     : undefined;
 
   return debug ? { issues, debug: debugInfo } : { issues };
