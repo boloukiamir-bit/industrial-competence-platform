@@ -15,8 +15,15 @@ import {
   Shield,
   UserX,
   X,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -64,6 +71,78 @@ const ACTION_LABELS: Record<string, string> = {
   'membership.role_updated': 'Role Changed',
   'membership.disabled': 'User Disabled',
 };
+
+/** Deterministic field order for regulatory_signal meta payload. */
+const REGULATORY_SIGNAL_PAYLOAD_KEYS = [
+  'signal_id',
+  'impact_level',
+  'effective_date',
+  'relevance_score',
+  'source',
+  'source_url',
+  'source_name',
+  'summary',
+  'title',
+  'time_to_impact_days',
+] as const;
+
+function formatPayloadValue(key: string, value: unknown): string {
+  if (value == null) return '';
+  if (key === 'effective_date' && typeof value === 'string') {
+    try {
+      return new Date(value).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function PayloadSection({
+  meta,
+  targetType,
+  defaultOpen = false,
+}: {
+  meta: Record<string, unknown>;
+  targetType: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const isEmpty = !meta || Object.keys(meta).length === 0;
+
+  if (isEmpty) return null;
+
+  const isRegulatorySignal = targetType === 'regulatory_signal';
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-2">
+      <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        <span>Payload</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {isRegulatorySignal ? (
+          <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            {REGULATORY_SIGNAL_PAYLOAD_KEYS.map((key) => {
+              const value = meta[key];
+              if (value === undefined || value === null) return null;
+              return (
+                <span key={key} className="contents">
+                  <span className="text-muted-foreground font-medium">{key.replace(/_/g, ' ')}</span>
+                  <span className="text-foreground break-all">{formatPayloadValue(key, value)}</span>
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <pre className="mt-2 p-3 rounded-md bg-muted text-muted-foreground text-xs overflow-x-auto">
+            <code>{JSON.stringify(meta, null, 2)}</code>
+          </pre>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 function AdminAuditContent() {
   const router = useRouter();
@@ -233,6 +312,11 @@ function AdminAuditContent() {
             <span><strong className="text-foreground">Actor:</strong> {selectedEvent.actor_email ?? selectedEvent.created_by ?? '—'}</span>
             <span><strong className="text-foreground">Created:</strong> {formatDate(selectedEvent.created_at)}</span>
           </div>
+          <PayloadSection
+            meta={selectedEvent.meta ?? {}}
+            targetType={selectedEvent.target_type}
+            defaultOpen={selectedEvent.target_type === 'regulatory_signal'}
+          />
         </div>
       )}
 
