@@ -93,6 +93,20 @@ function formatFocusedEventTimestamp(isoDateStr: string): { isoUtc: string; loca
   return { isoUtc, localStockholm };
 }
 
+type GovernanceEventCategory = 'REGULATORY' | 'EXECUTION' | 'COMPLIANCE' | 'LEGITIMACY' | 'SYSTEM';
+
+/** Deterministic classification for governance events. Priority: REGULATORY > LEGITIMACY > COMPLIANCE > EXECUTION > SYSTEM. */
+function classifyGovernanceEvent(action?: string | null, targetType?: string | null): GovernanceEventCategory {
+  const a = (action ?? '').toUpperCase();
+  const t = (targetType ?? '').toLowerCase();
+
+  if (a.startsWith('REGULATORY_') || t === 'regulatory_signal') return 'REGULATORY';
+  if (a.includes('LEGITIMACY') || a.startsWith('GOVERNANCE_GATE_') || a === 'ALLOWED' || a === 'BLOCKED') return 'LEGITIMACY';
+  if (a.startsWith('COMPLIANCE_') || t.includes('compliance')) return 'COMPLIANCE';
+  if (a.includes('DECISION') || a.startsWith('COCKPIT_') || a.startsWith('TOMORROWS_GAPS_')) return 'EXECUTION';
+  return 'SYSTEM';
+}
+
 /** Deterministic field order for regulatory_signal meta payload. */
 const REGULATORY_SIGNAL_PAYLOAD_KEYS = [
   'signal_id',
@@ -355,7 +369,12 @@ function AdminAuditContent() {
               </Button>
             </div>
             <div>
-              <span className="text-muted-foreground">Action</span>
+              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                <span className="text-muted-foreground">Action</span>
+                <span className="inline-flex items-center rounded-full border border-border bg-muted/80 px-2 py-0.5 text-xs font-medium uppercase text-muted-foreground">
+                  CATEGORY: {classifyGovernanceEvent(selectedEvent.action, selectedEvent.target_type)}
+                </span>
+              </div>
               <p className="font-semibold text-foreground mt-0.5">{selectedEvent.action}</p>
             </div>
             <div>
