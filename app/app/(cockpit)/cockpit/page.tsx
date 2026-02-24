@@ -255,6 +255,7 @@ export default function CockpitPage() {
     }>;
   } | null>(null);
   const [regulatoryRadarLoading, setRegulatoryRadarLoading] = useState(false);
+  const [creatingRadarActionSignalId, setCreatingRadarActionSignalId] = useState<string | null>(null);
 
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
@@ -987,6 +988,40 @@ export default function CockpitPage() {
     toast({ title: "Undo restored in UI; refresh to confirm." });
   };
 
+  const handleCreateRadarActionDraft = async (signalId: string) => {
+    if (creatingRadarActionSignalId) return;
+    setCreatingRadarActionSignalId(signalId);
+    try {
+      const res = await fetch("/api/cockpit/regulatory-radar/create-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signal_id: signalId }),
+        credentials: "include",
+      });
+      const data = (await res.json()) as { ok?: boolean; draft_id?: string; error?: string };
+      if (res.ok && data.ok && data.draft_id) {
+        toast({
+          title: "Draft created",
+          description: "Regulatory action draft saved to audit trail.",
+        });
+        return;
+      }
+      toast({
+        title: "Create action failed",
+        description: data.error ?? (res.status === 404 ? "Signal not found" : "Request failed"),
+        variant: "destructive",
+      });
+    } catch (err) {
+      toast({
+        title: "Create action failed",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingRadarActionSignalId(null);
+    }
+  };
+
   // Fragility Index 0–100 from severity (BLOCKING = 25 pts, WARNING = 8 pts). UI-only, no backend.
   const _blockingForFragility = issues.filter((i) => i.severity === "BLOCKING").length;
   const _warningForFragility = issues.filter((i) => i.severity === "WARNING").length;
@@ -1233,12 +1268,22 @@ export default function CockpitPage() {
                       )}
                       <p className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>Relevance {s.relevance_score}</p>
                     </div>
+                    {creatingRadarActionSignalId === s.id ? (
+                      <span className="text-xs text-[var(--text-2)] shrink-0">Creating…</span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 h-7 text-[12px]"
+                        onClick={() => handleCreateRadarActionDraft(s.id)}
+                        disabled={!!creatingRadarActionSignalId}
+                      >
+                        Create Action Draft
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
-              <Button disabled className="mt-3" size="sm" variant="outline">
-                Create Action Draft
-              </Button>
                 </>
               )}
             </div>
