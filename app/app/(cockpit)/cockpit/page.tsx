@@ -1183,7 +1183,7 @@ export default function CockpitPage() {
                   </span>
                 </div>
                 <Link
-                  href="/app/admin/audit"
+                  href="/app/admin/audit?impact=blocking&window_hours=24"
                   className="shrink-0 text-xs font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--hairline)] focus:ring-offset-1 rounded"
                   style={{ color: "var(--text)" }}
                 >

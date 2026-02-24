@@ -265,6 +265,12 @@ function AdminAuditContent() {
   }, [fetchLogs]);
 
   const idParam = searchParams.get('id')?.trim() ?? '';
+  const impactParam = searchParams.get('impact')?.trim() ?? '';
+  const windowHoursParam = searchParams.get('window_hours');
+  const windowHours = (() => {
+    const n = Number(windowHoursParam);
+    return Number.isFinite(n) && n >= 1 && n <= 168 ? n : null;
+  })();
 
   useEffect(() => {
     if (!idParam || !UUID_RE.test(idParam)) {
@@ -369,6 +375,36 @@ function AdminAuditContent() {
     const timeB = safeCreatedAtTime(b.created_at);
     return rankA - rankB || timeB - timeA || String(b.id).localeCompare(String(a.id));
   });
+
+  let filteredLogs = sortedLogs;
+  if (impactParam === 'blocking') {
+    filteredLogs = filteredLogs.filter((log) => {
+      const category = classifyGovernanceEvent(log.action, log.target_type);
+      const severity = resolveGovernanceSeverity(category, log.action, log.target_type, log.metadata);
+      return resolveGovernanceImpact(severity) === 'BLOCKING';
+    });
+  }
+  if (windowHours != null) {
+    const since = Date.now() - windowHours * 60 * 60 * 1000;
+    filteredLogs = filteredLogs.filter((log) => safeCreatedAtTime(log.created_at) >= since);
+  }
+
+  const displayLogs: AuditLog[] =
+    selectedEvent && !filteredLogs.some((l) => String(l.id) === selectedEvent.id)
+      ? [
+          {
+            id: selectedEvent.id,
+            actor_user_id: '',
+            action: selectedEvent.action,
+            target_type: selectedEvent.target_type,
+            target_id: selectedEvent.target_id,
+            metadata: selectedEvent.meta ?? {},
+            created_at: selectedEvent.created_at,
+            actor_email: selectedEvent.actor_email ?? null,
+          },
+          ...filteredLogs,
+        ]
+      : filteredLogs;
 
   const clearFocus = useCallback(() => {
     setSelectedEvent(null);
@@ -526,7 +562,7 @@ function AdminAuditContent() {
         emptyIcon={<ScrollText className="w-8 h-8 text-muted-foreground" />}
       >
         <div className="space-y-2">
-          {sortedLogs.map((log) => {
+          {displayLogs.map((log) => {
             const IconComponent = ACTION_ICONS[log.action] || ScrollText;
             const isFocused = selectedEvent != null && String(log.id) === selectedEvent.id;
             const showFlash = isFocused && flash;
