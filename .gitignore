@@ -41,3 +41,6 @@ project_context.txt
 # vercel local
 .vercel
 .cursor/
+
+# local auth artifacts
+.dev-bearer-header.txt
