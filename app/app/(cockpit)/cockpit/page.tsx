@@ -144,7 +144,7 @@ function isLegacyShiftType(shiftCode: string): boolean {
 }
 
 export default function CockpitPage() {
-  const { toast } = useToast();
+  const { toast, toasts } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { date, shiftCode, line, setDate, setShiftCode, setLine } = useCockpitFilters();
@@ -998,11 +998,16 @@ export default function CockpitPage() {
         body: JSON.stringify({ signal_id: signalId }),
         credentials: "include",
       });
-      const data = (await res.json()) as { ok?: boolean; draft_id?: string; error?: string };
+      const data = (await res.json()) as { ok?: boolean; draft_id?: string; audit_url?: string; error?: string };
       if (res.ok && data.ok && data.draft_id) {
+        const auditUrl = data.audit_url ?? `/app/admin/audit?id=${data.draft_id}`;
         toast({
           title: "Draft created",
-          description: "Regulatory action draft saved to audit trail.",
+          description: "Saved to audit trail.",
+          action: {
+            label: "Open audit",
+            onClick: () => router.push(auditUrl),
+          },
         });
         return;
       }
@@ -1632,6 +1637,35 @@ export default function CockpitPage() {
         sessionOk={sessionOk}
         cockpitMode={mode}
       />
+
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`rounded-lg border px-4 py-3 shadow-lg ${
+                t.variant === "destructive"
+                  ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/80"
+                  : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
+              }`}
+            >
+              {t.title && <p className="font-medium text-sm">{t.title}</p>}
+              {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
+              {t.action && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={t.action.onClick}
+                >
+                  {t.action.label}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </PageFrame>
   );
 }

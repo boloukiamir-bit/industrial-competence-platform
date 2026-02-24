@@ -114,9 +114,11 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
+  const draft_id = (inserted as { id: string }).id;
   const res = NextResponse.json({
     ok: true,
-    draft_id: (inserted as { id: string }).id,
+    draft_id,
+    audit_url: `/app/admin/audit?id=${draft_id}`,
   });
   applySupabaseCookies(res, pendingCookies);
   return res;
