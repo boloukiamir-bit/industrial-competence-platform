@@ -107,6 +107,27 @@ function classifyGovernanceEvent(action?: string | null, targetType?: string | n
   return 'SYSTEM';
 }
 
+type GovernanceEventSeverity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/** Deterministic severity from category + action. Priority: CRITICAL > HIGH > MEDIUM > LOW > INFO. Does not inspect meta. */
+function resolveGovernanceSeverity(
+  category: GovernanceEventCategory,
+  action?: string | null,
+  targetType?: string | null,
+  _meta?: unknown
+): GovernanceEventSeverity {
+  const a = (action ?? '').toUpperCase();
+  void targetType; // reserved for future use
+
+  if (category === 'LEGITIMACY' && (a === 'BLOCKED' || a.includes('LEGAL_STOP') || a.includes('NO_GO'))) return 'CRITICAL';
+  if (category === 'REGULATORY' && a.includes('BLOCKED')) return 'CRITICAL';
+  if (category === 'REGULATORY' || category === 'LEGITIMACY') return 'HIGH';
+  if (category === 'COMPLIANCE') return 'MEDIUM';
+  if (category === 'EXECUTION') return 'LOW';
+  if (category === 'SYSTEM') return 'INFO';
+  return 'INFO';
+}
+
 /** Deterministic field order for regulatory_signal meta payload. */
 const REGULATORY_SIGNAL_PAYLOAD_KEYS = [
   'signal_id',
@@ -369,12 +390,34 @@ function AdminAuditContent() {
               </Button>
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                <span className="text-muted-foreground">Action</span>
-                <span className="inline-flex items-center rounded-full border border-border bg-muted/80 px-2 py-0.5 text-xs font-medium uppercase text-muted-foreground">
-                  CATEGORY: {classifyGovernanceEvent(selectedEvent.action, selectedEvent.target_type)}
-                </span>
-              </div>
+              {(() => {
+                const category = classifyGovernanceEvent(selectedEvent.action, selectedEvent.target_type);
+                const severity = resolveGovernanceSeverity(
+                  category,
+                  selectedEvent.action,
+                  selectedEvent.target_type,
+                  selectedEvent.meta
+                );
+                const severityPillClass =
+                  severity === 'CRITICAL' || severity === 'HIGH'
+                    ? 'border-foreground/30 font-semibold text-foreground'
+                    : severity === 'MEDIUM'
+                      ? 'border-border text-muted-foreground'
+                      : 'border-border text-muted-foreground';
+                return (
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <span className="text-muted-foreground">Action</span>
+                    <span className="inline-flex items-center rounded-full border bg-muted/80 px-2 py-0.5 text-xs font-medium uppercase border-border text-muted-foreground">
+                      CATEGORY: {category}
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full border bg-muted/80 px-2 py-0.5 text-xs font-medium uppercase ${severityPillClass}`}
+                    >
+                      SEVERITY: {severity}
+                    </span>
+                  </div>
+                );
+              })()}
               <p className="font-semibold text-foreground mt-0.5">{selectedEvent.action}</p>
             </div>
             <div>
