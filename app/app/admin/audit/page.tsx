@@ -134,6 +134,13 @@ function resolveGovernanceImpact(sev: GovernanceEventSeverity): GovernanceEventI
   return sev === 'CRITICAL' || sev === 'HIGH' ? 'BLOCKING' : 'NON-BLOCKING';
 }
 
+/** Safe created_at as timestamp; 0 if missing or invalid. */
+function safeCreatedAtTime(created_at: string | undefined | null): number {
+  if (created_at == null || created_at === '') return 0;
+  const t = new Date(created_at).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 /** Deterministic field order for regulatory_signal meta payload. */
 const REGULATORY_SIGNAL_PAYLOAD_KEYS = [
   'signal_id',
@@ -349,6 +356,20 @@ function AdminAuditContent() {
   const uniqueActions = [...new Set(logs.map(l => l.action))];
   const dataStatus = useDataState(logs, loading, error);
 
+  const sortedLogs = [...logs].sort((a, b) => {
+    const categoryA = classifyGovernanceEvent(a.action, a.target_type);
+    const categoryB = classifyGovernanceEvent(b.action, b.target_type);
+    const severityA = resolveGovernanceSeverity(categoryA, a.action, a.target_type, a.metadata);
+    const severityB = resolveGovernanceSeverity(categoryB, b.action, b.target_type, b.metadata);
+    const impactA = resolveGovernanceImpact(severityA);
+    const impactB = resolveGovernanceImpact(severityB);
+    const rankA = impactA === 'BLOCKING' ? 0 : 1;
+    const rankB = impactB === 'BLOCKING' ? 0 : 1;
+    const timeA = safeCreatedAtTime(a.created_at);
+    const timeB = safeCreatedAtTime(b.created_at);
+    return rankA - rankB || timeB - timeA || String(b.id).localeCompare(String(a.id));
+  });
+
   const clearFocus = useCallback(() => {
     setSelectedEvent(null);
     setFocusError(null);
@@ -505,7 +526,7 @@ function AdminAuditContent() {
         emptyIcon={<ScrollText className="w-8 h-8 text-muted-foreground" />}
       >
         <div className="space-y-2">
-          {logs.map((log) => {
+          {sortedLogs.map((log) => {
             const IconComponent = ACTION_ICONS[log.action] || ScrollText;
             const isFocused = selectedEvent != null && String(log.id) === selectedEvent.id;
             const showFlash = isFocused && flash;
