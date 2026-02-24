@@ -17,8 +17,10 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  Copy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import {
   Collapsible,
   CollapsibleContent,
@@ -71,6 +73,25 @@ const ACTION_LABELS: Record<string, string> = {
   'membership.role_updated': 'Role Changed',
   'membership.disabled': 'User Disabled',
 };
+
+const FOCUSED_EVENT_TIMEZONE = 'Europe/Stockholm';
+
+/** Single helper for focused event timestamp: ISO UTC + local (Europe/Stockholm). */
+function formatFocusedEventTimestamp(isoDateStr: string): { isoUtc: string; localStockholm: string } {
+  const d = new Date(isoDateStr);
+  const isoUtc = d.toISOString();
+  const localStockholm = d.toLocaleString('sv-SE', {
+    timeZone: FOCUSED_EVENT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  return { isoUtc, localStockholm };
+}
 
 /** Deterministic field order for regulatory_signal meta payload. */
 const REGULATORY_SIGNAL_PAYLOAD_KEYS = [
@@ -148,6 +169,7 @@ function AdminAuditContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentOrg } = useOrg();
+  const { toast, toasts } = useToast();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
@@ -156,6 +178,14 @@ function AdminAuditContent() {
   const [focusError, setFocusError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   const focusFetchedRef = useRef<string | null>(null);
+
+  const copyEventId = useCallback(() => {
+    if (!selectedEvent?.id) return;
+    navigator.clipboard.writeText(selectedEvent.id).then(
+      () => toast({ title: 'Copied' }),
+      () => toast({ title: 'Copy failed', variant: 'destructive' })
+    );
+  }, [selectedEvent?.id, toast]);
 
   const fetchLogs = useCallback(async () => {
     if (!currentOrg) return;
@@ -298,19 +328,58 @@ function AdminAuditContent() {
         </div>
       )}
 
-      {selectedEvent && (
-        <div className="rounded-lg border border-primary/30 bg-muted/50 dark:bg-muted/30 px-4 py-3 space-y-2">
+      {selectedEvent && (() => {
+        const ts = formatFocusedEventTimestamp(selectedEvent.created_at);
+        return (
+        <div className="rounded-lg border border-primary/30 bg-muted/50 dark:bg-muted/30 px-4 py-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-sm text-foreground">Focused Event</span>
             <Button type="button" variant="outline" size="sm" onClick={clearFocus}>
               Clear focus
             </Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span><strong className="text-foreground">Action:</strong> {selectedEvent.action}</span>
-            <span><strong className="text-foreground">Target:</strong> {selectedEvent.target_type}{selectedEvent.target_id ? ` / ${selectedEvent.target_id}` : ''}</span>
-            <span><strong className="text-foreground">Actor:</strong> {selectedEvent.actor_email ?? selectedEvent.created_by ?? '—'}</span>
-            <span><strong className="text-foreground">Created:</strong> {formatDate(selectedEvent.created_at)}</span>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-muted-foreground">Event ID</span>
+              <code className="font-mono text-xs bg-muted px-2 py-1 rounded">{selectedEvent.id}</code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={copyEventId}
+                aria-label="Copy event ID"
+              >
+                <Copy className="w-3.5 h-3.5 mr-1" />
+                Copy
+              </Button>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Action</span>
+              <p className="font-semibold text-foreground mt-0.5">{selectedEvent.action}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Target</span>
+              <p className="font-mono text-xs mt-0.5 text-foreground">
+                {selectedEvent.target_type}
+                {selectedEvent.target_id != null && selectedEvent.target_id !== ''
+                  ? ` / ${selectedEvent.target_id}`
+                  : ''}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Actor</span>
+              <p className="mt-0.5 text-foreground">
+                {selectedEvent.actor_email ?? selectedEvent.created_by ?? '—'}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Timestamp</span>
+              <p className="mt-0.5 font-mono text-xs text-foreground">{ts.isoUtc}</p>
+              <p className="mt-0.5 text-muted-foreground">
+                {ts.localStockholm} ({FOCUSED_EVENT_TIMEZONE})
+              </p>
+            </div>
           </div>
           <PayloadSection
             meta={selectedEvent.meta ?? {}}
@@ -318,7 +387,8 @@ function AdminAuditContent() {
             defaultOpen={selectedEvent.target_type === 'regulatory_signal'}
           />
         </div>
-      )}
+        );
+      })()}
 
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
@@ -407,6 +477,24 @@ function AdminAuditContent() {
           })}
         </div>
       </DataState>
+
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`rounded-lg border px-4 py-3 shadow-lg ${
+                t.variant === 'destructive'
+                  ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/80'
+                  : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+              }`}
+            >
+              {t.title && <p className="font-medium text-sm">{t.title}</p>}
+              {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
