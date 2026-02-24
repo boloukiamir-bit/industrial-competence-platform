@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 import { getInitialDateFromUrlOrToday, useCockpitFilters } from "@/lib/CockpitFilterContext";
@@ -222,6 +224,12 @@ export default function CockpitPage() {
     reasons?: string[];
   } | null>(null);
   const [executiveKpisLoading, setExecutiveKpisLoading] = useState(false);
+  const [governanceKpis, setGovernanceKpis] = useState<{
+    ok: boolean;
+    window_hours: number;
+    blocking_events_24h: number;
+  } | null>(null);
+  const [governanceKpisLoading, setGovernanceKpisLoading] = useState(false);
   const [birthdays, setBirthdays] = useState<{
     ok: boolean;
     supported: boolean;
@@ -717,6 +725,27 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [sessionOk]);
 
+  // Blocking governance events (24h) — tenant-scoped KPI
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setGovernanceKpisLoading(true);
+    fetchJson<{ ok: boolean; window_hours: number; blocking_events_24h: number }>(
+      "/api/cockpit/governance-kpis?window_hours=24"
+    )
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setGovernanceKpis(res.data);
+        else if (!cancelled) setGovernanceKpis(null);
+      })
+      .catch(() => {
+        if (!cancelled) setGovernanceKpis(null);
+      })
+      .finally(() => {
+        if (!cancelled) setGovernanceKpisLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
   // Upcoming birthdays — roadmap B
   useEffect(() => {
     if (isDemoMode() || !sessionOk) return;
@@ -1139,6 +1168,29 @@ export default function CockpitPage() {
       {/* Executive KPI row + Birthdays (roadmap B) — first section */}
       {!isDemoMode() && (
         <div className="mb-6 space-y-4" data-testid="cockpit-executive-kpi-section">
+          {/* Executive Alert Strip: show only when blocking governance events (24h) > 0 */}
+          {!governanceKpisLoading &&
+            typeof governanceKpis?.blocking_events_24h === "number" &&
+            governanceKpis.blocking_events_24h > 0 && (
+              <div
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2"
+                data-testid="exec-alert-blocking-governance"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <TriangleAlert className="h-4 w-4 shrink-0 text-[var(--text-2)]" aria-hidden />
+                  <span className="text-sm font-medium truncate" style={{ color: "var(--text-2)" }}>
+                    Blocking governance activity detected (last 24h).
+                  </span>
+                </div>
+                <Link
+                  href="/app/admin/audit"
+                  className="shrink-0 text-xs font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--hairline)] focus:ring-offset-1 rounded"
+                  style={{ color: "var(--text)" }}
+                >
+                  Open audit
+                </Link>
+              </div>
+            )}
           {/* Single Industrial Readiness card — Overall + 3 pillar rows */}
           <div
             className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-md transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--hairline)] focus-visible:ring-offset-2 outline-none"
@@ -1224,6 +1276,17 @@ export default function CockpitPage() {
                     </div>
                   );
                 })}
+                {/* Blocking governance events (24h) */}
+                <div className="mt-3 flex items-center gap-2 flex-wrap" data-testid="exec-kpi-blocking-governance">
+                  <span className="text-xs font-medium uppercase tracking-wider shrink-0" style={{ color: "var(--text-2)" }}>Blocking governance events (24h)</span>
+                  {governanceKpisLoading ? (
+                    <div className="h-4 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                  ) : governanceKpis?.ok === true && typeof governanceKpis.blocking_events_24h === "number" ? (
+                    <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{governanceKpis.blocking_events_24h}</span>
+                  ) : (
+                    <span className="text-sm shrink-0" style={{ color: "var(--text-2)" }}>—</span>
+                  )}
+                </div>
               </>
             )}
           </div>
