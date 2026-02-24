@@ -128,6 +128,12 @@ function resolveGovernanceSeverity(
   return 'INFO';
 }
 
+type GovernanceEventImpact = 'BLOCKING' | 'NON-BLOCKING';
+
+function resolveGovernanceImpact(sev: GovernanceEventSeverity): GovernanceEventImpact {
+  return sev === 'CRITICAL' || sev === 'HIGH' ? 'BLOCKING' : 'NON-BLOCKING';
+}
+
 /** Deterministic field order for regulatory_signal meta payload. */
 const REGULATORY_SIGNAL_PAYLOAD_KEYS = [
   'signal_id',
@@ -398,12 +404,15 @@ function AdminAuditContent() {
                   selectedEvent.target_type,
                   selectedEvent.meta
                 );
+                const impact = resolveGovernanceImpact(severity);
                 const severityPillClass =
                   severity === 'CRITICAL' || severity === 'HIGH'
                     ? 'border-foreground/30 font-semibold text-foreground'
                     : severity === 'MEDIUM'
                       ? 'border-border text-muted-foreground'
                       : 'border-border text-muted-foreground';
+                const impactPillClass =
+                  impact === 'BLOCKING' ? 'border-foreground/30 font-semibold text-foreground' : 'border-border text-muted-foreground';
                 return (
                   <div className="flex items-center gap-2 flex-wrap mt-0.5">
                     <span className="text-muted-foreground">Action</span>
@@ -414,6 +423,11 @@ function AdminAuditContent() {
                       className={`inline-flex items-center rounded-full border bg-muted/80 px-2 py-0.5 text-xs font-medium uppercase ${severityPillClass}`}
                     >
                       SEVERITY: {severity}
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full border bg-muted/80 px-2 py-0.5 text-xs font-medium uppercase ${impactPillClass}`}
+                    >
+                      IMPACT: {impact}
                     </span>
                   </div>
                 );
