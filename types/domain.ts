@@ -13,6 +13,12 @@ export type Employee = {
   employmentType: 'permanent' | 'temporary' | 'consultant';
   startDate?: string;
   contractEndDate?: string;
+  /** HR master Anst.id; used for imports and matching */
+  employmentExternalId?: string;
+  /** HR master: e.g. Visstid - Överenskommen, Provanställd */
+  employmentForm?: string;
+  /** HR master: Anst.datum */
+  contractStartDate?: string;
   managerId?: string;
   managerName?: string;
   address?: string;

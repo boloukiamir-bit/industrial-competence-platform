@@ -20,6 +20,7 @@ import type { Employee } from "@/types/domain";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
 import { EmployeeActionsMenu } from "@/components/employees/EmployeeActionsMenu";
+import { EmployeeCreateDrawer } from "@/components/employees/EmployeeCreateDrawer";
 import { EmployeeEditDrawer } from "@/components/employees/EmployeeEditDrawer";
 
 export default function EmployeesPage() {
@@ -40,6 +41,7 @@ export default function EmployeesPage() {
   const [terminationDate, setTerminationDate] = useState("");
   const [deactivating, setDeactivating] = useState(false);
   const [terminating, setTerminating] = useState(false);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editEmployeeId, setEditEmployeeId] = useState<string | null>(null);
   const [editInitial, setEditInitial] = useState<{
     firstName?: string;
@@ -110,6 +112,10 @@ export default function EmployeesPage() {
           country: (row.country as string) ?? "Sweden",
           isActive: row.isActive !== false,
           employmentStatus: (row as { employmentStatus?: string }).employmentStatus ?? "ACTIVE",
+          employmentExternalId: (row as { employmentExternalId?: string }).employmentExternalId,
+          employmentForm: (row as { employmentForm?: string }).employmentForm,
+          contractStartDate: (row as { contractStartDate?: string }).contractStartDate,
+          hireDate: (row as { hireDate?: string }).hireDate,
         }))
       );
     } finally {
@@ -255,13 +261,24 @@ export default function EmployeesPage() {
                 <Upload className="h-4 w-4 mr-2" />
                 Import employees
               </Button>
-              <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee-empty">
+              <Button variant="outline" onClick={() => setCreateDrawerOpen(true)} data-testid="button-add-employee-empty">
                 <UserPlus className="h-4 w-4 mr-2" />
                 {COPY.actions.addEmployee}
               </Button>
             </div>
           </CardContent>
         </Card>
+        <EmployeeCreateDrawer
+          open={createDrawerOpen}
+          onOpenChange={setCreateDrawerOpen}
+          onSaved={async (newEmployeeId) => {
+            await loadEmployees();
+            if (newEmployeeId) {
+              setHighlightedEmployeeId(newEmployeeId);
+              setTimeout(() => setHighlightedEmployeeId(null), 3000);
+            }
+          }}
+        />
       </div>
     );
   }
@@ -283,12 +300,12 @@ export default function EmployeesPage() {
             <Upload className="h-4 w-4 mr-2" />
             {COPY.actions.importCsv}
           </Button>
-          <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee">
-            <UserPlus className="h-4 w-4 mr-2" />
-            {COPY.actions.addEmployee}
-          </Button>
+          <Button variant="outline" onClick={() => setCreateDrawerOpen(true)} data-testid="button-add-employee">
+              <UserPlus className="h-4 w-4 mr-2" />
+              {COPY.actions.addEmployee}
+            </Button>
+          </div>
         </div>
-      </div>
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -552,6 +569,21 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
 
+      <EmployeeCreateDrawer
+        open={createDrawerOpen}
+        onOpenChange={setCreateDrawerOpen}
+        onSaved={async (newEmployeeId) => {
+          await loadEmployees();
+          if (newEmployeeId) {
+            setHighlightedEmployeeId(newEmployeeId);
+            requestAnimationFrame(() => {
+              const el = document.querySelector(`[data-employee-id="${newEmployeeId}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            });
+            setTimeout(() => setHighlightedEmployeeId(null), 3000);
+          }
+        }}
+      />
       <EmployeeEditDrawer
         open={!!editEmployeeId}
         onOpenChange={(open) => !open && setEditEmployeeId(null)}
