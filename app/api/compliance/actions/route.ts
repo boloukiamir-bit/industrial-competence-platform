@@ -1,10 +1,13 @@
 /**
- * GET /api/compliance/actions?employeeId=... — list open + done actions for that employee. Org/site scoped.
+ * GET /api/compliance/actions?employee_id=&status= — list actions. Org/site scoped. Optional filters.
+ * POST /api/compliance/actions — create compliance gap action. Admin/HR only. Writes governance_events.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { isHrAdmin } from "@/lib/auth";
+import { normalizeComplianceActionStatus, type ComplianceActionStatus } from "@/types/domain";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +17,203 @@ const supabaseAdmin = createClient(
 function errorPayload(step: string, error: unknown, details?: string) {
   const msg = error instanceof Error ? error.message : String(error);
   return { ok: false as const, step, error: msg, ...(details != null && { details }) };
+}
+
+export async function POST(request: NextRequest) {
+  const { supabase, pendingCookies } = await createSupabaseServerClient();
+  const org = await getActiveOrgFromSession(request, supabase);
+  if (!org.ok) {
+    const res = NextResponse.json(errorPayload("getActiveOrg", org.error), { status: org.status });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("role")
+    .eq("user_id", org.userId)
+    .eq("org_id", org.activeOrgId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (!isHrAdmin(membership?.role)) {
+    const res = NextResponse.json(errorPayload("forbidden", "Admin or HR role required"), { status: 403 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = await request.json();
+  } catch {
+    const res = NextResponse.json(errorPayload("body", "Invalid JSON"), { status: 400 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  if (!title) {
+    const res = NextResponse.json(errorPayload("validation", "title is required"), { status: 400 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+  const description = typeof body.description === "string" ? body.description.trim() : "";
+  const employee_id =
+    typeof body.employee_id === "string" ? body.employee_id.trim() || null : null;
+  let requirement_id =
+    typeof body.requirement_id === "string" ? body.requirement_id.trim() || null : null;
+  const compliance_code =
+    typeof body.compliance_code === "string" ? body.compliance_code.trim() || null : null;
+  if (!requirement_id && compliance_code) {
+    const { data: catRow, error: catErr } = await supabaseAdmin
+      .from("compliance_catalog")
+      .select("id")
+      .eq("org_id", org.activeOrgId)
+      .eq("code", compliance_code)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!catErr && catRow) requirement_id = (catRow as { id: string }).id;
+  }
+  const assigned_to_user_id =
+    typeof body.assigned_to_user_id === "string" ? body.assigned_to_user_id.trim() || null : null;
+  const due_date =
+    typeof body.due_date === "string" ? body.due_date.trim() || null : null;
+
+  let site_id: string | null = null;
+  if (employee_id) {
+    const { data: empRow, error: empErr } = await supabaseAdmin
+      .from("employees")
+      .select("id, site_id")
+      .eq("id", employee_id)
+      .eq("org_id", org.activeOrgId)
+      .maybeSingle();
+    if (empErr || !empRow) {
+      const res = NextResponse.json(
+        errorPayload("validation", "employee_id not found or not in org"),
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+    site_id = (empRow as { site_id: string | null }).site_id ?? null;
+    if (org.activeSiteId != null && site_id !== null && site_id !== org.activeSiteId) {
+      const res = NextResponse.json(
+        errorPayload("validation", "Employee does not belong to active site"),
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+  }
+
+  if (requirement_id) {
+    const { data: catRow, error: catErr } = await supabaseAdmin
+      .from("compliance_catalog")
+      .select("id")
+      .eq("id", requirement_id)
+      .eq("org_id", org.activeOrgId)
+      .maybeSingle();
+    if (catErr || !catRow) {
+      const res = NextResponse.json(
+        errorPayload("validation", "requirement_id not found or not in org"),
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+  }
+
+  const insertRow = {
+    org_id: org.activeOrgId,
+    site_id: org.activeSiteId ?? site_id,
+    employee_id,
+    compliance_id: requirement_id,
+    action_type: "COMPLIANCE_GAP",
+    title,
+    description: description || "",
+    owner_user_id: assigned_to_user_id,
+    due_date: due_date || null,
+    status: "OPEN",
+    created_by: org.userId,
+  };
+
+  const { data: inserted, error: insertErr } = await supabaseAdmin
+    .from("compliance_actions")
+    .insert(insertRow)
+    .select("id, org_id, site_id, employee_id, compliance_id, action_type, title, description, owner_user_id, due_date, status, created_by, created_at, closed_at, closed_by")
+    .single();
+
+  if (insertErr) {
+    console.error("[compliance/actions] POST insert", insertErr);
+    const res = NextResponse.json(errorPayload("insert", insertErr.message), { status: 500 });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  }
+
+  const actionId = (inserted as { id: string }).id;
+  const idempotencyKey = `COMPLIANCE_ACTION_CREATE:${actionId}:${Date.now()}`;
+  const { error: govErr } = await supabaseAdmin.from("governance_events").insert({
+    org_id: org.activeOrgId,
+    site_id: org.activeSiteId ?? null,
+    actor_user_id: org.userId,
+    action: "COMPLIANCE_ACTION_CREATE",
+    target_type: "COMPLIANCE_ACTION",
+    target_id: actionId,
+    outcome: "RECORDED",
+    legitimacy_status: "OK",
+    readiness_status: "NON_BLOCKING",
+    reason_codes: ["COMPLIANCE_GAP"],
+    meta: {
+      employee_id: employee_id ?? undefined,
+      requirement_id: requirement_id ?? undefined,
+      due_date: due_date ?? undefined,
+      assigned_to_user_id: assigned_to_user_id ?? undefined,
+      title,
+    },
+    idempotency_key: idempotencyKey,
+  });
+
+  if (govErr) {
+    console.error("[compliance/actions] POST governance_events insert", govErr);
+    // Action already created; still return 201 with action
+  }
+
+  const action = mapRowToAction(inserted as Record<string, unknown>);
+  const res = NextResponse.json({ ok: true, action }, { status: 201 });
+  applySupabaseCookies(res, pendingCookies);
+  return res;
+}
+
+/** DB status values that match canonical OPEN (for query expansion). */
+const OPEN_DB_VALUES = ["OPEN", "open"];
+/** DB status values that match canonical CLOSED. */
+const CLOSED_DB_VALUES = ["CLOSED", "done"];
+
+function expandStatusForQuery(canonical: ComplianceActionStatus): string[] {
+  if (canonical === "OPEN") return OPEN_DB_VALUES;
+  if (canonical === "CLOSED") return CLOSED_DB_VALUES;
+  return ["IN_PROGRESS"];
+}
+
+function mapRowToAction(r: Record<string, unknown>) {
+  const rawStatus = r.status as string | undefined;
+  return {
+    id: r.id,
+    org_id: r.org_id,
+    site_id: r.site_id ?? null,
+    employee_id: r.employee_id ?? null,
+    requirement_id: r.compliance_id ?? null,
+    action_type: r.action_type,
+    title: r.title,
+    description: r.description ?? "",
+    assigned_to_user_id: r.owner_user_id ?? null,
+    due_date: r.due_date ?? null,
+    status: normalizeComplianceActionStatus(rawStatus),
+    created_by: r.created_by,
+    created_at: r.created_at,
+    closed_at: r.closed_at ?? null,
+    closed_by: r.closed_by ?? null,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -26,26 +226,34 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const employeeId = searchParams.get("employeeId")?.trim() || null;
-  if (!employeeId) {
-    const res = NextResponse.json(errorPayload("validation", "employeeId is required"), { status: 400 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+  const employeeId =
+    searchParams.get("employee_id")?.trim() ||
+    searchParams.get("employeeId")?.trim() ||
+    null;
+  const statusParam = searchParams.get("status")?.trim() || null;
 
   try {
     let query = supabaseAdmin
       .from("compliance_actions")
       .select(
-        "id, employee_id, compliance_id, action_type, status, due_date, notes, created_at, evidence_url, evidence_notes, evidence_added_at, evidence_added_by"
+        "id, employee_id, compliance_id, action_type, status, due_date, notes, created_at, evidence_url, evidence_notes, evidence_added_at, evidence_added_by, title, description, owner_user_id, created_by, closed_at, closed_by"
       )
       .eq("org_id", org.activeOrgId)
-      .eq("employee_id", employeeId)
-      .in("status", ["open", "done"])
       .order("created_at", { ascending: false });
 
+    if (employeeId) {
+      query = query.eq("employee_id", employeeId);
+    }
+    if (statusParam) {
+      const raw = statusParam.split(",").map((s) => s.trim()).filter(Boolean);
+      const canonical = raw.map((s) => (s === "open" ? "OPEN" : s === "done" ? "CLOSED" : s as ComplianceActionStatus)).filter((s): s is ComplianceActionStatus => ["OPEN", "IN_PROGRESS", "CLOSED"].includes(s));
+      if (canonical.length) {
+        const expanded = [...new Set(canonical.flatMap(expandStatusForQuery))];
+        query = query.in("status", expanded);
+      }
+    }
     if (org.activeSiteId) {
-      query = query.eq("site_id", org.activeSiteId);
+      query = query.or(`site_id.eq.${org.activeSiteId},site_id.is.null`);
     }
 
     const { data: rows, error } = await query;
@@ -57,13 +265,18 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const catalogIds = [...new Set((rows ?? []).map((r: { compliance_id: string }) => r.compliance_id))];
-    const { data: catalogRows } = catalogIds.length
-      ? await supabaseAdmin
-          .from("compliance_catalog")
-          .select("id, code, name")
-          .in("id", catalogIds)
-      : { data: [] as { id: string; code: string; name: string }[] };
+    const catalogIds = [
+      ...new Set(
+        (rows ?? []).map((r: { compliance_id: string | null }) => r.compliance_id).filter(Boolean)
+      ),
+    ] as string[];
+    const { data: catalogRows } =
+      catalogIds.length > 0
+        ? await supabaseAdmin
+            .from("compliance_catalog")
+            .select("id, code, name")
+            .in("id", catalogIds)
+        : { data: [] as { id: string; code: string; name: string }[] };
     const catalogMap = new Map(
       (catalogRows ?? []).map((c) => [c.id, { code: c.code, name: c.name }])
     );
@@ -93,19 +306,13 @@ export async function GET(request: NextRequest) {
     }
 
     const actions = rowList.map((r: Record<string, unknown>) => {
-      const cat = catalogMap.get(r.compliance_id as string);
+      const cat = r.compliance_id ? catalogMap.get(r.compliance_id as string) : null;
       const draftMeta = latestDraftByAction.get(r.id as string);
       return {
-        id: r.id,
-        employee_id: r.employee_id,
-        compliance_id: r.compliance_id,
-        action_type: r.action_type,
-        status: r.status,
-        due_date: r.due_date ?? null,
-        notes: r.notes ?? null,
-        created_at: r.created_at,
+        ...mapRowToAction(r),
         compliance_code: cat?.code ?? null,
         compliance_name: cat?.name ?? null,
+        notes: r.notes ?? null,
         last_drafted_at: draftMeta?.last_drafted_at ?? null,
         last_drafted_channel: draftMeta?.last_drafted_channel ?? null,
         evidence_url: r.evidence_url ?? null,

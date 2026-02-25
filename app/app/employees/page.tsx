@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Users, Search, ChevronRight, Upload, UserPlus, MoreVertical } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Users, Search, Upload, UserPlus, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,18 +19,37 @@ import { useOrg } from "@/hooks/useOrg";
 import type { Employee } from "@/types/domain";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
+import { EmployeeActionsMenu } from "@/components/employees/EmployeeActionsMenu";
+import { EmployeeEditDrawer } from "@/components/employees/EmployeeEditDrawer";
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight_id")?.trim() ?? null;
   const { currentOrg } = useOrg();
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [highlightedEmployeeId, setHighlightedEmployeeId] = useState<string | null>(null);
+  const handledHighlightIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [lineFilter, setLineFilter] = useState<string>("");
   const [menuRowId, setMenuRowId] = useState<string | null>(null);
   const [deactivateEmployee, setDeactivateEmployee] = useState<Employee | null>(null);
+  const [terminateEmployee, setTerminateEmployee] = useState<Employee | null>(null);
+  const [terminationDate, setTerminationDate] = useState("");
   const [deactivating, setDeactivating] = useState(false);
+  const [terminating, setTerminating] = useState(false);
+  const [editEmployeeId, setEditEmployeeId] = useState<string | null>(null);
+  const [editInitial, setEditInitial] = useState<{
+    firstName?: string;
+    lastName?: string;
+    employeeNumber?: string;
+    email?: string;
+    phone?: string;
+    title?: string;
+    hireDate?: string;
+  } | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const { toast } = useToast();
 
@@ -90,6 +109,7 @@ export default function EmployeesPage() {
           postalCode: row.postalCode as string | undefined,
           country: (row.country as string) ?? "Sweden",
           isActive: row.isActive !== false,
+          employmentStatus: (row as { employmentStatus?: string }).employmentStatus ?? "ACTIVE",
         }))
       );
     } finally {
@@ -134,6 +154,42 @@ export default function EmployeesPage() {
     const matchesLine = !lineFilter || (e as { lineCode?: string }).lineCode === lineFilter || e.line === lineFilter;
     return matchesSearch && matchesLine;
   });
+
+  useEffect(() => {
+    if (!highlightId || loading || handledHighlightIdRef.current === highlightId) return;
+    const emp = employees.find((e) => e.id === highlightId);
+    if (!emp) {
+      if (employees.length > 0) {
+        handledHighlightIdRef.current = highlightId;
+        toast({ title: "Employee not found", variant: "destructive" });
+      }
+      return;
+    }
+    const inFiltered = filteredEmployees.some((e) => e.id === highlightId);
+    if (!inFiltered) {
+      handledHighlightIdRef.current = highlightId;
+      toast({ title: "Employee not found in current filter", variant: "destructive" });
+      return;
+    }
+    handledHighlightIdRef.current = highlightId;
+    setHighlightedEmployeeId(highlightId);
+    setEditEmployeeId(highlightId);
+    setEditInitial({
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      employeeNumber: emp.employeeNumber,
+      email: emp.email,
+      phone: emp.phone,
+      title: (emp as { title?: string }).title,
+      hireDate: (emp as { hireDate?: string }).hireDate,
+    });
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-employee-id="${highlightId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    const t = setTimeout(() => setHighlightedEmployeeId(null), 3000);
+    return () => clearTimeout(t);
+  }, [highlightId, loading, employees, filteredEmployees, toast]);
 
   if (loading) {
     return (
@@ -280,6 +336,9 @@ export default function EmployeesPage() {
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Role
               </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Status
+              </th>
               <th className="w-10" />
             </tr>
           </thead>
@@ -287,7 +346,12 @@ export default function EmployeesPage() {
             {filteredEmployees.map((employee) => (
               <tr
                 key={employee.id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                data-employee-id={employee.id}
+                className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                  highlightedEmployeeId === employee.id
+                    ? "bg-primary/15 ring-1 ring-primary/30"
+                    : ""
+                }`}
                 data-testid={`row-employee-${employee.id}`}
               >
                 <td className="px-4 py-3">
@@ -311,6 +375,19 @@ export default function EmployeesPage() {
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                   {employee.role || "-"}
                 </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      (employee as { employmentStatus?: string }).employmentStatus === "TERMINATED"
+                        ? "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200"
+                        : (employee as { employmentStatus?: string }).employmentStatus === "INACTIVE"
+                          ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200"
+                          : "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200"
+                    }`}
+                  >
+                    {(employee as { employmentStatus?: string }).employmentStatus ?? "ACTIVE"}
+                  </span>
+                </td>
                 <td className="px-4 py-3 relative">
                   <Button
                     variant="ghost"
@@ -326,39 +403,27 @@ export default function EmployeesPage() {
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                   {menuRowId === employee.id && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border bg-white dark:bg-gray-800 shadow-lg py-1"
-                      role="menu"
-                    >
-                      <Link
-                        href={`/app/employees/${employee.id}`}
-                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        role="menuitem"
-                        onClick={() => setMenuRowId(null)}
-                      >
-                        View
-                      </Link>
-                      <Link
-                        href={`/app/employees/${employee.id}`}
-                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        role="menuitem"
-                        onClick={() => setMenuRowId(null)}
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        role="menuitem"
-                        onClick={() => {
-                          setDeactivateEmployee(employee);
-                          setMenuRowId(null);
-                        }}
-                      >
-                        Deactivate
-                      </button>
-                    </div>
+                    <EmployeeActionsMenu
+                      employee={employee}
+                      onClose={() => setMenuRowId(null)}
+                      onEdit={() => {
+                        setEditEmployeeId(employee.id);
+                        setEditInitial({
+                          firstName: employee.firstName,
+                          lastName: employee.lastName,
+                          employeeNumber: employee.employeeNumber,
+                          email: employee.email,
+                          phone: employee.phone,
+                          title: (employee as { title?: string }).title,
+                          hireDate: (employee as { hireDate?: string }).hireDate,
+                        });
+                      }}
+                      onDeactivate={() => setDeactivateEmployee(employee)}
+                      onTerminate={() => {
+                        setTerminateEmployee(employee);
+                        setTerminationDate("");
+                      }}
+                    />
                   )}
                 </td>
               </tr>
@@ -373,7 +438,7 @@ export default function EmployeesPage() {
             <DialogTitle>Deactivate employee</DialogTitle>
             <DialogDescription>
               {deactivateEmployee
-                ? `Deactivate employee ${deactivateEmployee.name} (${deactivateEmployee.employeeNumber})?`
+                ? `Set employment status to INACTIVE for ${deactivateEmployee.name} (${deactivateEmployee.employeeNumber})?`
                 : ""}
             </DialogDescription>
           </DialogHeader>
@@ -394,16 +459,19 @@ export default function EmployeesPage() {
                 try {
                   const res = await fetch(`/api/employees/${deactivateEmployee.id}`, {
                     method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ is_active: false }),
+                    headers: { "Content-Type": "application/json", ...withDevBearer() },
+                    body: JSON.stringify({ employment_status: "INACTIVE" }),
                     credentials: "include",
                   });
-                  if (res.ok) {
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data?.ok) {
+                    toast({ title: "Employee deactivated" });
                     setDeactivateEmployee(null);
                     await loadEmployees();
                   } else {
-                    const j = await res.json().catch(() => ({}));
-                    console.error("Deactivate failed", j);
+                    if (res.status === 403) toast({ title: "You do not have access", variant: "destructive" });
+                    else if (res.status === 404) toast({ title: "Employee not found (maybe moved org)", variant: "destructive" });
+                    else toast({ title: data?.error?.details?.[0] ?? "Deactivate failed", variant: "destructive" });
                   }
                 } finally {
                   setDeactivating(false);
@@ -415,6 +483,82 @@ export default function EmployeesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!terminateEmployee} onOpenChange={(open) => !open && setTerminateEmployee(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Terminate employee</DialogTitle>
+            <DialogDescription>
+              {terminateEmployee
+                ? `Set employment status to TERMINATED for ${terminateEmployee.name} (${terminateEmployee.employeeNumber}). Enter termination date.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <label htmlFor="termination-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Termination date
+            </label>
+            <input
+              id="termination-date"
+              type="date"
+              value={terminationDate}
+              onChange={(e) => setTerminationDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTerminateEmployee(null)}
+              disabled={terminating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={terminating || !terminationDate.trim()}
+              onClick={async () => {
+                if (!terminateEmployee || !terminationDate.trim()) return;
+                setTerminating(true);
+                try {
+                  const res = await fetch(`/api/employees/${terminateEmployee.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", ...withDevBearer() },
+                    body: JSON.stringify({
+                      employment_status: "TERMINATED",
+                      termination_date: terminationDate.trim(),
+                    }),
+                    credentials: "include",
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data?.ok) {
+                    toast({ title: "Employee terminated" });
+                    setTerminateEmployee(null);
+                    setTerminationDate("");
+                    await loadEmployees();
+                  } else {
+                    if (res.status === 403) toast({ title: "You do not have access", variant: "destructive" });
+                    else if (res.status === 404) toast({ title: "Employee not found (maybe moved org)", variant: "destructive" });
+                    else toast({ title: data?.error?.details?.[0] ?? "Terminate failed", variant: "destructive" });
+                  }
+                } finally {
+                  setTerminating(false);
+                }
+              }}
+            >
+              {terminating ? "Terminating…" : "Terminate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <EmployeeEditDrawer
+        open={!!editEmployeeId}
+        onOpenChange={(open) => !open && setEditEmployeeId(null)}
+        employeeId={editEmployeeId}
+        initial={editInitial}
+        onSaved={loadEmployees}
+      />
     </div>
   );
 }

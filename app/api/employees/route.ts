@@ -108,10 +108,10 @@ export async function GET(request: NextRequest) {
     const result = await pool.query(
       `SELECT id, name, first_name, last_name, employee_number, email, phone, date_of_birth,
               role, line, line_code, team, employment_type, start_date, contract_end_date, manager_id,
-              address, city, postal_code, country, is_active
+              address, city, postal_code, country, is_active,               employment_status, hire_date
        FROM employees 
        WHERE org_id = $1
-         AND is_active = true
+         AND (employment_status IS NULL OR employment_status != 'ARCHIVED')
          AND ${EMPLOYEE_SCOPE_SITE_FRAGMENT}
          AND ($3::text IS NULL OR $3 = '' OR line_code = $3)
        ORDER BY name 
@@ -157,6 +157,8 @@ export async function GET(request: NextRequest) {
       postalCode: row.postal_code ?? undefined,
       country: row.country ?? "Sweden",
       isActive: row.is_active ?? true,
+      employmentStatus: (row as { employment_status?: string }).employment_status ?? "ACTIVE",
+      hireDate: (row as { hire_date?: string }).hire_date ?? undefined,
     }));
     const res = NextResponse.json({
       employees,

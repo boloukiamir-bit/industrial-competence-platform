@@ -32,6 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { fetchJson } from "@/lib/coreFetch";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { getSeverityFromSignals, severityToBadgeVariant } from "@/lib/ui/severity";
 import type { DrilldownRosterItem } from "@/app/api/cockpit/issues/drilldown/route";
 import { EmployeeDrawer } from "@/components/employees/EmployeeDrawer";
 
@@ -95,19 +96,6 @@ export type IssueDrawerProps = {
   sessionOk?: boolean;
   /** When "global", Record decision / Swap / Escalate / Resolve are disabled; Plan action/training only if roster loaded. */
   cockpitMode?: "global" | "shift";
-};
-
-const statusVariant = (status: string) => {
-  switch (status) {
-    case "NO_GO":
-      return "destructive";
-    case "WARNING":
-      return "secondary";
-    case "GO":
-      return "outline";
-    default:
-      return "secondary";
-  }
 };
 
 function rosterLabel(r: DrilldownRosterItem): string {
@@ -490,9 +478,17 @@ export function IssueDrawer({
               {issue.area ?? issue.line ?? "—"}
             </SheetDescription>
             <div className="flex flex-wrap items-center gap-2 pt-2">
-              <Badge variant={issue.severity === "BLOCKING" ? "destructive" : "secondary"}>
-                {statusBadge === "NO_GO" ? "NO-GO" : statusBadge === "UNSTAFFED" ? "UNSTAFFED" : statusBadge === "ILLEGAL" ? "ILLEGAL" : statusBadge}
-              </Badge>
+              {(() => {
+                const level = getSeverityFromSignals({
+                  readiness: statusBadge === "NO_GO" ? "NO_GO" : statusBadge === "WARNING" ? "WARNING" : undefined,
+                });
+                const { variant, className } = severityToBadgeVariant(level);
+                return (
+                  <Badge variant={variant} className={className}>
+                    {statusBadge === "NO_GO" ? "NO-GO" : statusBadge === "UNSTAFFED" ? "UNSTAFFED" : statusBadge === "ILLEGAL" ? "ILLEGAL" : statusBadge}
+                  </Badge>
+                );
+              })()}
               {issue.resolved && (
                 <Badge variant="outline" className="text-green-600 border-green-300">Closed</Badge>
               )}

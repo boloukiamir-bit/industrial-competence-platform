@@ -18,6 +18,7 @@ import { DecisionQueueInlinePanel } from "@/components/cockpit/DecisionQueue";
 import { ExecutiveHeader } from "@/components/cockpit/ExecutiveHeader";
 import { InlinePanelShell } from "@/components/cockpit/InlinePanelShell";
 import { KpiTile } from "@/components/cockpit/KpiTile";
+import { ComplianceActionsOverview } from "@/components/cockpit/ComplianceActionsOverview";
 import { ExpiringSoonPanel, type ExpiringRow } from "@/components/cockpit/panels/ExpiringSoonPanel";
 import { InterventionPanel, type InterventionJobRow } from "@/components/cockpit/panels/InterventionPanel";
 import {
@@ -69,6 +70,7 @@ import { fetchJson } from "@/lib/coreFetch";
 import { cockpitSummaryParams, dateDaysAgo } from "@/lib/client/cockpitUrl";
 import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 import { PageFrame } from "@/components/layout/PageFrame";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { FRAGILITY_PTS } from "@/lib/cockpitCostEngine";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -199,6 +201,19 @@ export default function CockpitPage() {
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const [markedPlannedIds, setMarkedPlannedIds] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<"global" | "shift">("global");
+  const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
+  const [auditEvent, setAuditEvent] = useState<{
+    id: string;
+    action: string;
+    target_type: string;
+    target_id: string | null;
+    legitimacy_status: string;
+    readiness_status: string;
+    reason_codes: string[];
+    meta: Record<string, unknown>;
+    created_at: string;
+  } | null>(null);
+  const handledAuditLinkRef = useRef<string | null>(null);
   const [activePanel, setActivePanel] = useState<
     "none" | "decisions" | "blockers" | "readiness" | "restricted" | "expiring" | "interventions"
   >("none");
@@ -264,6 +279,14 @@ export default function CockpitPage() {
   } | null>(null);
   const [regulatoryRadarLoading, setRegulatoryRadarLoading] = useState(false);
   const [creatingRadarActionSignalId, setCreatingRadarActionSignalId] = useState<string | null>(null);
+
+  const [complianceActionsSummary, setComplianceActionsSummary] = useState<{
+    openCount: number;
+    overdueCount: number;
+    due7DaysCount: number;
+    topAssignees: Array<{ assignedToUserId: string | null; openCount: number; displayName: string }>;
+  } | null>(null);
+  const [complianceActionsSummaryLoading, setComplianceActionsSummaryLoading] = useState(false);
 
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
@@ -390,6 +413,49 @@ export default function CockpitPage() {
       console.warn("[cockpit] Date diverged from URL", { stateDate: date, urlDate });
     }
   }, [date, searchParams]);
+
+  // Deep-link from HR Inbox (governance): action + target_id -> fetch audit event and open drawer
+  useEffect(() => {
+    const linkAction = searchParams.get("action")?.trim() ?? null;
+    const linkTargetId = searchParams.get("target_id")?.trim() ?? null;
+    if (!linkAction && !linkTargetId) {
+      handledAuditLinkRef.current = null;
+      return;
+    }
+    const key = `${linkAction ?? ""}|${linkTargetId ?? ""}`;
+    if (handledAuditLinkRef.current === key) return;
+    handledAuditLinkRef.current = key;
+    const params = new URLSearchParams();
+    if (linkAction) params.set("action", linkAction);
+    if (linkTargetId) params.set("target_id", linkTargetId);
+    fetchJson<{ ok: boolean; event?: { id: string; action: string; target_type: string; target_id: string | null; legitimacy_status: string; readiness_status: string; reason_codes: string[]; meta: Record<string, unknown>; created_at: string } | null }>(`/api/cockpit/audit?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok) {
+          toast({ title: "Failed to load audit event", variant: "destructive" });
+          return;
+        }
+        const event = res.data?.event ?? null;
+        if (!event) {
+          toast({ title: "No matching audit event found", variant: "destructive" });
+          return;
+        }
+        setAuditEvent({
+          id: (event as { id: string }).id,
+          action: (event as { action: string }).action,
+          target_type: (event as { target_type: string }).target_type,
+          target_id: (event as { target_id: string | null }).target_id ?? null,
+          legitimacy_status: (event as { legitimacy_status: string }).legitimacy_status,
+          readiness_status: (event as { readiness_status: string }).readiness_status,
+          reason_codes: Array.isArray((event as { reason_codes?: string[] }).reason_codes) ? (event as { reason_codes: string[] }).reason_codes : [],
+          meta: (typeof (event as { meta?: unknown }).meta === "object" && (event as { meta?: unknown }).meta !== null ? (event as { meta: Record<string, unknown> }).meta : {}) as Record<string, unknown>,
+          created_at: (event as { created_at: string }).created_at,
+        });
+        setAuditDrawerOpen(true);
+      })
+      .catch(() => {
+        toast({ title: "No matching audit event found", variant: "destructive" });
+      });
+  }, [searchParams, toast]);
 
   // P1.3: Undo countdown (30s)
   useEffect(() => {
@@ -742,6 +808,33 @@ export default function CockpitPage() {
       })
       .finally(() => {
         if (!cancelled) setGovernanceKpisLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Compliance actions summary (org-level) for overview block
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setComplianceActionsSummaryLoading(true);
+    fetchJson<{
+      ok: boolean;
+        summary?: {
+        openCount: number;
+        overdueCount: number;
+        due7DaysCount: number;
+        topAssignees: Array<{ assignedToUserId: string | null; openCount: number; displayName: string }>;
+      };
+    }>("/api/cockpit/compliance-actions-summary")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data?.summary) setComplianceActionsSummary(res.data.summary);
+        else if (!cancelled) setComplianceActionsSummary(null);
+      })
+      .catch(() => {
+        if (!cancelled) setComplianceActionsSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setComplianceActionsSummaryLoading(false);
       });
     return () => { cancelled = true; };
   }, [sessionOk]);
@@ -1552,6 +1645,16 @@ export default function CockpitPage() {
             />
           </div>
 
+          {!isDemoMode() && (
+            <div className="mt-6">
+              <ComplianceActionsOverview
+                summary={complianceActionsSummary}
+                loading={complianceActionsSummaryLoading}
+                sessionOk={sessionOk}
+              />
+            </div>
+          )}
+
           <DecisionQueueInlinePanel
             open={activePanel === "decisions"}
             issues={issues}
@@ -1700,6 +1803,29 @@ export default function CockpitPage() {
         sessionOk={sessionOk}
         cockpitMode={mode}
       />
+
+      <Sheet open={auditDrawerOpen} onOpenChange={(open) => { setAuditDrawerOpen(open); if (!open) setAuditEvent(null); }}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Audit event</SheetTitle>
+          </SheetHeader>
+          {auditEvent && (
+            <div className="mt-4 space-y-3 text-sm">
+              <p><span className="font-medium text-muted-foreground">Action:</span> {auditEvent.action}</p>
+              <p><span className="font-medium text-muted-foreground">Target:</span> {auditEvent.target_type} {auditEvent.target_id ?? "—"}</p>
+              <p><span className="font-medium text-muted-foreground">Legitimacy:</span> {auditEvent.legitimacy_status}</p>
+              <p><span className="font-medium text-muted-foreground">Readiness:</span> {auditEvent.readiness_status}</p>
+              {auditEvent.reason_codes.length > 0 && (
+                <p><span className="font-medium text-muted-foreground">Reason codes:</span> {auditEvent.reason_codes.join(", ")}</p>
+              )}
+              <p><span className="font-medium text-muted-foreground">When:</span> {auditEvent.created_at}</p>
+              {Object.keys(auditEvent.meta).length > 0 && (
+                <pre className="rounded bg-muted p-2 text-xs overflow-auto max-h-40">{JSON.stringify(auditEvent.meta, null, 2)}</pre>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {toasts.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 space-y-2">

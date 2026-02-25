@@ -20,6 +20,147 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const EMPLOYMENT_STATUS_VALUES = ["ACTIVE", "INACTIVE", "TERMINATED", "ARCHIVED"] as const;
+type EmploymentStatus = (typeof EMPLOYMENT_STATUS_VALUES)[number];
+
+type PatchEmployeeBody = {
+  first_name?: string;
+  last_name?: string;
+  employee_number?: string;
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  hire_date?: string;
+  termination_date?: string | null;
+  employment_status?: EmploymentStatus;
+  position_id?: string | null;
+  is_active?: boolean;
+};
+
+function parseDate(s: unknown): string | null {
+  if (s === null || s === undefined) return null;
+  const str = String(s).trim();
+  if (!str) return null;
+  const d = new Date(str);
+  return Number.isFinite(d.getTime()) ? str : null;
+}
+
+function validatePatchBody(body: unknown): { ok: true; updates: PatchEmployeeBody } | { ok: false; code: string; details: string[] } {
+  if (body === null || typeof body !== "object") {
+    return { ok: false, code: "VALIDATION_ERROR", details: ["Body must be a JSON object"] };
+  }
+  const b = body as Record<string, unknown>;
+  const details: string[] = [];
+  const updates: PatchEmployeeBody = {};
+
+  if (b.first_name !== undefined) {
+    updates.first_name = typeof b.first_name === "string" ? b.first_name : undefined;
+    if (updates.first_name === undefined && b.first_name !== null) details.push("first_name must be string");
+  }
+  if (b.last_name !== undefined) {
+    updates.last_name = typeof b.last_name === "string" ? b.last_name : undefined;
+    if (updates.last_name === undefined && b.last_name !== null) details.push("last_name must be string");
+  }
+  if (b.employee_number !== undefined) {
+    updates.employee_number = typeof b.employee_number === "string" ? b.employee_number : undefined;
+    if (updates.employee_number === undefined && b.employee_number !== null) details.push("employee_number must be string");
+  }
+  if (b.email !== undefined) {
+    updates.email = b.email === null ? null : typeof b.email === "string" ? b.email : undefined;
+    if (updates.email === undefined && b.email !== null) details.push("email must be string or null");
+  }
+  if (b.phone !== undefined) {
+    updates.phone = b.phone === null ? null : typeof b.phone === "string" ? b.phone : undefined;
+    if (updates.phone === undefined && b.phone !== null) details.push("phone must be string or null");
+  }
+  if (b.title !== undefined) {
+    updates.title = b.title === null ? null : typeof b.title === "string" ? b.title : undefined;
+    if (updates.title === undefined && b.title !== null) details.push("title must be string or null");
+  }
+  if (b.hire_date !== undefined) {
+    const v = parseDate(b.hire_date);
+    if (v) updates.hire_date = v;
+    else if (b.hire_date !== null && b.hire_date !== undefined && String(b.hire_date).trim() !== "")
+      details.push("hire_date must be a valid date (YYYY-MM-DD)");
+  }
+  if (b.termination_date !== undefined) {
+    const v =
+      b.termination_date === null || (typeof b.termination_date === "string" && b.termination_date.trim() === "")
+        ? null
+        : parseDate(b.termination_date);
+    if (v !== undefined) updates.termination_date = v;
+    else if (b.termination_date !== null && b.termination_date !== undefined)
+      details.push("termination_date must be a valid date or null");
+  }
+  if (b.employment_status !== undefined) {
+    const v =
+      typeof b.employment_status === "string" && EMPLOYMENT_STATUS_VALUES.includes(b.employment_status as EmploymentStatus)
+        ? (b.employment_status as EmploymentStatus)
+        : undefined;
+    if (v !== undefined) updates.employment_status = v;
+    else {
+      if (b.employment_status === "ARCHIVED") {
+        return { ok: false, code: "INVALID_TRANSITION", details: ["ARCHIVED cannot be set via API"] };
+      }
+      details.push("employment_status must be one of: ACTIVE, INACTIVE, TERMINATED");
+    }
+  }
+  if (b.position_id !== undefined) {
+    updates.position_id =
+      b.position_id === null || b.position_id === ""
+        ? null
+        : typeof b.position_id === "string"
+          ? b.position_id
+          : undefined;
+    if (updates.position_id === undefined && b.position_id !== null && b.position_id !== "")
+      details.push("position_id must be string or null");
+  }
+  if (b.is_active !== undefined) {
+    if (typeof b.is_active === "boolean") updates.is_active = b.is_active;
+    else details.push("is_active must be boolean");
+  }
+
+  if (details.length > 0) return { ok: false, code: "VALIDATION_ERROR", details };
+  return { ok: true, updates };
+}
+
+function validateLifecycleRules(
+  updates: PatchEmployeeBody,
+  current: { employment_status?: string | null; termination_date?: string | null }
+): { ok: true } | { ok: false; code: string; details: string[] } {
+  const status = updates.employment_status;
+  const termDate = updates.termination_date;
+  const curTerm = current.termination_date;
+  if (status === "ARCHIVED") {
+    return { ok: false, code: "INVALID_TRANSITION", details: ["ARCHIVED cannot be set via API"] };
+  }
+  if (status === "TERMINATED") {
+    const effectiveTerm = termDate ?? curTerm;
+    if (effectiveTerm === null || effectiveTerm === undefined || String(effectiveTerm).trim() === "") {
+      return {
+        ok: false,
+        code: "VALIDATION_ERROR",
+        details: ["termination_date is required when employment_status is TERMINATED"],
+      };
+    }
+    const d = new Date(effectiveTerm);
+    if (!Number.isFinite(d.getTime())) {
+      return { ok: false, code: "VALIDATION_ERROR", details: ["termination_date must be a valid date"] };
+    }
+  }
+  if (status === "ACTIVE" || status === "INACTIVE") {
+    const effectiveTerm = termDate !== undefined ? termDate : curTerm;
+    if (effectiveTerm != null && String(effectiveTerm).trim() !== "") {
+      return {
+        ok: false,
+        code: "VALIDATION_ERROR",
+        details: ["termination_date must be null when employment_status is ACTIVE or INACTIVE"],
+      };
+    }
+  }
+  return { ok: true };
+}
+
 function toEmployeeDto(row: Record<string, unknown> & { manager?: { name: string } | null }) {
   return {
     id: row.id,
@@ -46,6 +187,10 @@ function toEmployeeDto(row: Record<string, unknown> & { manager?: { name: string
     country: row.country ?? "Sweden",
     isActive: row.is_active ?? true,
     orgId: row.org_id,
+    employmentStatus: row.employment_status ?? "ACTIVE",
+    hireDate: row.hire_date ?? undefined,
+    terminationDate: row.termination_date ?? undefined,
+    statusChangedAt: row.status_changed_at ?? undefined,
   };
 }
 
@@ -134,38 +279,76 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { supabase, pendingCookies } = await createSupabaseServerClient(request);
+  const apply = (res: NextResponse) => {
+    applySupabaseCookies(res, pendingCookies);
+    return res;
+  };
+
   try {
     const { id } = await params;
-    if (!id) {
-      return NextResponse.json({ error: "Employee id required" }, { status: 400 });
+    if (!id?.trim()) {
+      return apply(NextResponse.json({ ok: false, error: { code: "VALIDATION_ERROR", details: ["Employee id required"] } }, { status: 400 }));
     }
 
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
-    const org = await getActiveOrgFromSession(request, supabase);
-    if (!org.ok) {
-      const res = NextResponse.json({ error: org.error }, { status: org.status });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+    const auth = await requireAdminOrHr(request, supabase);
+    if (!auth.ok) {
+      return apply(
+        NextResponse.json({ ok: false, error: { code: "FORBIDDEN" } }, { status: 403 })
+      );
     }
-    const activeOrgId = org.activeOrgId;
+    const activeOrgId = auth.activeOrgId;
 
     const body = await request.json().catch(() => ({}));
-    const updates: Record<string, unknown> = {};
-    if (typeof body.is_active === "boolean") updates.is_active = body.is_active;
+    const validated = validatePatchBody(body);
+    if (!validated.ok) {
+      return apply(
+        NextResponse.json(
+          { ok: false, error: { code: validated.code, details: validated.details } },
+          { status: 400 }
+        )
+      );
+    }
+    const updates = validated.updates;
+    if (Object.keys(updates).length === 0) {
+      return apply(
+        NextResponse.json(
+          { ok: false, error: { code: "VALIDATION_ERROR", details: ["No allowed fields to update"] } },
+          { status: 400 }
+        )
+      );
+    }
 
-    if (body.position_id !== undefined) {
-      const auth = await requireAdminOrHr(request, supabase);
-      if (!auth.ok) {
-        const res = NextResponse.json({ error: auth.error }, { status: auth.status });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
-      }
-      const positionId = body.position_id === null || body.position_id === "" ? null : body.position_id;
-      if (positionId !== null && typeof positionId !== "string") {
-        const res = NextResponse.json({ error: "position_id must be string or null" }, { status: 400 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
-      }
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from("employees")
+      .select("id, employment_status, termination_date")
+      .eq("id", id)
+      .eq("org_id", activeOrgId)
+      .maybeSingle();
+
+    if (fetchErr) {
+      console.error("[api/employees/[id]] PATCH fetch current", fetchErr);
+      return apply(NextResponse.json({ ok: false, error: "Failed to load employee" }, { status: 500 }));
+    }
+    if (!existing) {
+      return apply(NextResponse.json({ ok: false, error: { code: "NOT_FOUND" } }, { status: 404 }));
+    }
+
+    const lifecycleCheck = validateLifecycleRules(updates, {
+      employment_status: (existing as { employment_status?: string }).employment_status,
+      termination_date: (existing as { termination_date?: string }).termination_date,
+    });
+    if (!lifecycleCheck.ok) {
+      return apply(
+        NextResponse.json(
+          { ok: false, error: { code: lifecycleCheck.code, details: lifecycleCheck.details } },
+          { status: 400 }
+        )
+      );
+    }
+
+    if (updates.position_id !== undefined) {
+      const positionId = updates.position_id;
       if (positionId) {
         const { data: pos } = await supabaseAdmin
           .from("positions")
@@ -174,23 +357,35 @@ export async function PATCH(
           .eq("org_id", activeOrgId)
           .maybeSingle();
         if (!pos) {
-          const res = NextResponse.json({ error: "Position not found" }, { status: 404 });
-          applySupabaseCookies(res, pendingCookies);
-          return res;
+          return apply(NextResponse.json({ ok: false, error: { code: "NOT_FOUND", details: ["Position not found"] } }, { status: 404 }));
         }
       }
-      updates.position_id = positionId;
     }
 
-    if (Object.keys(updates).length === 0) {
-      const res = NextResponse.json({ error: "No allowed fields to update" }, { status: 400 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+    const dbPayload: Record<string, unknown> = {};
+    if (updates.first_name !== undefined) dbPayload.first_name = updates.first_name;
+    if (updates.last_name !== undefined) dbPayload.last_name = updates.last_name;
+    if (updates.employee_number !== undefined) dbPayload.employee_number = updates.employee_number;
+    if (updates.email !== undefined) dbPayload.email = updates.email;
+    if (updates.phone !== undefined) dbPayload.phone = updates.phone;
+    if (updates.title !== undefined) dbPayload.title = updates.title;
+    if (updates.hire_date !== undefined) dbPayload.hire_date = updates.hire_date;
+    if (updates.termination_date !== undefined) dbPayload.termination_date = updates.termination_date;
+    if (updates.employment_status !== undefined) dbPayload.employment_status = updates.employment_status;
+    if (updates.position_id !== undefined) dbPayload.position_id = updates.position_id;
+    if (updates.is_active !== undefined) dbPayload.is_active = updates.is_active;
+
+    const currentStatus = (existing as { employment_status?: string }).employment_status ?? "ACTIVE";
+    if (
+      updates.employment_status !== undefined &&
+      updates.employment_status !== currentStatus
+    ) {
+      dbPayload.status_changed_by = auth.userId;
     }
 
     const { data, error } = await supabaseAdmin
       .from("employees")
-      .update(updates)
+      .update(dbPayload)
       .eq("id", id)
       .eq("org_id", activeOrgId)
       .select("*, manager:manager_id(name)")
@@ -198,25 +393,17 @@ export async function PATCH(
 
     if (error) {
       console.error("[api/employees/[id]] PATCH error", error);
-      const res = NextResponse.json({ error: "Failed to update employee" }, { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return apply(NextResponse.json({ ok: false, error: "Failed to update employee" }, { status: 500 }));
     }
     if (!data) {
-      const res = NextResponse.json({ error: "Employee not found" }, { status: 404 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return apply(NextResponse.json({ ok: false, error: { code: "NOT_FOUND" } }, { status: 404 }));
     }
 
-    if (updates.is_active === false) {
-      console.log("[api/employees/[id]] deactivated", { employeeId: id, orgId: org.activeOrgId });
-    }
-
-    const res = NextResponse.json(toEmployeeDto(data as Record<string, unknown>));
-    applySupabaseCookies(res, pendingCookies);
-    return res;
+    return apply(
+      NextResponse.json({ ok: true, employee: toEmployeeDto(data as Record<string, unknown> & { manager?: { name: string } | null }) }, { status: 200 })
+    );
   } catch (err) {
     console.error("[api/employees/[id]] PATCH", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return apply(NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 }));
   }
 }

@@ -21,9 +21,13 @@ export type Employee = {
   country?: string;
   orgUnitId?: string;
   isActive: boolean;
+  /** Lifecycle: ACTIVE | INACTIVE | TERMINATED (ARCHIVED not exposed in UI). */
+  employmentStatus?: string;
+  hireDate?: string;
+  terminationDate?: string;
   createdAt?: string;
   updatedAt?: string;
-};
+}
 
 export type Skill = {
   id: string;
@@ -369,6 +373,36 @@ export type HRWorkflowInstance = {
   notes?: string;
 };
 
+export type ComplianceActionStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
+
+/** Normalize legacy DB status to canonical; never return "open" or "done" to clients. */
+export function normalizeComplianceActionStatus(s: string | null | undefined): ComplianceActionStatus {
+  if (s == null || s === "") return "OPEN";
+  const t = s.toUpperCase();
+  if (t === "CLOSED" || s === "done") return "CLOSED";
+  if (t === "IN_PROGRESS") return "IN_PROGRESS";
+  if (t === "OPEN" || s === "open") return "OPEN";
+  return "OPEN";
+}
+
+export type ComplianceAction = {
+  id: string;
+  org_id: string;
+  site_id: string | null;
+  employee_id: string | null;
+  requirement_id: string | null;
+  action_type: string;
+  title: string;
+  description: string;
+  assigned_to_user_id: string | null;
+  due_date: string | null;
+  status: ComplianceActionStatus | string;
+  created_by: string;
+  created_at: string;
+  closed_at: string | null;
+  closed_by: string | null;
+};
+
 export type HRAnalyticsV2 = HRAnalytics & {
   attritionRisk: { 
     highrisk: number; 
@@ -380,3 +414,46 @@ export type HRAnalyticsV2 = HRAnalytics & {
   openWorkflowsByTemplate: { templateId: string; templateName: string; count: number }[];
   skillGapSummary: { criticalGaps: number; trainingNeeded: number; wellStaffed: number };
 };
+
+/** HR Inbox Priority Strip: aggregated counts from GET /api/hr/inbox/priority. */
+export type PrioritySummary = {
+  overdueActions: number;
+  unassignedActions: number;
+  legalStops: number;
+  noGoOrWarnings: number;
+};
+
+/** HR Inbox: actions tab item (compliance_actions). */
+export type InboxActionItem = {
+  id: string;
+  title: string;
+  status: string;
+  due_date: string | null;
+  assigned_to_user_id: string | null;
+  created_at: string;
+  employee_id: string | null;
+  requirement_id: string | null;
+};
+
+/** HR Inbox: lifecycle tab item (governance_events EMPLOYMENT_STATUS_CHANGE). */
+export type InboxLifecycleItem = {
+  created_at: string;
+  target_id: string;
+  from: string;
+  to: string;
+  employee_label: string;
+};
+
+/** HR Inbox: governance tab item (governance_events with LEGAL_STOP / NO_GO / WARNING). */
+export type InboxGovernanceItem = {
+  created_at: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  legitimacy_status: string;
+  readiness_status: string;
+  reason_codes: string[];
+  meta: Record<string, unknown>;
+};
+
+export type InboxItem = InboxActionItem | InboxLifecycleItem | InboxGovernanceItem;

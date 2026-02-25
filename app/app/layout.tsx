@@ -36,6 +36,8 @@ import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
+import { OrgIdentityProvider } from "@/contexts/OrgIdentityContext";
+import { OrgIdentity } from "@/components/nav/OrgIdentity";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { SessionDebugStrip } from "@/components/SessionDebugStrip";
 import { VersionStrip } from "@/components/VersionStrip";
@@ -189,6 +191,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <TooltipProvider delayDuration={200} skipDelayDuration={0}>
       <OrgProvider>
+        <OrgIdentityProvider>
         <AppLayoutContent
           pathname={pathname}
           authUser={authUser}
@@ -201,6 +204,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         >
           {children}
         </AppLayoutContent>
+        </OrgIdentityProvider>
       </OrgProvider>
     </TooltipProvider>
   );
@@ -450,8 +454,9 @@ function AppLayoutContent({
           </aside>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            <header className="h-14 shrink-0 bg-surface border-b border-border flex items-center px-6">
-              <div className="text-sm text-muted-foreground" data-testid="header-date">
+            <header className="h-14 shrink-0 bg-surface border-b border-border flex items-center justify-between px-6 gap-4">
+              <OrgIdentity />
+              <div className="text-sm text-muted-foreground shrink-0" data-testid="header-date">
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
                   year: "numeric",

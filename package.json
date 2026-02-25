@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
+  "pilot-smoke": "bash scripts/pilot-smoke-test.sh",
   "scripts": {
     "dev": "next dev --webpack -H 0.0.0.0 -p 5001",
     "build": "next build",
