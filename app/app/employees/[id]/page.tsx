@@ -24,6 +24,7 @@ import {
   Building2,
   Image,
   ClipboardCheck,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +32,16 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import type {
   Employee,
   EmployeeSkill,
@@ -134,6 +145,22 @@ export default function EmployeeDetailPage() {
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>([]);
   const [complianceLoading, setComplianceLoading] = useState(false);
 
+  const [employmentModalOpen, setEmploymentModalOpen] = useState(false);
+  type EmploymentFormState = {
+    employment_form: string;
+    employment_status: string;
+    contract_start_date: string;
+    contract_end_date: string;
+  };
+  const [employmentFormState, setEmploymentFormState] = useState<EmploymentFormState>({
+    employment_form: "Permanent",
+    employment_status: "ACTIVE",
+    contract_start_date: "",
+    contract_end_date: "",
+  });
+  const [employmentSaving, setEmploymentSaving] = useState(false);
+  const { toast } = useToast();
+
   useEffect(() => {
     async function loadData() {
       if (!id) {
@@ -189,6 +216,11 @@ export default function EmployeeDetailPage() {
             employmentType: (raw.employmentType ?? "permanent") as "permanent" | "temporary" | "consultant",
             startDate: raw.startDate,
             contractEndDate: raw.contractEndDate,
+            employmentForm: raw.employmentForm,
+            contractStartDate: raw.contractStartDate,
+            employmentStatus: raw.employmentStatus ?? "ACTIVE",
+            hireDate: raw.hireDate,
+            terminationDate: raw.terminationDate,
             managerId: raw.managerId,
             managerName: raw.managerName,
             address: raw.address,
@@ -680,20 +712,247 @@ export default function EmployeeDetailPage() {
 
         {activeTab === "employment" && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
               <CardTitle>Job & Employment</CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setEmploymentFormState({
+                    employment_form: employee.employmentForm ?? "Permanent",
+                    employment_status: employee.employmentStatus ?? "ACTIVE",
+                    contract_start_date: employee.contractStartDate ?? employee.hireDate ?? employee.startDate ?? "",
+                    contract_end_date:
+                      (employee.employmentForm ?? "Permanent") === "Permanent"
+                        ? ""
+                        : (employee.contractEndDate ?? ""),
+                  });
+                  setEmploymentModalOpen(true);
+                }}
+                data-testid="button-edit-employment"
+                aria-label="Edit employment"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <InfoRow icon={Briefcase} label="Role" value={employee.role || "-"} />
-                <InfoRow icon={Briefcase} label="Employment Type" value={employee.employmentType} />
-                <InfoRow icon={Calendar} label="Start Date" value={employee.startDate ? new Date(employee.startDate).toLocaleDateString("sv-SE") : "-"} />
-                <InfoRow icon={Calendar} label="Contract End Date" value={employee.contractEndDate ? new Date(employee.contractEndDate).toLocaleDateString("sv-SE") : "-"} />
-                <InfoRow icon={User} label="Status" value={employee.isActive ? "Active" : "Inactive"} />
+                <InfoRow icon={Briefcase} label="Employment form" value={employee.employmentForm ?? "Permanent"} />
+                <InfoRow
+                  icon={User}
+                  label="Employment status"
+                  value={
+                    employee.employmentStatus === "TERMINATED"
+                      ? "Terminated"
+                      : employee.employmentStatus === "INACTIVE"
+                        ? "Inactive"
+                        : "Active"
+                  }
+                />
+                <InfoRow
+                  icon={Calendar}
+                  label="Start Date"
+                  value={
+                    (employee.contractStartDate ?? employee.hireDate ?? employee.startDate)
+                      ? new Date(
+                          employee.contractStartDate ?? employee.hireDate ?? employee.startDate ?? ""
+                        ).toLocaleDateString("sv-SE")
+                      : "-"
+                  }
+                />
+                <InfoRow
+                  icon={Calendar}
+                  label="Contract End Date"
+                  value={
+                    (employee.employmentForm ?? "Permanent") === "Permanent"
+                      ? "—"
+                      : employee.contractEndDate
+                        ? new Date(employee.contractEndDate).toLocaleDateString("sv-SE")
+                        : "-"
+                  }
+                />
               </div>
             </CardContent>
           </Card>
         )}
+
+        <Dialog open={employmentModalOpen} onOpenChange={setEmploymentModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Job & Employment</DialogTitle>
+              <DialogDescription>Update employment form, status, and contract dates.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="employment_form">Employment form</Label>
+                <Select
+                  value={employmentFormState.employment_form}
+                  onValueChange={(v) => {
+                    setEmploymentFormState((prev) => ({
+                      ...prev,
+                      employment_form: v,
+                      contract_end_date: v === "Permanent" ? "" : prev.contract_end_date,
+                    }));
+                  }}
+                >
+                  <SelectTrigger id="employment_form">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Permanent">Permanent</SelectItem>
+                    <SelectItem value="Visstid">Visstid</SelectItem>
+                    <SelectItem value="Provanställd">Provanställd</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="employment_status">Employment status</Label>
+                <Select
+                  value={employmentFormState.employment_status}
+                  onValueChange={(v) =>
+                    setEmploymentFormState((prev) => ({ ...prev, employment_status: v }))
+                  }
+                >
+                  <SelectTrigger id="employment_status">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="INACTIVE">Inactive</SelectItem>
+                    <SelectItem value="TERMINATED">Terminated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="contract_start_date">Contract start date</Label>
+                <Input
+                  id="contract_start_date"
+                  type="date"
+                  value={employmentFormState.contract_start_date}
+                  onChange={(e) =>
+                    setEmploymentFormState((prev) => ({
+                      ...prev,
+                      contract_start_date: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="contract_end_date">Contract end date</Label>
+                <Input
+                  id="contract_end_date"
+                  type="date"
+                  value={employmentFormState.contract_end_date}
+                  disabled={employmentFormState.employment_form === "Permanent"}
+                  onChange={(e) =>
+                    setEmploymentFormState((prev) => ({
+                      ...prev,
+                      contract_end_date: e.target.value,
+                    }))
+                  }
+                />
+                {employmentFormState.employment_form !== "Permanent" && (
+                  <p className="text-xs text-muted-foreground">Required for fixed-term employment.</p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEmploymentModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                data-testid="button-save-employment"
+                disabled={employmentSaving}
+                onClick={async () => {
+                  const isPermanent = employmentFormState.employment_form === "Permanent";
+                  if (!isPermanent && !employmentFormState.contract_end_date.trim()) {
+                    toast({
+                      title: "Contract end date is required for fixed-term employment",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  const initial = {
+                    employment_form: employee.employmentForm ?? "Permanent",
+                    employment_status: employee.employmentStatus ?? "ACTIVE",
+                    contract_start_date:
+                      employee.contractStartDate ?? employee.hireDate ?? employee.startDate ?? "",
+                    contract_end_date:
+                      (employee.employmentForm ?? "Permanent") === "Permanent"
+                        ? ""
+                        : employee.contractEndDate ?? "",
+                  };
+                  const payload: Record<string, string | null> = {};
+                  if (employmentFormState.employment_form !== initial.employment_form) {
+                    payload.employment_form = employmentFormState.employment_form;
+                  }
+                  if (employmentFormState.employment_status !== initial.employment_status) {
+                    payload.employment_status = employmentFormState.employment_status;
+                  }
+                  if (employmentFormState.contract_start_date !== initial.contract_start_date) {
+                    payload.contract_start_date = employmentFormState.contract_start_date
+                      ? employmentFormState.contract_start_date
+                      : null;
+                  }
+                  const effectiveEnd = isPermanent ? null : employmentFormState.contract_end_date.trim() || null;
+                  if (effectiveEnd !== (initial.contract_end_date || null)) {
+                    payload.contract_end_date = effectiveEnd;
+                  }
+                  if (Object.keys(payload).length === 0) {
+                    setEmploymentModalOpen(false);
+                    return;
+                  }
+                  setEmploymentSaving(true);
+                  try {
+                    const res = await fetch(`/api/employees/${id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json", ...withDevBearer() },
+                      credentials: "include",
+                      body: JSON.stringify(payload),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (res.ok && json.ok && json.employee) {
+                      const e = json.employee;
+                      setData((prev) =>
+                        prev.employee
+                          ? {
+                              ...prev,
+                              employee: {
+                                ...prev.employee,
+                                employmentForm: e.employmentForm ?? prev.employee.employmentForm,
+                                employmentStatus: e.employmentStatus ?? prev.employee.employmentStatus,
+                                contractStartDate: e.contractStartDate ?? prev.employee.contractStartDate,
+                                contractEndDate: e.contractEndDate ?? prev.employee.contractEndDate,
+                                hireDate: e.hireDate ?? prev.employee.hireDate,
+                              },
+                            }
+                          : prev
+                      );
+                      setEmploymentModalOpen(false);
+                      toast({ title: "Employment updated" });
+                    } else {
+                      const msg =
+                        (json?.error?.details as string[])?.[0] ??
+                        (json?.error?.code as string) ??
+                        "Update failed";
+                      toast({ title: msg, variant: "destructive" });
+                    }
+                  } catch (err) {
+                    toast({
+                      title: err instanceof Error ? err.message : "Update failed",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setEmploymentSaving(false);
+                  }
+                }}
+              >
+                {employmentSaving ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {activeTab === "compensation" && (
           <div className="space-y-6">

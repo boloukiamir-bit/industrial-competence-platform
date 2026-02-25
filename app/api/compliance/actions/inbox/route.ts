@@ -49,7 +49,7 @@ function errorPayload(step: string, error: unknown, details?: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
+  const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
     const res = NextResponse.json(errorPayload("getActiveOrg", org.error), { status: org.status });
@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const { data: membership } = await supabase
+  // Membership check via service role so it works with cookie or bearer auth (RLS not applied).
+  const { data: membership } = await supabaseAdmin
     .from("memberships")
     .select("role")
     .eq("user_id", org.userId)

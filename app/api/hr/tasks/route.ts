@@ -84,10 +84,14 @@ export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
   try {
     // Authenticate and get org session
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      const payload: Record<string, unknown> = { error: session.error };
+      if (process.env.NODE_ENV !== "production") {
+        payload.step = "getOrgIdFromSession";
+      }
+      const res = NextResponse.json(payload, { status: session.status });
       res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -95,7 +99,11 @@ export async function GET(request: NextRequest) {
 
     // Verify user has access to HR tasks (admin or hr role)
     if (session.role !== "admin" && session.role !== "hr") {
-      const res = NextResponse.json({ error: "Forbidden: HR admin access required" }, { status: 403 });
+      const payload: Record<string, unknown> = { error: "Forbidden: HR admin access required" };
+      if (process.env.NODE_ENV !== "production") {
+        payload.step = "role_check";
+      }
+      const res = NextResponse.json(payload, { status: 403 });
       res.headers.set("X-Request-Id", requestId);
       applySupabaseCookies(res, pendingCookies);
       return res;

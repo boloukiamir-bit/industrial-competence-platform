@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRequestId } from "@/lib/server/requestId";
+import { getDevBearerContext } from "@/lib/server/auth";
 
 export type OrgSessionResult = {
   success: true;
@@ -38,6 +40,46 @@ export async function getOrgIdFromSession(
 
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
     const accessToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : undefined;
+
+    // Dev-only: resolve from DEV_BEARER_TOKEN (same mechanism as /api/debug/auth). Never in production.
+    const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+    if (!isProduction && accessToken) {
+      const devToken = process.env.DEV_BEARER_TOKEN ?? process.env.NEXT_PUBLIC_DEV_BEARER_TOKEN ?? "";
+      if (devToken !== "" && accessToken === devToken) {
+        const ctx = await getDevBearerContext(request);
+        if (ctx) {
+          let orgId = ctx.active_org_id ?? null;
+          let role = ctx.role ?? null;
+          if (!orgId) {
+            const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+            const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (url && key) {
+              const admin = createClient(url, key);
+              const { data: firstMembership } = await admin
+                .from("memberships")
+                .select("org_id, role")
+                .eq("user_id", ctx.userId)
+                .eq("status", "active")
+                .order("created_at", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              if (firstMembership) {
+                orgId = firstMembership.org_id;
+                role = firstMembership.role ?? role;
+              }
+            }
+          }
+          if (orgId) {
+            return {
+              success: true,
+              userId: ctx.userId,
+              orgId,
+              role: role ?? "admin",
+            };
+          }
+        }
+      }
+    }
 
     let supabase: SupabaseClient;
 

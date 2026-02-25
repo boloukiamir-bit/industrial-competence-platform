@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { forwardAuthHeaders } from "@/lib/server/forwardAuthHeaders";
 
 function gradeFromPercent(pct: number): "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" {
   if (pct >= 95) return "A";
@@ -55,12 +56,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const baseUrl = request.nextUrl.origin;
-    const cookieHeader = request.headers.get("cookie") ?? "";
+    const authHeaders = forwardAuthHeaders(request);
     const overviewUrl = `${baseUrl}/api/compliance/overview`;
     const competencyUrl = `${baseUrl}/api/dashboard/competency-score`;
 
     // Compliance pillar: from overview.kpis (locked model)
-    const overviewRes = await fetch(overviewUrl, { headers: { cookie: cookieHeader } });
+    const overviewRes = await fetch(overviewUrl, { headers: authHeaders });
     complianceStatus = overviewRes.status;
     if (overviewRes.ok) {
       const overviewJson = (await overviewRes.json()) as {
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Safety + Technical: from dashboard competency-score
-    const scoreRes = await fetch(competencyUrl, { headers: { cookie: cookieHeader } });
+    const scoreRes = await fetch(competencyUrl, { headers: authHeaders });
     competencyStatus = scoreRes.status;
     if (scoreRes.ok) {
       const scoreJson = (await scoreRes.json()) as {

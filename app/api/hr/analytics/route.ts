@@ -134,17 +134,25 @@ async function getHrAnalytics({ orgId }: { orgId: string }): Promise<HRAnalytics
 export async function GET(request: NextRequest) {
   try {
     // Authenticate and get org session
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const session = await getOrgIdFromSession(request, supabase);
     if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
+      const payload: Record<string, unknown> = { error: session.error };
+      if (process.env.NODE_ENV !== "production") {
+        payload.step = "getOrgIdFromSession";
+      }
+      const res = NextResponse.json(payload, { status: session.status });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
 
     // Verify user has access to HR analytics (admin or hr role)
     if (session.role !== "admin" && session.role !== "hr") {
-      const res = NextResponse.json({ error: "Forbidden: HR admin access required" }, { status: 403 });
+      const payload: Record<string, unknown> = { error: "Forbidden: HR admin access required" };
+      if (process.env.NODE_ENV !== "production") {
+        payload.step = "role_check";
+      }
+      const res = NextResponse.json(payload, { status: 403 });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
