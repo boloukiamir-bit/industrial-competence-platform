@@ -19,6 +19,8 @@ import { useOrg } from "@/hooks/useOrg";
 import type { Employee } from "@/types/domain";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
+import { EmployeeActionsMenu } from "@/components/employees/EmployeeActionsMenu";
+import { EmployeeEditDrawer } from "@/components/employees/EmployeeEditDrawer";
 
 export default function EmployeesPage() {
   const router = useRouter();
@@ -31,6 +33,16 @@ export default function EmployeesPage() {
   const [menuRowId, setMenuRowId] = useState<string | null>(null);
   const [deactivateEmployee, setDeactivateEmployee] = useState<Employee | null>(null);
   const [deactivating, setDeactivating] = useState(false);
+  const [editEmployeeId, setEditEmployeeId] = useState<string | null>(null);
+  const [editInitial, setEditInitial] = useState<{
+    firstName?: string;
+    lastName?: string;
+    employeeNumber?: string;
+    email?: string;
+    phone?: string;
+    title?: string;
+    hireDate?: string;
+  } | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const { toast } = useToast();
 
@@ -326,39 +338,23 @@ export default function EmployeesPage() {
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                   {menuRowId === employee.id && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border bg-white dark:bg-gray-800 shadow-lg py-1"
-                      role="menu"
-                    >
-                      <Link
-                        href={`/app/employees/${employee.id}`}
-                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        role="menuitem"
-                        onClick={() => setMenuRowId(null)}
-                      >
-                        View
-                      </Link>
-                      <Link
-                        href={`/app/employees/${employee.id}`}
-                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        role="menuitem"
-                        onClick={() => setMenuRowId(null)}
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        role="menuitem"
-                        onClick={() => {
-                          setDeactivateEmployee(employee);
-                          setMenuRowId(null);
-                        }}
-                      >
-                        Deactivate
-                      </button>
-                    </div>
+                    <EmployeeActionsMenu
+                      employee={employee}
+                      onClose={() => setMenuRowId(null)}
+                      onEdit={() => {
+                        setEditEmployeeId(employee.id);
+                        setEditInitial({
+                          firstName: employee.firstName,
+                          lastName: employee.lastName,
+                          employeeNumber: employee.employeeNumber,
+                          email: employee.email,
+                          phone: employee.phone,
+                          title: employee.role,
+                          hireDate: employee.startDate,
+                        });
+                      }}
+                      onDeactivate={() => setDeactivateEmployee(employee)}
+                    />
                   )}
                 </td>
               </tr>
@@ -394,7 +390,7 @@ export default function EmployeesPage() {
                 try {
                   const res = await fetch(`/api/employees/${deactivateEmployee.id}`, {
                     method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", ...withDevBearer() },
                     body: JSON.stringify({ is_active: false }),
                     credentials: "include",
                   });
@@ -415,6 +411,14 @@ export default function EmployeesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EmployeeEditDrawer
+        open={editEmployeeId !== null}
+        onOpenChange={(open) => !open && setEditEmployeeId(null)}
+        employeeId={editEmployeeId}
+        initial={editInitial}
+        onSaved={() => loadEmployees()}
+      />
     </div>
   );
 }
