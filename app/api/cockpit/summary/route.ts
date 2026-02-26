@@ -30,6 +30,8 @@ export type CockpitSummaryResponse = {
   illegal_count: number;
   restricted_count: number;
   warning_count: number;
+  contract_illegal_count: number;
+  contract_warning_count: number;
 };
 
 export async function GET(request: NextRequest) {
@@ -119,6 +121,8 @@ export async function GET(request: NextRequest) {
     let illegal_count = 0;
     let restricted_count = 0;
     let warning_count = 0;
+    let contract_illegal_count = 0;
+    let contract_warning_count = 0;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -178,6 +182,24 @@ export async function GET(request: NextRequest) {
         restricted_count = aggregated.restrictedCount;
         warning_count = aggregated.warningCount;
       }
+
+      let contractQuery = admin
+        .from("v_employee_contract_status")
+        .select("status")
+        .eq("org_id", org.activeOrgId)
+        .in("status", ["ILLEGAL", "WARNING"]);
+      if (org.activeSiteId) {
+        contractQuery = contractQuery.or(`site_id.is.null,site_id.eq.${org.activeSiteId}`);
+      }
+      const { data: contractRows } = await contractQuery;
+      contract_illegal_count = (contractRows ?? []).filter(
+        (r: { status: string }) => r.status === "ILLEGAL"
+      ).length;
+      contract_warning_count = (contractRows ?? []).filter(
+        (r: { status: string }) => r.status === "WARNING"
+      ).length;
+      illegal_count += contract_illegal_count;
+      warning_count += contract_warning_count;
     }
 
     const body: CockpitSummaryResponse & { _debug?: unknown; _debug_error?: { message: string; code?: string } } = {
@@ -190,6 +212,8 @@ export async function GET(request: NextRequest) {
       illegal_count,
       restricted_count,
       warning_count,
+      contract_illegal_count,
+      contract_warning_count,
     };
     if (debugInfo) body._debug = debugInfo;
 
