@@ -20,6 +20,7 @@ import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDra
 import { IssueTable } from "@/components/cockpit/IssueTable";
 import { IssueDrawer } from "@/components/cockpit/IssueDrawer";
 import { InterventionQueue } from "@/components/cockpit/InterventionQueue";
+import { TopOperationalRisksBlock } from "@/components/cockpit/TopOperationalRisksBlock";
 import type { CockpitIssueRow } from "@/app/api/cockpit/issues/route";
 import { isDemoMode } from "@/lib/demoRuntime";
 import {
@@ -157,6 +158,7 @@ export default function CockpitPage() {
 
   const [gapsLines, setGapsLines] = useState<GapsLineRow[]>([]);
   const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsError, setGapsError] = useState<string | null>(null);
   const [rootCauseDrawerLine, setRootCauseDrawerLine] = useState<GapsLineRow | null>(null);
 
   const [issues, setIssues] = useState<CockpitIssueRow[]>([]);
@@ -371,42 +373,45 @@ export default function CockpitPage() {
     }
   };
 
-  // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page
+  // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page. Do not set pageError so cockpit stays usable; block shows inline failure.
   useEffect(() => {
     if (isDemoMode() || !sessionOk || !hasShiftCode) return;
     if (!isLegacyShiftType(shiftCode)) {
       setGapsLines([]);
       setGapsLoading(false);
+      setGapsError(null);
       return;
     }
     let cancelled = false;
     setGapsLoading(true);
+    setGapsError(null);
     const params = new URLSearchParams({ date, shift_code: shiftCode });
     fetchJson<{ lines?: GapsLineRow[] }>(`/api/tomorrows-gaps?${params.toString()}`)
       .then((res) => {
         if (!res.ok) {
           const friendly = res.status === 401 ? "Invalid or expired session" : res.error;
-          const toastMessage =
-            res.status === 401
-              ? "Request failed (401) — Session expired. Please reload/login."
-              : `Request failed (${res.status}) — ${res.error}`;
-          toast({ title: toastMessage, variant: "destructive" });
-          setPageError(friendly);
+          if (!cancelled) setGapsError(friendly);
           throw new Error(friendly);
         }
         return res.data;
       })
       .then((data) => {
-        if (!cancelled) setGapsLines(data.lines ?? []);
+        if (!cancelled) {
+          setGapsLines(data.lines ?? []);
+          setGapsError(null);
+        }
       })
       .catch(() => {
-        if (!cancelled) setGapsLines([]);
+        if (!cancelled) {
+          setGapsLines([]);
+          setGapsError("Could not load tomorrow's gaps.");
+        }
       })
       .finally(() => {
         if (!cancelled) setGapsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftCode, sessionOk, hasShiftCode, toast]);
+  }, [date, shiftCode, sessionOk, hasShiftCode]);
 
   // Load Issue Inbox (date, shift_code, optional line)
   useEffect(() => {
@@ -935,6 +940,13 @@ export default function CockpitPage() {
 
       {!isDemoMode() && (
         <div className="mt-10">
+          <TopOperationalRisksBlock
+            risks={topRisks.slice(0, 3)}
+            loading={gapsLoading}
+            error={gapsError}
+            date={date}
+            shiftCode={shiftCode}
+          />
           <InterventionQueue
             issues={issues}
             markedPlannedIds={markedPlannedIds}

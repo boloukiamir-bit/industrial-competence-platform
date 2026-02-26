@@ -3,11 +3,11 @@
  * Body: { station_id, skill_id, required: boolean }
  * Returns impact preview: before, after, deltaEligible, danger, hardBlock.
  * Tenant-scoped via active_org_id. Uses v_tomorrows_gaps_station_health (no Node recompute).
+ * Governed via withMutationGovernance (allowNoShiftContext: true).
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,119 +55,104 @@ async function fetchHealth(
   return mapHealthRow(rows[0] as Record<string, unknown>);
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
-    const org = await getActiveOrgFromSession(request, supabase);
-    if (!org.ok) {
-      const res = NextResponse.json({ error: org.error }, { status: org.status });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-    const activeOrgId = org.activeOrgId;
-
-    let body: Body = {};
+export const POST = withMutationGovernance(
+  async (ctx) => {
     try {
-      body = await request.json();
-    } catch {
-      // ignore
-    }
+      const body = ctx.body as Body;
+      const stationId = typeof body.station_id === "string" ? body.station_id.trim() : null;
+      const skillId = typeof body.skill_id === "string" ? body.skill_id.trim() : null;
+      const required = body.required === true;
 
-    const stationId = typeof body.station_id === "string" ? body.station_id.trim() : null;
-    const skillId = typeof body.skill_id === "string" ? body.skill_id.trim() : null;
-    const required = body.required === true;
-
-    if (!stationId || !skillId) {
-      const res = NextResponse.json(
-        { error: "station_id and skill_id are required" },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const { data: station } = await supabase
-      .from("stations")
-      .select("id")
-      .eq("id", stationId)
-      .eq("org_id", activeOrgId)
-      .single();
-    if (!station) {
-      const res = NextResponse.json({ error: "Station not found or not in org" }, { status: 403 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const { data: skill } = await supabase
-      .from("skills")
-      .select("id")
-      .eq("id", skillId)
-      .eq("org_id", activeOrgId)
-      .single();
-    if (!skill) {
-      const res = NextResponse.json({ error: "Skill not found or not in org" }, { status: 403 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const before = await fetchHealth(supabaseAdmin, activeOrgId, stationId);
-
-    if (required) {
-      const { error: upsertErr } = await supabase
-        .from("station_skill_requirements")
-        .upsert(
-          {
-            org_id: activeOrgId,
-            station_id: stationId,
-            skill_id: skillId,
-            required_level: 1,
-          },
-          { onConflict: "org_id,station_id,skill_id" }
+      if (!stationId || !skillId) {
+        return NextResponse.json(
+          { error: "station_id and skill_id are required" },
+          { status: 400 }
         );
-      if (upsertErr) {
-        console.error("requirements/upsert:", upsertErr);
-        const res = NextResponse.json({ error: "Failed to save requirement" }, { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
       }
-    } else {
-      const { error: delErr } = await supabase
-        .from("station_skill_requirements")
-        .delete()
-        .eq("org_id", activeOrgId)
-        .eq("station_id", stationId)
-        .eq("skill_id", skillId);
-      if (delErr) {
-        console.error("requirements/upsert delete:", delErr);
-        const res = NextResponse.json({ error: "Failed to remove requirement" }, { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+
+      const { data: station } = await ctx.supabase
+        .from("stations")
+        .select("id")
+        .eq("id", stationId)
+        .eq("org_id", ctx.orgId)
+        .single();
+      if (!station) {
+        return NextResponse.json({ error: "Station not found or not in org" }, { status: 403 });
       }
+
+      const { data: skill } = await ctx.supabase
+        .from("skills")
+        .select("id")
+        .eq("id", skillId)
+        .eq("org_id", ctx.orgId)
+        .single();
+      if (!skill) {
+        return NextResponse.json({ error: "Skill not found or not in org" }, { status: 403 });
+      }
+
+      const before = await fetchHealth(ctx.admin, ctx.orgId, stationId);
+
+      if (required) {
+        const { error: upsertErr } = await ctx.supabase
+          .from("station_skill_requirements")
+          .upsert(
+            {
+              org_id: ctx.orgId,
+              station_id: stationId,
+              skill_id: skillId,
+              required_level: 1,
+            },
+            { onConflict: "org_id,station_id,skill_id" }
+          );
+        if (upsertErr) {
+          console.error("requirements/upsert:", upsertErr);
+          return NextResponse.json({ error: "Failed to save requirement" }, { status: 500 });
+        }
+      } else {
+        const { error: delErr } = await ctx.supabase
+          .from("station_skill_requirements")
+          .delete()
+          .eq("org_id", ctx.orgId)
+          .eq("station_id", stationId)
+          .eq("skill_id", skillId);
+        if (delErr) {
+          console.error("requirements/upsert delete:", delErr);
+          return NextResponse.json({ error: "Failed to remove requirement" }, { status: 500 });
+        }
+      }
+
+      const after = await fetchHealth(ctx.admin, ctx.orgId, stationId);
+      const afterEligible = after?.eligible_final ?? 0;
+      const beforeEligible = before?.eligible_final ?? 0;
+      const deltaEligible = afterEligible - beforeEligible;
+      const danger = afterEligible <= 3;
+      const hardBlock = afterEligible === 0;
+
+      return NextResponse.json({
+        ok: true,
+        before: before ?? null,
+        after: after ?? null,
+        deltaEligible,
+        danger,
+        hardBlock,
+        server_time: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("POST /api/requirements/upsert failed:", err);
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Internal error" },
+        { status: 500 }
+      );
     }
-
-    const after = await fetchHealth(supabaseAdmin, activeOrgId, stationId);
-    const afterEligible = after?.eligible_final ?? 0;
-    const beforeEligible = before?.eligible_final ?? 0;
-    const deltaEligible = afterEligible - beforeEligible;
-    const danger = afterEligible <= 3;
-    const hardBlock = afterEligible === 0;
-
-    const res = NextResponse.json({
-      ok: true,
-      before: before ?? null,
-      after: after ?? null,
-      deltaEligible,
-      danger,
-      hardBlock,
-      server_time: new Date().toISOString(),
-    });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (err) {
-    console.error("POST /api/requirements/upsert failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 }
-    );
+  },
+  {
+    route: "/api/requirements/upsert",
+    action: "REQUIREMENTS_UPSERT",
+    target_type: "org",
+    allowNoShiftContext: true,
+    getTargetIdAndMeta: (body) => ({
+      target_id: typeof (body as Body).station_id === "string" ? `station:${(body as Body).station_id}` : "unknown",
+      meta: {},
+    }),
   }
-}
+);
