@@ -485,4 +485,16 @@ export type InboxMedicalItem = {
   days_to_expiry: number | null;
 };
 
-export type InboxItem = InboxActionItem | InboxLifecycleItem | InboxGovernanceItem | InboxContractItem | InboxMedicalItem;
+/** HR Inbox: training tab item (v_employee_training_status ILLEGAL/WARNING). CTA = open Employee Edit. */
+export type InboxTrainingItem = {
+  employee_id: string;
+  employee_name: string;
+  reason_code: string;
+  due_date: string;
+  severity: "ILLEGAL" | "WARNING";
+  training_code: string;
+  valid_to: string | null;
+  days_to_expiry: number | null;
+};
+
+export type InboxItem = InboxActionItem | InboxLifecycleItem | InboxGovernanceItem | InboxContractItem | InboxMedicalItem | InboxTrainingItem;

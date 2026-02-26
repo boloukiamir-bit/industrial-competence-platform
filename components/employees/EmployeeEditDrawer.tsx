@@ -69,6 +69,10 @@ export function EmployeeEditDrawer({
   const [medicalValidTo, setMedicalValidTo] = useState("");
   const [medicalSaving, setMedicalSaving] = useState(false);
   const [medicalError, setMedicalError] = useState<string | null>(null);
+  const [trainingValidTo, setTrainingValidTo] = useState("");
+  const [trainingCompletedOn, setTrainingCompletedOn] = useState("");
+  const [trainingSaving, setTrainingSaving] = useState(false);
+  const [trainingError, setTrainingError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setFirstName(initial?.firstName ?? "");
@@ -98,6 +102,26 @@ export function EmployeeEditDrawer({
         else setMedicalValidTo("");
       })
       .catch(() => setMedicalValidTo(""));
+  }, [open, employeeId]);
+
+  useEffect(() => {
+    if (!open || !employeeId) return;
+    setTrainingError(null);
+    fetch(`/api/employees/${employeeId}/training`, { credentials: "include", headers: withDevBearer() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.ok) {
+          setTrainingValidTo(json.valid_to ? String(json.valid_to).slice(0, 10) : "");
+          setTrainingCompletedOn(json.completed_on ? String(json.completed_on).slice(0, 10) : "");
+        } else {
+          setTrainingValidTo("");
+          setTrainingCompletedOn("");
+        }
+      })
+      .catch(() => {
+        setTrainingValidTo("");
+        setTrainingCompletedOn("");
+      });
   }, [open, employeeId]);
 
   const handleSave = async () => {
@@ -327,6 +351,73 @@ export function EmployeeEditDrawer({
               }}
             >
               {medicalSaving ? "Saving…" : "Save medical"}
+            </Button>
+          </div>
+          <div className="border-t border-border pt-4 space-y-2">
+            <Label className="text-sm font-medium">Training</Label>
+            <p className="text-xs text-muted-foreground">SAFETY training validity.</p>
+            {trainingError && (
+              <p className="text-sm text-destructive font-medium" role="alert">
+                {trainingError}
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-training-valid-to">Valid to</Label>
+              <Input
+                id="edit-training-valid-to"
+                type="date"
+                value={trainingValidTo}
+                onChange={(e) => setTrainingValidTo(e.target.value)}
+                className="bg-background"
+                data-testid="edit-training-valid-to"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-training-completed-on">Completed on (optional)</Label>
+              <Input
+                id="edit-training-completed-on"
+                type="date"
+                value={trainingCompletedOn}
+                onChange={(e) => setTrainingCompletedOn(e.target.value)}
+                className="bg-background"
+                data-testid="edit-training-completed-on"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={trainingSaving}
+              data-testid="employee-edit-save-training"
+              onClick={async () => {
+                if (!employeeId) return;
+                setTrainingError(null);
+                setTrainingSaving(true);
+                try {
+                  const res = await fetch(`/api/employees/${employeeId}/training`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", ...withDevBearer() },
+                    credentials: "include",
+                    body: JSON.stringify({
+                      training_code: "SAFETY",
+                      valid_to: trainingValidTo.trim() || null,
+                      completed_on: trainingCompletedOn.trim() || null,
+                    }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.ok) {
+                    toast({ title: "Training updated" });
+                    onSaved?.();
+                  } else {
+                    const msg = data?.error?.message ?? data?.error ?? "Failed to save training";
+                    setTrainingError(typeof msg === "string" ? msg : "Failed to save training");
+                  }
+                } finally {
+                  setTrainingSaving(false);
+                }
+              }}
+            >
+              {trainingSaving ? "Saving…" : "Save training"}
             </Button>
           </div>
           <div className="flex gap-2 pt-2">
