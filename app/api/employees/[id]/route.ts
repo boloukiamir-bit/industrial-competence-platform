@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import { auditWrite } from "@/lib/server/governance/auditWrite";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,6 +34,7 @@ type PatchBody = {
   is_active?: boolean;
   position_id?: string | null;
   employment_type?: EmploymentType;
+  contract_start_date?: string | null;
   contract_end_date?: string | null;
   start_date?: string | null;
 };
@@ -101,6 +103,16 @@ function validatePatchBody(
     if (v !== undefined) updates.employment_type = v;
     else details.push("employment_type must be one of: permanent, temporary, consultant");
   }
+  if (b.contract_start_date !== undefined) {
+    const v =
+      b.contract_start_date === null ||
+      (typeof b.contract_start_date === "string" && b.contract_start_date.trim() === "")
+        ? null
+        : parseDate(b.contract_start_date);
+    if (v !== undefined) updates.contract_start_date = v;
+    else if (b.contract_start_date !== null && b.contract_start_date !== undefined)
+      details.push("contract_start_date must be a valid date or null");
+  }
   if (b.contract_end_date !== undefined) {
     const v =
       b.contract_end_date === null ||
@@ -140,6 +152,13 @@ function validatePatchBody(
       details.push("contract_end_date is required for temporary or consultant employment");
       return { ok: false, code: "VALIDATION_ERROR", details };
     }
+  }
+
+  const startDate = updates.contract_start_date ?? null;
+  const endDate = updates.contract_end_date ?? null;
+  if (startDate != null && endDate != null && endDate < startDate) {
+    details.push("contract_end_date must be >= contract_start_date when both set");
+    return { ok: false, code: "VALIDATION_ERROR", details };
   }
 
   return { ok: true, updates };
@@ -340,6 +359,28 @@ export async function PATCH(
       }
     }
 
+    const contractFieldsUpdated =
+      updates.contract_start_date !== undefined ||
+      updates.contract_end_date !== undefined ||
+      updates.employment_type !== undefined;
+    let beforeContract: Record<string, unknown> | null = null;
+    if (contractFieldsUpdated) {
+      const { data: currentRow } = await supabaseAdmin
+        .from("employees")
+        .select("contract_start_date, contract_end_date, employment_type, employment_status")
+        .eq("id", id)
+        .eq("org_id", activeOrgId)
+        .maybeSingle();
+      if (currentRow) {
+        beforeContract = {
+          contract_start_date: (currentRow as Record<string, unknown>).contract_start_date ?? null,
+          contract_end_date: (currentRow as Record<string, unknown>).contract_end_date ?? null,
+          employment_type: (currentRow as Record<string, unknown>).employment_type ?? null,
+          employment_status: (currentRow as Record<string, unknown>).employment_status ?? null,
+        };
+      }
+    }
+
     const dbPayload: Record<string, unknown> = {};
     if (updates.first_name !== undefined) dbPayload.first_name = updates.first_name;
     if (updates.last_name !== undefined) dbPayload.last_name = updates.last_name;
@@ -350,6 +391,7 @@ export async function PATCH(
     if (updates.is_active !== undefined) dbPayload.is_active = updates.is_active;
     if (updates.position_id !== undefined) dbPayload.position_id = updates.position_id;
     if (updates.employment_type !== undefined) dbPayload.employment_type = updates.employment_type;
+    if (updates.contract_start_date !== undefined) dbPayload.contract_start_date = updates.contract_start_date;
     if (updates.contract_end_date !== undefined) dbPayload.contract_end_date = updates.contract_end_date;
     if (updates.start_date !== undefined) dbPayload.start_date = updates.start_date;
     if (updates.first_name !== undefined || updates.last_name !== undefined) {
@@ -373,7 +415,7 @@ export async function PATCH(
 
     const { data: requery, error: fetchErr } = await supabaseAdmin
       .from("employees")
-      .select("id, name, first_name, last_name, employee_number, email, phone, date_of_birth, role, line, line_code, team, employment_type, start_date, contract_end_date, manager_id, position_id, address, city, postal_code, country, is_active, org_id")
+      .select("id, name, first_name, last_name, employee_number, email, phone, date_of_birth, role, line, line_code, team, employment_type, start_date, contract_start_date, contract_end_date, employment_status, manager_id, position_id, address, city, postal_code, country, is_active, org_id")
       .eq("id", id)
       .eq("org_id", activeOrgId)
       .limit(1)
@@ -389,6 +431,30 @@ export async function PATCH(
       return apply(
         NextResponse.json({ ok: false, error: { code: "NOT_FOUND" }, requestId }, { status: 404 })
       );
+    }
+
+    if (beforeContract != null) {
+      const requeryRow = requery as Record<string, unknown>;
+      const afterContract = {
+        contract_start_date: requeryRow.contract_start_date ?? null,
+        contract_end_date: requeryRow.contract_end_date ?? null,
+        employment_type: requeryRow.employment_type ?? null,
+        employment_status: requeryRow.employment_status ?? null,
+      };
+      await auditWrite({
+        admin: supabaseAdmin,
+        orgId: activeOrgId,
+        siteId: auth.activeSiteId ?? null,
+        actorUserId: auth.userId,
+        action: "EMPLOYEE_UPDATE",
+        targetType: "EMPLOYEE",
+        targetId: id,
+        reasonCodes: ["CONTRACT"],
+        before: beforeContract,
+        after: afterContract,
+        requestId,
+        idempotencyKey: `EMPLOYEE_UPDATE:${id}:${requestId}`,
+      });
     }
 
     const employee = toEmployeeDto(requery as Record<string, unknown>);

@@ -48,6 +48,8 @@ export default function EmployeesPage() {
     phone?: string;
     title?: string;
     hireDate?: string;
+    employmentType?: "permanent" | "temporary" | "consultant";
+    contractEndDate?: string;
   } | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const { toast } = useToast();
@@ -185,6 +187,8 @@ export default function EmployeesPage() {
       phone: emp.phone,
       title: (emp as { title?: string }).title,
       hireDate: (emp as { hireDate?: string }).hireDate,
+      employmentType: ((emp.employmentType ?? (emp as { employment_type?: string }).employment_type) ?? "permanent") as "permanent" | "temporary" | "consultant",
+      contractEndDate: emp.contractEndDate ?? (emp as { contract_end_date?: string }).contract_end_date,
     });
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-employee-id="${highlightId}"]`);
@@ -429,7 +433,9 @@ export default function EmployeesPage() {
                           email: employee.email,
                           phone: employee.phone,
                           title: (employee as { title?: string }).title ?? employee.role,
-                          hireDate: employee.startDate,
+                          hireDate: (employee as { hireDate?: string }).hireDate ?? employee.startDate,
+                          employmentType: ((employee.employmentType ?? (employee as { employment_type?: string }).employment_type) ?? "permanent") as "permanent" | "temporary" | "consultant",
+                          contractEndDate: employee.contractEndDate ?? (employee as { contract_end_date?: string }).contract_end_date,
                         });
                       }}
                       onDeactivate={() => setDeactivateEmployee(employee)}
