@@ -2,12 +2,14 @@
  * POST /api/compliance/bulk-assign — assign one compliance type to many employees by scope. Admin/HR only.
  * Body: { compliance_code, scope, scope_value?, valid_from?, valid_to?, notes?, waived? }
  * Returns { ok: true, inserted, updated, skipped } or { ok: false, step, error }.
+ * Governed via withMutationGovernance (allowNoShiftContext: true).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { isHrAdmin } from "@/lib/auth";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,75 +24,52 @@ function errorPayload(step: string, error: unknown, details?: string) {
 const SCOPE_VALUES = ["all", "line", "department", "shift", "area"] as const;
 type Scope = (typeof SCOPE_VALUES)[number];
 
-export async function POST(request: NextRequest) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
-  const org = await getActiveOrgFromSession(request, supabase);
-  if (!org.ok) {
-    const res = NextResponse.json(errorPayload("getActiveOrg", org.error), { status: org.status });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    const { data: membership } = await ctx.supabase
+      .from("memberships")
+      .select("role")
+      .eq("user_id", ctx.userId)
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active")
+      .maybeSingle();
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("role")
-    .eq("user_id", org.userId)
-    .eq("org_id", org.activeOrgId)
-    .eq("status", "active")
-    .maybeSingle();
+    if (!isHrAdmin(membership?.role)) {
+      return NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
+    }
 
-  if (!isHrAdmin(membership?.role)) {
-    const res = NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    const body = ctx.body as Record<string, unknown>;
+    const compliance_code = typeof body.compliance_code === "string" ? body.compliance_code.trim() : "";
+    const scopeRaw = typeof body.scope === "string" ? body.scope.trim().toLowerCase() : "";
+    const scope = SCOPE_VALUES.includes(scopeRaw as Scope) ? (scopeRaw as Scope) : "all";
+    const scope_value = typeof body.scope_value === "string" ? body.scope_value.trim() || null : null;
+    const valid_from = typeof body.valid_from === "string" ? body.valid_from || null : null;
+    const valid_to = typeof body.valid_to === "string" ? body.valid_to || null : null;
+    const notes = typeof body.notes === "string" ? body.notes.trim() || null : null;
+    const waived = body.waived === true;
 
-  let body: Record<string, unknown> = {};
-  try {
-    body = await request.json();
-  } catch {
-    const res = NextResponse.json(errorPayload("body", "Invalid JSON"), { status: 400 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    if (!compliance_code) {
+      return NextResponse.json(errorPayload("validation", "compliance_code is required"), { status: 400 });
+    }
 
-  const compliance_code = typeof body.compliance_code === "string" ? body.compliance_code.trim() : "";
-  const scopeRaw = typeof body.scope === "string" ? body.scope.trim().toLowerCase() : "";
-  const scope = SCOPE_VALUES.includes(scopeRaw as Scope) ? (scopeRaw as Scope) : "all";
-  const scope_value = typeof body.scope_value === "string" ? body.scope_value.trim() || null : null;
-  const valid_from = typeof body.valid_from === "string" ? body.valid_from || null : null;
-  const valid_to = typeof body.valid_to === "string" ? body.valid_to || null : null;
-  const notes = typeof body.notes === "string" ? body.notes.trim() || null : null;
-  const waived = body.waived === true;
+    if (scope === "shift") {
+      return NextResponse.json(
+        errorPayload("validation", "Shift scope not supported yet"),
+        { status: 400 }
+      );
+    }
 
-  if (!compliance_code) {
-    const res = NextResponse.json(errorPayload("validation", "compliance_code is required"), { status: 400 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    if (scope !== "all" && !scope_value) {
+      return NextResponse.json(
+        errorPayload("validation", `scope_value is required when scope is ${scope}`),
+        { status: 400 }
+      );
+    }
 
-  if (scope === "shift") {
-    const res = NextResponse.json(
-      errorPayload("validation", "Shift scope not supported yet"),
-      { status: 400 }
-    );
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
+    try {
+      const orgId = ctx.orgId;
 
-  if (scope !== "all" && !scope_value) {
-    const res = NextResponse.json(
-      errorPayload("validation", `scope_value is required when scope is ${scope}`),
-      { status: 400 }
-    );
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
-  try {
-    const orgId = org.activeOrgId;
-
-    const { data: catalogRow, error: catError } = await supabaseAdmin
+      const { data: catalogRow, error: catError } = await ctx.admin
       .from("compliance_catalog")
       .select("id")
       .eq("org_id", orgId)
@@ -99,17 +78,15 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (catError || !catalogRow) {
-      const res = NextResponse.json(
+      return NextResponse.json(
         errorPayload("catalog", "Compliance code not found or inactive", catError?.message),
         { status: 404 }
       );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
     }
 
     const compliance_id = catalogRow.id;
 
-    const employeesQuery = supabaseAdmin
+    const employeesQuery = ctx.admin
       .from("employees")
       .select("id, site_id")
       .eq("org_id", orgId)
@@ -128,27 +105,23 @@ export async function POST(request: NextRequest) {
 
     if (empErr) {
       console.error("compliance/bulk-assign employees", empErr);
-      const res = NextResponse.json(errorPayload("employees", empErr.message), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(errorPayload("employees", empErr.message), { status: 500 });
     }
 
     const empList = employees ?? [];
     const withSite = empList.filter((e) => e.site_id != null);
     const withoutSite = empList.filter((e) => e.site_id == null);
     if (withoutSite.length > 0) {
-      const res = NextResponse.json(
+      return NextResponse.json(
         errorPayload(
           "employees",
           `${withoutSite.length} employee(s) have no site_id; bulk assign requires site_id. Backfill employees.site_id first.`
         ),
         { status: 400 }
       );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
     }
 
-    const existing = await supabaseAdmin
+    const existing = await ctx.admin
       .from("employee_compliance")
       .select("employee_id")
       .eq("org_id", orgId)
@@ -157,9 +130,7 @@ export async function POST(request: NextRequest) {
 
     if (existing.error) {
       console.error("compliance/bulk-assign existing", existing.error);
-      const res = NextResponse.json(errorPayload("existing", existing.error.message), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(errorPayload("existing", existing.error.message), { status: 500 });
     }
 
     const existingSet = new Set((existing.data ?? []).map((r) => r.employee_id));
@@ -218,14 +189,12 @@ export async function POST(request: NextRequest) {
         notes: r.notes,
         waived: r.waived,
       }));
-      const { error: insErr } = await supabaseAdmin
+      const { error: insErr } = await ctx.admin
         .from("employee_compliance")
         .upsert(insertRows, { onConflict: "org_id,employee_id,compliance_id", ignoreDuplicates: false });
       if (insErr) {
         console.error("compliance/bulk-assign insert", insErr);
-        const res = NextResponse.json(errorPayload("upsert", insErr.message), { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+        return NextResponse.json(errorPayload("upsert", insErr.message), { status: 500 });
       }
       inserted = toInsert.length;
     }
@@ -234,7 +203,7 @@ export async function POST(request: NextRequest) {
       for (const { employee_id } of toUpdate) {
         const emp = withSite.find((e) => e.id === employee_id);
         const site_id = emp?.site_id as string;
-        const { error: upErr } = await supabaseAdmin
+        const { error: upErr } = await ctx.admin
           .from("employee_compliance")
           .update({
             valid_from: valid_from || null,
@@ -248,22 +217,27 @@ export async function POST(request: NextRequest) {
           .eq("compliance_id", compliance_id);
         if (upErr) {
           console.error("compliance/bulk-assign update", { employee_id, upErr });
-          const res = NextResponse.json(errorPayload("upsert", upErr.message), { status: 500 });
-          applySupabaseCookies(res, pendingCookies);
-          return res;
+          return NextResponse.json(errorPayload("upsert", upErr.message), { status: 500 });
         }
         updated += 1;
       }
     }
 
     const skipped = 0;
-    const res = NextResponse.json({ ok: true, inserted, updated, skipped });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
+    return NextResponse.json({ ok: true, inserted, updated, skipped });
   } catch (err) {
     console.error("POST /api/compliance/bulk-assign failed:", err);
-    const res = NextResponse.json(errorPayload("unexpected", err), { status: 500 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
+    return NextResponse.json(errorPayload("unexpected", err), { status: 500 });
   }
-}
+  },
+  {
+    route: "/api/compliance/bulk-assign",
+    action: "COMPLIANCE_BULK_ASSIGN",
+    target_type: "compliance_scope",
+    allowNoShiftContext: true,
+    getTargetIdAndMeta: (body) => ({
+      target_id: typeof body.compliance_code === "string" ? body.compliance_code : "unknown",
+      meta: { scope: (body.scope as string) ?? undefined },
+    }),
+  }
+);

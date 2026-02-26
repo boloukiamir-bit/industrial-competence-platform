@@ -1,22 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getOrgIdFromSession } from "@/lib/orgSession";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = await getOrgIdFromSession(request);
-    if (!session.success) {
-      return NextResponse.json({ error: session.error }, { status: session.status });
-    }
-    const orgId = session.orgId;
-
-    const body = await request.json();
-    const { shift_date, shift_type, line } = body;
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    const body = ctx.body as Record<string, unknown>;
+    const shift_date = body.shift_date;
+    const shift_type = body.shift_type;
+    const line = body.line;
 
     if (!shift_date || !shift_type || !line) {
       return NextResponse.json(
@@ -25,17 +21,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate shift_type
-    if (!['Day', 'Evening', 'Night'].includes(shift_type)) {
+    if (!["Day", "Evening", "Night"].includes(shift_type as string)) {
       return NextResponse.json(
         { error: "Invalid shift_type. Must be Day, Evening, or Night" },
         { status: 400 }
       );
     }
 
-    // Upsert shift on (org_id, shift_date, shift_type, line)
-    // First try to find existing shift
-    const { data: existingShift, error: findError } = await supabaseAdmin
+    const orgId = ctx.orgId;
+
+    const { data: existingShift } = await ctx.admin
       .from("shifts")
       .select("id")
       .eq("org_id", orgId)
@@ -48,8 +43,7 @@ export async function POST(request: NextRequest) {
     if (existingShift?.id) {
       shiftId = existingShift.id;
     } else {
-      // Insert new shift
-      const { data: newShift, error: shiftError } = await supabaseAdmin
+      const { data: newShift, error: shiftError } = await ctx.admin
         .from("shifts")
         .insert({
           org_id: orgId,
@@ -73,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find stations for this line
-    const { data: stationsData, error: stationsError } = await supabaseAdmin
+    const { data: stationsData, error: stationsError } = await ctx.admin
       .from("stations")
       .select("id")
       .eq("org_id", orgId)
@@ -97,10 +91,9 @@ export async function POST(request: NextRequest) {
 
     // Upsert shift_assignments for all stations on this line
     // Unique index: (org_id, shift_id, station_id)
-    const assignments = [];
+    const assignments: string[] = [];
     for (const station of stationsData) {
-      // Check if assignment already exists
-      const { data: existingAssignment } = await supabaseAdmin
+      const { data: existingAssignment } = await ctx.admin
         .from("shift_assignments")
         .select("id")
         .eq("org_id", orgId)
@@ -112,7 +105,7 @@ export async function POST(request: NextRequest) {
         assignments.push(existingAssignment.id);
       } else {
         // Insert new assignment
-        const { data: newAssignment, error: assignmentError } = await supabaseAdmin
+        const { data: newAssignment, error: assignmentError } = await ctx.admin
           .from("shift_assignments")
           .insert({
             org_id: orgId,
@@ -136,17 +129,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       shift_id: shiftId,
       assignment_count: assignments.length,
-      assignment_ids: assignments 
+      assignment_ids: assignments,
     });
-  } catch (error) {
-    console.error("ensureShiftContext error:", error);
-    return NextResponse.json(
-      { error: `Failed to ensure shift context: ${error instanceof Error ? error.message : "Unknown error"}` },
-      { status: 500 }
-    );
+  },
+  {
+    route: "/api/shift-context/ensure",
+    action: "SHIFT_CONTEXT_ENSURE",
+    target_type: "shift",
+    allowNoShiftContext: true,
+    getTargetIdAndMeta: (body) => ({
+      target_id: [body.shift_date, body.shift_type, body.line].filter(Boolean).join(":") || "unknown",
+      meta: {},
+    }),
   }
-}
+);

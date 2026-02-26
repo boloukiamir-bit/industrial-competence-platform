@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db/pool";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
 import { createSupabaseServerClient, applySupabaseCookies, type CookieToSet } from "@/lib/supabase/server";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
+import { isHrAdmin } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -81,140 +83,139 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
-  const auth = await requireAdminOrHr(request, supabase);
-  if (!auth.ok) {
-    return withCookies(NextResponse.json({ error: auth.error }, { status: auth.status }), pendingCookies);
-  }
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    const { data: membership } = await ctx.supabase
+      .from("memberships")
+      .select("role")
+      .eq("user_id", ctx.userId)
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active")
+      .maybeSingle();
 
-  let body: {
-    template_id?: string;
-    template_code?: string;
-    employee_id?: string;
-    title?: string;
-    rendered_body?: string;
-    metadata?: Record<string, unknown>;
-  };
-  try {
-    body = await request.json();
-  } catch {
-    return withCookies(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }), pendingCookies);
-  }
+    if (!isHrAdmin(membership?.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-  const templateId = typeof body.template_id === "string" ? body.template_id.trim() : "";
-  const templateCode = typeof body.template_code === "string" ? body.template_code.trim() : "";
-  const employeeId = typeof body.employee_id === "string" ? body.employee_id.trim() : "";
-  let title = typeof body.title === "string" ? body.title.trim() : "";
-  let renderedBody = typeof body.rendered_body === "string" ? body.rendered_body : "";
+    const body = ctx.body as Record<string, unknown>;
+    const templateId = typeof body.template_id === "string" ? body.template_id.trim() : "";
+    const templateCode = typeof body.template_code === "string" ? body.template_code.trim() : "";
+    const employeeId = typeof body.employee_id === "string" ? body.employee_id.trim() : "";
+    let title = typeof body.title === "string" ? body.title.trim() : "";
+    let renderedBody = typeof body.rendered_body === "string" ? body.rendered_body : "";
 
-  if (!employeeId) {
-    return withCookies(
-      NextResponse.json({ error: "employee_id is required" }, { status: 400 }),
-      pendingCookies
-    );
-  }
+    if (!employeeId) {
+      return NextResponse.json({ error: "employee_id is required" }, { status: 400 });
+    }
 
-  if (!templateId && !templateCode) {
-    return withCookies(
-      NextResponse.json({ error: "template_id or template_code is required" }, { status: 400 }),
-      pendingCookies
-    );
-  }
+    if (!templateId && !templateCode) {
+      return NextResponse.json({ error: "template_id or template_code is required" }, { status: 400 });
+    }
 
-  let resolvedTemplateId = templateId;
-  if (templateCode && !resolvedTemplateId) {
-    const tRes = await pool.query(
-      `SELECT id, name, content FROM hr_templates WHERE org_id = $1 AND code = $2 AND is_active = true LIMIT 1`,
-      [auth.activeOrgId, templateCode]
-    );
-    const tRow = tRes.rows[0];
-    if (!tRow) {
-      return withCookies(
-        NextResponse.json(
+    const activeOrgId = ctx.orgId;
+    let resolvedTemplateId = templateId;
+    if (templateCode && !resolvedTemplateId) {
+      const tRes = await pool.query(
+        `SELECT id, name, content FROM hr_templates WHERE org_id = $1 AND code = $2 AND is_active = true LIMIT 1`,
+        [activeOrgId, templateCode]
+      );
+      const tRow = tRes.rows[0];
+      if (!tRow) {
+        return NextResponse.json(
           { error: `Template with code "${templateCode}" not found. Create it in HR Templates (e.g. code: ${templateCode}).` },
           { status: 400 }
-        ),
-        pendingCookies
+        );
+      }
+      resolvedTemplateId = tRow.id;
+
+      const meta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+
+      const empRes = await pool.query(
+        `SELECT name, first_name, last_name, employee_number, team, line_code FROM employees WHERE id = $1 AND org_id = $2`,
+        [employeeId, activeOrgId]
       );
-    }
-    resolvedTemplateId = tRow.id;
+      const emp = empRes.rows[0];
+      if (!emp) {
+        return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+      }
+      const firstName = emp.first_name ?? "";
+      const lastName = emp.last_name ?? "";
+      const name = emp.name ?? ([firstName, lastName].filter(Boolean).join(" ") || "—");
+      const orgUnit = emp.team || emp.line_code || "—";
+      const vars: Record<string, string> = {
+        first_name: firstName,
+        last_name: lastName,
+        name,
+        employee_number: emp.employee_number ?? "",
+        org_unit: orgUnit,
+      };
+      for (const [k, v] of Object.entries(meta)) {
+        if (typeof v === "string" && /^\w+$/.test(k)) vars[k] = v;
+      }
 
-    const meta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
-
-    const empRes = await pool.query(
-      `SELECT name, first_name, last_name, employee_number, team, line_code FROM employees WHERE id = $1 AND org_id = $2`,
-      [employeeId, auth.activeOrgId]
-    );
-    const emp = empRes.rows[0];
-    if (!emp) {
-      return withCookies(NextResponse.json({ error: "Employee not found" }, { status: 404 }), pendingCookies);
-    }
-    const firstName = emp.first_name ?? "";
-    const lastName = emp.last_name ?? "";
-    const name = emp.name ?? ([firstName, lastName].filter(Boolean).join(" ") || "—");
-    const orgUnit = emp.team || emp.line_code || "—";
-    const vars: Record<string, string> = {
-      first_name: firstName,
-      last_name: lastName,
-      name,
-      employee_number: emp.employee_number ?? "",
-      org_unit: orgUnit,
-    };
-    for (const [k, v] of Object.entries(meta)) {
-      if (typeof v === "string" && /^\w+$/.test(k)) vars[k] = v;
+      const content = tRow.content ?? {};
+      const bodySrc =
+        typeof content === "object" && content !== null && "body" in content && typeof (content as { body: unknown }).body === "string"
+          ? (content as { body: string }).body
+          : "";
+      const titleSrc =
+        typeof content === "object" && content !== null && "title" in content && typeof (content as { title: unknown }).title === "string"
+          ? (content as { title: string }).title
+          : tRow.name ?? "HR Job";
+      renderedBody = replacePlaceholders(bodySrc, vars);
+      title = replacePlaceholders(titleSrc, vars) || tRow.name || "HR Job";
     }
 
-    const content = tRow.content ?? {};
-    const bodySrc =
-      typeof content === "object" && content !== null && "body" in content && typeof (content as { body: unknown }).body === "string"
-        ? (content as { body: string }).body
-        : "";
-    const titleSrc =
-      typeof content === "object" && content !== null && "title" in content && typeof (content as { title: unknown }).title === "string"
-        ? (content as { title: string }).title
-        : tRow.name ?? "HR Job";
-    renderedBody = replacePlaceholders(bodySrc, vars);
-    title = replacePlaceholders(titleSrc, vars) || tRow.name || "HR Job";
+    if (!resolvedTemplateId) {
+      return NextResponse.json({ error: "template_id or template_code is required" }, { status: 400 });
+    }
+
+    const { data: profile } = await ctx.admin
+      .from("profiles")
+      .select("email")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+    const userEmail = (profile as { email?: string } | null)?.email ?? null;
+
+    try {
+      const result = await pool.query(
+        `INSERT INTO hr_jobs (org_id, template_id, employee_id, title, rendered_body, status)
+         VALUES ($1, $2, $3, $4, $5, 'CREATED')
+         RETURNING id, title, status, created_at`,
+        [activeOrgId, resolvedTemplateId, employeeId, title || "HR Job", renderedBody]
+      );
+
+      const row = result.rows[0];
+      if (!row) {
+        return NextResponse.json({ error: "Insert failed" }, { status: 500 });
+      }
+
+      await pool.query(
+        `INSERT INTO hr_job_events (org_id, job_id, event_type, to_status, actor_user_id, actor_email)
+         VALUES ($1, $2, 'CREATED', 'CREATED', $3, $4)`,
+        [activeOrgId, row.id, ctx.userId, userEmail]
+      );
+
+      return NextResponse.json({
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        createdAt: row.created_at,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("POST /api/hr/jobs failed:", msg);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  },
+  {
+    route: "/api/hr/jobs",
+    action: "HR_JOBS_CREATE",
+    target_type: "hr_job",
+    allowNoShiftContext: true,
+    getTargetIdAndMeta: (body) => ({
+      target_id: (body.employee_id as string) ?? "unknown",
+      meta: { template_id: body.template_id, template_code: body.template_code },
+    }),
   }
-
-  if (!resolvedTemplateId) {
-    return withCookies(
-      NextResponse.json({ error: "template_id or template_code is required" }, { status: 400 }),
-      pendingCookies
-    );
-  }
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO hr_jobs (org_id, template_id, employee_id, title, rendered_body, status)
-       VALUES ($1, $2, $3, $4, $5, 'CREATED')
-       RETURNING id, title, status, created_at`,
-      [auth.activeOrgId, resolvedTemplateId, employeeId, title || "HR Job", renderedBody]
-    );
-
-    const row = result.rows[0];
-    if (!row) {
-      return withCookies(NextResponse.json({ error: "Insert failed" }, { status: 500 }), pendingCookies);
-    }
-
-    await pool.query(
-      `INSERT INTO hr_job_events (org_id, job_id, event_type, to_status, actor_user_id, actor_email)
-       VALUES ($1, $2, 'CREATED', 'CREATED', $3, $4)`,
-      [auth.activeOrgId, row.id, auth.userId, auth.userEmail ?? null]
-    );
-
-    const res = NextResponse.json({
-      id: row.id,
-      title: row.title,
-      status: row.status,
-      createdAt: row.created_at,
-    });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("POST /api/hr/jobs failed:", msg);
-    return withCookies(NextResponse.json({ error: msg }, { status: 500 }), pendingCookies);
-  }
-}
+);
