@@ -4,7 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { TriangleAlert } from "lucide-react";
+import {
+  TriangleAlert,
+  ClipboardCheck,
+  AlertTriangle,
+  Lock,
+  Clock,
+  ListChecks,
+  FileSignature,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 import { getInitialDateFromUrlOrToday, useCockpitFilters } from "@/lib/CockpitFilterContext";
@@ -1264,15 +1272,35 @@ export default function CockpitPage() {
 
   return (
     <PageFrame debugPanel={debugPanel}>
-      {/* Executive KPI row + Birthdays (roadmap B) — first section */}
+      {/* Row 1: Hi (name) + filters */}
       {!isDemoMode() && (
-        <div className="mb-6 space-y-4" data-testid="cockpit-executive-kpi-section">
+        <ExecutiveHeader
+          userName={userName}
+          mode={mode}
+          onModeChange={handleModeChange}
+          date={date}
+          onDateChange={setDate}
+          shiftCode={shiftCode}
+          onShiftCodeChange={setShiftCode}
+          availableShiftCodes={availableShiftCodes}
+          shiftCodesError={shiftCodesError}
+          line={line}
+          onLineChange={setLine}
+          lineOptions={lineOptions}
+          showResolved={showResolved}
+          onShowResolvedChange={setShowResolved}
+        />
+      )}
+
+      {/* Executive KPI section: alert strip + Industrial Readiness + Regulatory Radar + Birthdays */}
+      {!isDemoMode() && (
+        <div className="space-y-6 mb-8" data-testid="cockpit-executive-kpi-section">
           {/* Executive Alert Strip: show only when blocking governance events (24h) > 0 */}
           {!governanceKpisLoading &&
             typeof governanceKpis?.blocking_events_24h === "number" &&
             governanceKpis.blocking_events_24h > 0 && (
               <div
-                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-4 py-2.5"
                 data-testid="exec-alert-blocking-governance"
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -1283,27 +1311,32 @@ export default function CockpitPage() {
                 </div>
                 <Link
                   href="/app/admin/audit?impact=blocking&window_hours=24"
-                  className="shrink-0 text-xs font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--hairline)] focus:ring-offset-1 rounded"
+                  className="shrink-0 text-sm font-medium underline underline-offset-2 hover:no-underline"
                   style={{ color: "var(--text)" }}
                 >
                   Open audit
                 </Link>
               </div>
             )}
-          {/* Single Industrial Readiness card — Overall + 3 pillar rows */}
+
+          {/* Industrial Readiness card — reference layout: title, main score + grade icon, progress bar, breakdown rows */}
           <div
-            className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-md transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--hairline)] focus-visible:ring-offset-2 outline-none"
+            className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-6 shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--hairline)] focus-visible:ring-offset-2 outline-none"
             data-testid="exec-kpi-overall"
             tabIndex={0}
           >
-            <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex items-start justify-between gap-2 mb-4">
               <div>
-                <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Industrial Readiness</h3>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>Executive readiness status (global)</p>
+                <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>
+                  Industrial Readiness
+                </h2>
+                <p className="text-sm mt-0.5 text-muted-foreground" style={{ color: "var(--text-2)" }}>
+                  Executive readiness status (global)
+                </p>
               </div>
               {executiveKpis && !executiveKpis.supported && (
                 <span
-                  className="text-[10px] font-medium uppercase text-[var(--text-2)] shrink-0"
+                  className="text-xs font-medium text-[var(--text-2)] shrink-0"
                   title={executiveKpis.reasons?.length ? executiveKpis.reasons.join(", ") : "Some pillars are unavailable"}
                 >
                   Partial data
@@ -1312,78 +1345,81 @@ export default function CockpitPage() {
             </div>
             {(executiveKpisLoading || !executiveKpis) ? (
               <>
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="h-7 w-10 rounded animate-pulse bg-[var(--surface-3)]" />
-                  <div className="h-5 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                <div className="flex items-center justify-between gap-4">
+                  <div className="h-8 w-14 rounded animate-pulse bg-[var(--surface-3)]" />
+                  <div className="h-10 w-10 rounded-full animate-pulse bg-[var(--surface-3)]" />
                 </div>
-                <div className="mt-1 h-3 w-full rounded-full bg-[var(--surface-3)] overflow-hidden animate-pulse" />
+                <div className="mt-3 h-2 w-full rounded-full bg-[var(--surface-3)] overflow-hidden animate-pulse" />
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="mt-3 flex items-center justify-between gap-2">
-                    <div className="h-4 w-16 rounded animate-pulse bg-[var(--surface-3)]" />
-                    <div className="h-4 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
-                    <div className="flex-1 max-w-[60%] ml-2 h-1.5 rounded-full bg-[var(--surface-3)] animate-pulse" />
+                  <div key={i} className="mt-4 flex items-center justify-between gap-3">
+                    <div className="h-4 w-24 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-10 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="flex-1 max-w-[50%] h-2 rounded-full bg-[var(--surface-3)] animate-pulse" />
                   </div>
                 ))}
               </>
             ) : (
               <>
-                {/* Overall row — dominant */}
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    {executiveKpis.grade != null && (
-                      <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
-                        {executiveKpis.grade}
-                      </span>
-                    )}
-                    <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Overall</span>
-                  </div>
-                  <span className="text-lg tabular-nums" style={{ color: "var(--text-2)" }}>
+                {/* Main row: large percent left, circular grade badge right */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-3xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
                     {executiveKpis.overall_percent != null ? `${executiveKpis.overall_percent}%` : "—"}
                   </span>
+                  {executiveKpis.grade != null && (
+                    <span
+                      className="flex items-center justify-center w-12 h-12 rounded-full border border-[var(--hairline)] text-lg font-semibold tabular-nums shrink-0"
+                      style={{ color: "var(--text-2)" }}
+                      title="Overall grade"
+                    >
+                      {executiveKpis.grade}
+                    </span>
+                  )}
                 </div>
-                <div className="mt-1 h-3 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                <div className="mt-3 h-2 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
                   <div
-                    className={["h-full rounded-full shadow-sm transition-all duration-500 ease-out", barClassFor(executiveKpis.overall_percent)].join(" ")}
+                    className={["h-full rounded-full transition-all duration-500 ease-out", barClassFor(executiveKpis.overall_percent)].join(" ")}
                     style={{ width: `${executiveKpis.overall_percent != null ? Math.min(100, Math.max(0, executiveKpis.overall_percent)) : 0}%` }}
                   />
                 </div>
-                {/* Pillar rows */}
+                {/* Pillar breakdown rows: label left, % right, progress bar */}
                 {(["safety", "technical", "compliance"] as const).map((pillar) => {
                   const pct = executiveKpis.pillars[pillar];
-                  const label = pillar.charAt(0).toUpperCase() + pillar.slice(1);
+                  const label =
+                    pillar === "safety"
+                      ? "Safety certifications"
+                      : pillar === "technical"
+                        ? "Technical skills"
+                        : "Compliance training";
                   return (
-                    <div key={pillar} className="mt-3 flex items-center gap-2 flex-wrap" data-testid={`exec-kpi-${pillar}`}>
-                      <span className="text-xs font-medium uppercase tracking-wider w-20 shrink-0" style={{ color: "var(--text-2)" }}>{label}</span>
-                      {pct != null ? (
-                        <>
-                          {gradeFor(pct) != null && (
-                            <span className="text-xs font-medium tabular-nums shrink-0" style={{ color: "var(--text-2)" }} title={`Grade ${gradeFor(pct)} based on percent thresholds`}>{gradeFor(pct)}</span>
-                          )}
-                          <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{pct}%</span>
-                          <div className="flex-1 min-w-0 max-w-[60%] h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
-                            <div className={["h-full rounded-full", barClassFor(pct)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-sm shrink-0" style={{ color: "var(--text-2)" }}>—</span>
-                          <div className="flex-1 min-w-0 max-w-[60%] h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
-                            <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
-                          </div>
-                        </>
-                      )}
+                    <div key={pillar} className="mt-4 flex items-center gap-3" data-testid={`exec-kpi-${pillar}`}>
+                      <span className="text-sm font-medium w-40 shrink-0" style={{ color: "var(--text)" }}>
+                        {label}
+                      </span>
+                      <span className="text-sm tabular-nums shrink-0 w-10 text-right" style={{ color: "var(--text-2)" }}>
+                        {pct != null ? `${pct}%` : "—"}
+                      </span>
+                      <div className="flex-1 min-w-0 h-2 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                        <div
+                          className={["h-full rounded-full", barClassFor(pct)].join(" ")}
+                          style={{ width: `${pct != null ? Math.min(100, Math.max(0, pct)) : 0}%` }}
+                        />
+                      </div>
                     </div>
                   );
                 })}
                 {/* Blocking governance events (24h) */}
-                <div className="mt-3 flex items-center gap-2 flex-wrap" data-testid="exec-kpi-blocking-governance">
-                  <span className="text-xs font-medium uppercase tracking-wider shrink-0" style={{ color: "var(--text-2)" }}>Blocking governance events (24h)</span>
+                <div className="mt-4 pt-3 border-t border-[var(--hairline-soft)] flex items-center justify-between gap-2" data-testid="exec-kpi-blocking-governance">
+                  <span className="text-sm font-medium" style={{ color: "var(--text-2)" }}>
+                    Blocking governance events (24h)
+                  </span>
                   {governanceKpisLoading ? (
-                    <div className="h-4 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-10 rounded animate-pulse bg-[var(--surface-3)]" />
                   ) : governanceKpis?.ok === true && typeof governanceKpis.blocking_events_24h === "number" ? (
-                    <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{governanceKpis.blocking_events_24h}</span>
+                    <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text)" }}>
+                      {governanceKpis.blocking_events_24h}
+                    </span>
                   ) : (
-                    <span className="text-sm shrink-0" style={{ color: "var(--text-2)" }}>—</span>
+                    <span className="text-sm text-muted-foreground">—</span>
                   )}
                 </div>
               </>
@@ -1392,11 +1428,11 @@ export default function CockpitPage() {
           {/* Regulatory Radar — skeleton when loading; content when supported and signals.length > 0 */}
           {(regulatoryRadarLoading || (regulatoryRadar?.supported && (regulatoryRadar?.signals?.length ?? 0) > 0)) && (
             <div
-              className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
+              className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-6 shadow-sm"
               data-testid="cockpit-regulatory-radar-block"
             >
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Regulatory Radar</h3>
-              <p className="text-xs mt-0.5 mb-3" style={{ color: "var(--text-2)" }}>External regulatory signals impacting operations</p>
+              <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>Regulatory Radar</h2>
+              <p className="text-sm mt-0.5 mb-4 text-muted-foreground" style={{ color: "var(--text-2)" }}>External regulatory signals impacting operations</p>
               {regulatoryRadarLoading ? (
                 <div className="flex flex-wrap items-start gap-2">
                   <div className="h-5 w-14 rounded animate-pulse bg-[var(--surface-3)] shrink-0" />
@@ -1441,11 +1477,11 @@ export default function CockpitPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="shrink-0 h-7 text-[12px]"
+                        className="shrink-0 h-7 text-xs"
                         onClick={() => handleCreateRadarActionDraft(s.id)}
                         disabled={!!creatingRadarActionSignalId}
                       >
-                        Create Action Draft
+                        Create draft
                       </Button>
                     )}
                   </li>
@@ -1457,10 +1493,10 @@ export default function CockpitPage() {
           )}
           {/* Birthdays block */}
           <div
-            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
+            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-6 shadow-sm"
             data-testid="cockpit-birthdays-block"
           >
-            <h3 className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-2)" }}>Upcoming birthdays</h3>
+            <h2 className="text-base font-semibold tracking-tight mb-4" style={{ color: "var(--text)" }}>Upcoming birthdays</h2>
             {birthdaysLoading ? (
               <ul className="space-y-2">
                 {[1, 2, 3].map((i) => (
@@ -1492,7 +1528,7 @@ export default function CockpitPage() {
       )}
 
       {!isGlobal && summary && summary.active_total === 0 && !summaryLoading && (
-        <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
+        <div className="mb-8 gov-panel px-6 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
             {availableShiftCodes.map((code) => (
@@ -1535,30 +1571,14 @@ export default function CockpitPage() {
         </div>
       )}
 
-      {/* Executive Overview */}
+      {/* KPI tile grid */}
       {!isDemoMode() && (
         <>
-          <ExecutiveHeader
-            userName={userName}
-            mode={mode}
-            onModeChange={handleModeChange}
-            date={date}
-            onDateChange={setDate}
-            shiftCode={shiftCode}
-            onShiftCodeChange={setShiftCode}
-            availableShiftCodes={availableShiftCodes}
-            shiftCodesError={shiftCodesError}
-            line={line}
-            onLineChange={setLine}
-            lineOptions={lineOptions}
-            showResolved={showResolved}
-            onShowResolvedChange={setShowResolved}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="kpi-tile-grid">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="kpi-tile-grid">
             <KpiTile
               tileId="kpi-readiness"
               title="Readiness"
+              icon={<ClipboardCheck />}
               primaryValue={readinessStatus}
               secondaryLabel={readinessStatus === "NO-GO" ? "Blocking" : readinessStatus === "WARNING" ? "Warnings" : "Active"}
               secondaryValue={readinessStatus === "NO-GO" ? blockingCount : readinessStatus === "WARNING" ? warningCount : 0}
@@ -1571,18 +1591,21 @@ export default function CockpitPage() {
             <KpiTile
               tileId="kpi-blockers"
               title="Blockers"
+              icon={<AlertTriangle />}
               primaryValue={blockersCount}
               onClick={() => handleTileClick("blockers")}
             />
             <KpiTile
               tileId="kpi-restricted"
               title="Restricted"
+              icon={<Lock />}
               primaryValue="—"
               onClick={() => handleTileClick("restricted")}
             />
             <KpiTile
               tileId="kpi-expiring"
               title="Expiring soon"
+              icon={<Clock />}
               primaryValue={complianceExpiring?.expiringCount ?? "—"}
               secondaryLabel="Expired"
               secondaryValue={complianceExpiring?.expiredCount}
@@ -1605,12 +1628,14 @@ export default function CockpitPage() {
             <KpiTile
               tileId="kpi-decisions"
               title="Open Decisions"
+              icon={<ListChecks />}
               primaryValue={issues.length}
               onClick={() => handleTileClick("decisions")}
             />
             <KpiTile
               tileId="kpi-interventions"
               title="Intervention Queue"
+              icon={<FileSignature />}
               primaryValue={interventions.length}
               secondaryLabel={
                 interventions.some((j) => (j.status ?? "").toUpperCase() === "SENT")
@@ -1660,7 +1685,7 @@ export default function CockpitPage() {
           />
 
           {!isDemoMode() && (
-            <div className="mt-6">
+            <div className="mt-8">
               <ComplianceActionsOverview
                 summary={complianceActionsSummary}
                 loading={complianceActionsSummaryLoading}
@@ -1762,7 +1787,8 @@ export default function CockpitPage() {
       )}
 
       {!isDemoMode() && (
-        <div className="mt-10" data-testid="cockpit-issues-section">
+        <div className="mt-8" data-testid="cockpit-issues-section">
+          <h2 className="text-base font-semibold tracking-tight mb-4" style={{ color: "var(--text)" }}>Open decisions</h2>
           <IssueTable
             issues={issues}
             loading={issuesLoading}

@@ -53,11 +53,11 @@ export function ComplianceActionsOverview({
   if (loading) {
     return (
       <section
-        className="rounded-xl border border-[var(--hairline)] bg-white p-4 shadow-sm"
+        className="rounded-xl border border-[var(--hairline)] bg-white p-6 shadow-sm"
         data-testid="compliance-actions-overview"
       >
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-2)] mb-3">
-          COMPLIANCE ACTIONS
+        <h2 className="text-base font-semibold tracking-tight text-[var(--text)] mb-4">
+          Compliance actions
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => (
@@ -75,11 +75,11 @@ export function ComplianceActionsOverview({
 
   return (
     <section
-      className="rounded-xl border border-[var(--hairline)] bg-white p-4 shadow-sm"
+      className="rounded-xl border border-[var(--hairline)] bg-white p-6 shadow-sm"
       data-testid="compliance-actions-overview"
     >
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-2)] mb-3">
-        COMPLIANCE ACTIONS
+      <h2 className="text-base font-semibold tracking-tight text-[var(--text)] mb-4">
+        Compliance actions
       </h2>
       {openCount === 0 && (
         <p className="text-xs text-[var(--text-2)] mb-3">No open actions</p>
@@ -124,12 +124,12 @@ export function ComplianceActionsOverview({
       ) : (
         <p className="mt-3 text-[0.6875rem] text-[var(--text-2)]">No assignees yet</p>
       )}
-      <footer className="mt-3 pt-2 border-t border-[var(--hairline)]">
+      <footer className="mt-4 pt-3 border-t border-[var(--hairline)]">
         <Link
           href={viewActionsHref}
-          className="text-xs font-medium text-primary hover:underline"
+          className="text-sm font-medium text-primary hover:underline"
         >
-          View actions
+          Open inbox
         </Link>
       </footer>
     </section>

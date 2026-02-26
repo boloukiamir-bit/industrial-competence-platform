@@ -63,15 +63,15 @@ export function TopOperationalRisksBlock({
   const ctaHref = tomorrowsGapsHref(date, shiftCode);
 
   return (
-    <div className="gov-panel overflow-hidden mt-10" data-testid="top-operational-risks-block">
+    <div className="gov-panel overflow-hidden mt-8" data-testid="top-operational-risks-block">
       <div
-        className="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+        className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
         style={{ borderBottom: "1px solid var(--hairline-soft, rgba(15,23,42,0.06))" }}
       >
-        <h2 className="gov-kicker">Top Operational Risks (Next Shift)</h2>
-        <Button variant="outline" size="sm" className="h-8 text-[13px]" asChild>
+        <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>Top operational risks (next shift)</h2>
+        <Button variant="outline" size="sm" className="h-8 text-sm" asChild>
           <Link href={ctaHref} data-testid="top-risks-cta">
-            Open Tomorrow&apos;s Gaps
+            Review
           </Link>
         </Button>
       </div>

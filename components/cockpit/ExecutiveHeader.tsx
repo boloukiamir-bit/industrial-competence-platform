@@ -47,20 +47,20 @@ export function ExecutiveHeader({
   className,
 }: ExecutiveHeaderProps) {
   const name = (userName ?? "").trim();
-  const greeting = name ? `Welcome, ${name}` : "Welcome";
+  const greeting = name ? `Hi, ${name}` : "Cockpit";
   const isShift = mode === "shift";
 
   return (
     <header
-      className={cn("mt-2 mb-6 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4", className)}
+      className={cn("mb-8 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4", className)}
       data-testid="executive-header"
     >
       <div>
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: "var(--text)" }}>
           {greeting}
         </h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-2)" }}>
-          Here is your operational readiness overview.
+        <p className="text-sm mt-1 text-muted-foreground" style={{ color: "var(--text-2)" }}>
+          Operational readiness overview.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
