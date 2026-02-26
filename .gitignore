@@ -30,6 +30,7 @@ supabase_pooler_ca_bundle.pem
 
 # local cookies / auth artifacts
 .dev-cockpit-cookies
+.dev-cockpit-cookie-header.txt
 project_context.txt
 
 # local env
@@ -40,3 +41,6 @@ project_context.txt
 # vercel local
 .vercel
 .cursor/
+
+# local auth artifacts
+.dev-bearer-header.txt

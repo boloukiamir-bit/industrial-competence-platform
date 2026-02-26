@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Users, Search, ChevronRight, Upload, UserPlus, MoreVertical } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Users, Search, Upload, UserPlus, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,12 +20,17 @@ import type { Employee } from "@/types/domain";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
 import { EmployeeActionsMenu } from "@/components/employees/EmployeeActionsMenu";
+import { EmployeeCreateDrawer } from "@/components/employees/EmployeeCreateDrawer";
 import { EmployeeEditDrawer } from "@/components/employees/EmployeeEditDrawer";
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight_id")?.trim() ?? null;
   const { currentOrg } = useOrg();
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [highlightedEmployeeId, setHighlightedEmployeeId] = useState<string | null>(null);
+  const handledHighlightIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -33,6 +38,7 @@ export default function EmployeesPage() {
   const [menuRowId, setMenuRowId] = useState<string | null>(null);
   const [deactivateEmployee, setDeactivateEmployee] = useState<Employee | null>(null);
   const [deactivating, setDeactivating] = useState(false);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editEmployeeId, setEditEmployeeId] = useState<string | null>(null);
   const [editInitial, setEditInitial] = useState<{
     firstName?: string;
@@ -102,6 +108,11 @@ export default function EmployeesPage() {
           postalCode: row.postalCode as string | undefined,
           country: (row.country as string) ?? "Sweden",
           isActive: row.isActive !== false,
+          employmentStatus: (row as { employmentStatus?: string }).employmentStatus ?? "ACTIVE",
+          employmentExternalId: (row as { employmentExternalId?: string }).employmentExternalId,
+          employmentForm: (row as { employmentForm?: string }).employmentForm,
+          contractStartDate: (row as { contractStartDate?: string }).contractStartDate,
+          hireDate: (row as { hireDate?: string }).hireDate,
         }))
       );
     } finally {
@@ -146,6 +157,42 @@ export default function EmployeesPage() {
     const matchesLine = !lineFilter || (e as { lineCode?: string }).lineCode === lineFilter || e.line === lineFilter;
     return matchesSearch && matchesLine;
   });
+
+  useEffect(() => {
+    if (!highlightId || loading || handledHighlightIdRef.current === highlightId) return;
+    const emp = employees.find((e) => e.id === highlightId);
+    if (!emp) {
+      if (employees.length > 0) {
+        handledHighlightIdRef.current = highlightId;
+        toast({ title: "Employee not found", variant: "destructive" });
+      }
+      return;
+    }
+    const inFiltered = filteredEmployees.some((e) => e.id === highlightId);
+    if (!inFiltered) {
+      handledHighlightIdRef.current = highlightId;
+      toast({ title: "Employee not found in current filter", variant: "destructive" });
+      return;
+    }
+    handledHighlightIdRef.current = highlightId;
+    setHighlightedEmployeeId(highlightId);
+    setEditEmployeeId(highlightId);
+    setEditInitial({
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      employeeNumber: emp.employeeNumber,
+      email: emp.email,
+      phone: emp.phone,
+      title: (emp as { title?: string }).title,
+      hireDate: (emp as { hireDate?: string }).hireDate,
+    });
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-employee-id="${highlightId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    const t = setTimeout(() => setHighlightedEmployeeId(null), 3000);
+    return () => clearTimeout(t);
+  }, [highlightId, loading, employees, filteredEmployees, toast]);
 
   if (loading) {
     return (
@@ -211,13 +258,24 @@ export default function EmployeesPage() {
                 <Upload className="h-4 w-4 mr-2" />
                 Import employees
               </Button>
-              <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee-empty">
+              <Button variant="outline" onClick={() => setCreateDrawerOpen(true)} data-testid="button-add-employee-empty">
                 <UserPlus className="h-4 w-4 mr-2" />
                 {COPY.actions.addEmployee}
               </Button>
             </div>
           </CardContent>
         </Card>
+        <EmployeeCreateDrawer
+          open={createDrawerOpen}
+          onOpenChange={setCreateDrawerOpen}
+          onSaved={async (newEmployeeId) => {
+            await loadEmployees();
+            if (newEmployeeId) {
+              setHighlightedEmployeeId(newEmployeeId);
+              setTimeout(() => setHighlightedEmployeeId(null), 3000);
+            }
+          }}
+        />
       </div>
     );
   }
@@ -239,12 +297,12 @@ export default function EmployeesPage() {
             <Upload className="h-4 w-4 mr-2" />
             {COPY.actions.importCsv}
           </Button>
-          <Button variant="outline" onClick={() => router.push("/app/employees/new")} data-testid="button-add-employee">
-            <UserPlus className="h-4 w-4 mr-2" />
-            {COPY.actions.addEmployee}
-          </Button>
+          <Button variant="outline" onClick={() => setCreateDrawerOpen(true)} data-testid="button-add-employee">
+              <UserPlus className="h-4 w-4 mr-2" />
+              {COPY.actions.addEmployee}
+            </Button>
+          </div>
         </div>
-      </div>
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -292,6 +350,9 @@ export default function EmployeesPage() {
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Role
               </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Status
+              </th>
               <th className="w-10" />
             </tr>
           </thead>
@@ -299,7 +360,12 @@ export default function EmployeesPage() {
             {filteredEmployees.map((employee) => (
               <tr
                 key={employee.id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                data-employee-id={employee.id}
+                className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                  highlightedEmployeeId === employee.id
+                    ? "bg-primary/15 ring-1 ring-primary/30"
+                    : ""
+                }`}
                 data-testid={`row-employee-${employee.id}`}
               >
                 <td className="px-4 py-3">
@@ -322,6 +388,19 @@ export default function EmployeesPage() {
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                   {employee.role || "-"}
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      (employee as { employmentStatus?: string }).employmentStatus === "TERMINATED"
+                        ? "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200"
+                        : (employee as { employmentStatus?: string }).employmentStatus === "INACTIVE"
+                          ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200"
+                          : "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200"
+                    }`}
+                  >
+                    {(employee as { employmentStatus?: string }).employmentStatus ?? "ACTIVE"}
+                  </span>
                 </td>
                 <td className="px-4 py-3 relative">
                   <Button
@@ -349,7 +428,7 @@ export default function EmployeesPage() {
                           employeeNumber: employee.employeeNumber,
                           email: employee.email,
                           phone: employee.phone,
-                          title: employee.role,
+                          title: (employee as { title?: string }).title ?? employee.role,
                           hireDate: employee.startDate,
                         });
                       }}
@@ -369,7 +448,7 @@ export default function EmployeesPage() {
             <DialogTitle>Deactivate employee</DialogTitle>
             <DialogDescription>
               {deactivateEmployee
-                ? `Deactivate employee ${deactivateEmployee.name} (${deactivateEmployee.employeeNumber})?`
+                ? `Set employment status to INACTIVE for ${deactivateEmployee.name} (${deactivateEmployee.employeeNumber})?`
                 : ""}
             </DialogDescription>
           </DialogHeader>
@@ -394,12 +473,15 @@ export default function EmployeesPage() {
                     body: JSON.stringify({ is_active: false }),
                     credentials: "include",
                   });
-                  if (res.ok) {
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data?.ok) {
+                    toast({ title: "Employee deactivated" });
                     setDeactivateEmployee(null);
                     await loadEmployees();
                   } else {
-                    const j = await res.json().catch(() => ({}));
-                    console.error("Deactivate failed", j);
+                    if (res.status === 403) toast({ title: "You do not have access", variant: "destructive" });
+                    else if (res.status === 404) toast({ title: "Employee not found (maybe moved org)", variant: "destructive" });
+                    else toast({ title: data?.error?.details?.[0] ?? "Deactivate failed", variant: "destructive" });
                   }
                 } finally {
                   setDeactivating(false);
@@ -418,6 +500,21 @@ export default function EmployeesPage() {
         employeeId={editEmployeeId}
         initial={editInitial}
         onSaved={() => loadEmployees()}
+      />
+      <EmployeeCreateDrawer
+        open={createDrawerOpen}
+        onOpenChange={setCreateDrawerOpen}
+        onSaved={async (newEmployeeId) => {
+          await loadEmployees();
+          if (newEmployeeId) {
+            setHighlightedEmployeeId(newEmployeeId);
+            requestAnimationFrame(() => {
+              const el = document.querySelector(`[data-employee-id="${newEmployeeId}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            });
+            setTimeout(() => setHighlightedEmployeeId(null), 3000);
+          }
+        }}
       />
     </div>
   );

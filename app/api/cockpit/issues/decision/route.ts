@@ -11,6 +11,13 @@ const supabaseAdmin = createClient(
 );
 
 const ALLOWED_ACTIONS = ["acknowledged", "plan_training", "swap", "escalate"] as const;
+const DECISION_TYPES = ["ACKNOWLEDGED", "OVERRIDDEN", "DEFERRED", "RESOLVED"] as const;
+const ISSUE_TYPES = ["NO_GO", "WARNING", "GO", "UNSTAFFED", "ILLEGAL"] as const;
+
+function normalizeIssueType(raw: string): string {
+  const u = raw.toUpperCase().trim();
+  return ISSUE_TYPES.includes(u as (typeof ISSUE_TYPES)[number]) ? u : "NO_GO";
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,17 +56,15 @@ export async function POST(request: NextRequest) {
     const shiftRaw = typeof b.shift_code === "string" ? b.shift_code.trim() : "";
     const stationId = typeof b.station_id === "string" ? b.station_id.trim() : "";
     const issueTypeRaw = typeof b.issue_type === "string" ? b.issue_type.trim() : "";
-    const actionRaw = typeof b.action === "string" ? b.action.trim().toLowerCase() : "";
-    const actionsObj = b.actions && typeof b.actions === "object" ? (b.actions as Record<string, unknown>) : {};
-    const chosen = (actionsObj.chosen ?? actionRaw) as string;
-    const action = ALLOWED_ACTIONS.includes(chosen as (typeof ALLOWED_ACTIONS)[number]) ? chosen : null;
     const note = typeof b.note === "string" ? b.note.trim() || null : null;
-    const resolved = b.resolved === true;
+    const decisionTypeRaw = typeof b.decision_type === "string" ? b.decision_type.trim().toUpperCase() : "";
+    const resolvedFromBody = typeof b.resolved === "boolean" ? b.resolved : b.resolved === true;
+    const linkedJobIdRaw = typeof b.linked_job_id === "string" ? b.linked_job_id.trim() || null : null;
 
     const shift = normalizeShift(shiftRaw || "Day");
     const dateMatch = dateRaw.match(/^\d{4}-\d{2}-\d{2}$/);
     const dateStr = dateMatch ? dateRaw : "";
-    const issueType = ["NO_GO", "WARNING", "GO"].includes(issueTypeRaw) ? issueTypeRaw : "NO_GO";
+    const issueType = normalizeIssueType(issueTypeRaw || "NO_GO");
 
     if (!stationId) {
       const res = NextResponse.json(
@@ -85,14 +90,6 @@ export async function POST(request: NextRequest) {
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
-    if (!action) {
-      const res = NextResponse.json(
-        { ok: false, error: `action must be one of: ${ALLOWED_ACTIONS.join(", ")}` },
-        { status: 400 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
 
     const targetId = stationShiftTargetId(
       org.activeOrgId,
@@ -103,7 +100,31 @@ export async function POST(request: NextRequest) {
       issueType
     );
 
-    const rootCause = {
+    let decisionType: string;
+    let resolved: boolean;
+    let linkedJobId: string | null = null;
+    if (DECISION_TYPES.includes(decisionTypeRaw as (typeof DECISION_TYPES)[number])) {
+      decisionType = decisionTypeRaw;
+      resolved = decisionType === "RESOLVED" || resolvedFromBody;
+      if (linkedJobIdRaw && /^[0-9a-f-]{36}$/i.test(linkedJobIdRaw)) linkedJobId = linkedJobIdRaw;
+    } else {
+      const actionRaw = typeof b.action === "string" ? b.action.trim().toLowerCase() : "";
+      const actionsObj = b.actions && typeof b.actions === "object" ? (b.actions as Record<string, unknown>) : {};
+      const chosen = (actionsObj.chosen ?? actionRaw) as string;
+      const action = ALLOWED_ACTIONS.includes(chosen as (typeof ALLOWED_ACTIONS)[number]) ? chosen : null;
+      if (!action) {
+        const res = NextResponse.json(
+          { ok: false, error: `decision_type must be one of ${DECISION_TYPES.join(", ")} or action one of: ${ALLOWED_ACTIONS.join(", ")}` },
+          { status: 400 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      decisionType = "acknowledged_station_issue";
+      resolved = (["acknowledged", "resolved", "plan_training", "swap", "escalate"] as const).includes(action as "acknowledged") || resolvedFromBody;
+    }
+
+    const rootCause: Record<string, unknown> = {
       type: "station_issue",
       org_id: org.activeOrgId,
       site_id: org.activeSiteId,
@@ -111,33 +132,48 @@ export async function POST(request: NextRequest) {
       shift_date: dateStr,
       shift_code: shift,
       issue_type: issueType,
-      selected_action: action,
       notes: note ?? undefined,
     };
+    if (decisionType === "acknowledged_station_issue" && typeof b.action === "string") {
+      const a = (b.action as string).trim().toLowerCase();
+      const actionsObj = b.actions && typeof b.actions === "object" ? (b.actions as Record<string, unknown>) : {};
+      const chosen = (actionsObj.chosen ?? a) as string;
+      rootCause.selected_action = chosen;
+    }
 
-    const actions = {
-      chosen: action,
+    const actions: Record<string, unknown> = {
       note: note ?? undefined,
-      resolved: resolved || true,
+      resolved,
     };
+    if (decisionType === "acknowledged_station_issue") {
+      const actionRaw = typeof b.action === "string" ? b.action.trim().toLowerCase() : "";
+      const actionsObj = b.actions && typeof b.actions === "object" ? (b.actions as Record<string, unknown>) : {};
+      const chosen = (actionsObj.chosen ?? actionRaw) as string;
+      actions.chosen = chosen;
+      actions.selected_action = chosen;
+    }
 
     const { data: existing } = await supabaseAdmin
       .from("execution_decisions")
       .select("id, status, created_at, created_by")
       .eq("org_id", org.activeOrgId)
-      .eq("decision_type", "acknowledged_station_issue")
       .eq("target_type", "station_shift")
       .eq("target_id", targetId)
+      .eq("status", "active")
       .maybeSingle();
 
+    const payload: Record<string, unknown> = {
+      root_cause: rootCause,
+      actions,
+      decision_type: decisionType,
+      ...(linkedJobId && { linked_job_id: linkedJobId }),
+    };
+
     let record: Record<string, unknown>;
-    if (existing && existing.status === "active") {
+    if (existing) {
       const { data: updated, error: updErr } = await supabaseAdmin
         .from("execution_decisions")
-        .update({
-          root_cause: rootCause,
-          actions,
-        })
+        .update(payload)
         .eq("id", existing.id)
         .select()
         .single();
@@ -158,11 +194,9 @@ export async function POST(request: NextRequest) {
         .insert({
           org_id: org.activeOrgId,
           site_id: org.activeSiteId,
-          decision_type: "acknowledged_station_issue",
           target_type: "station_shift",
           target_id: targetId,
-          root_cause: rootCause,
-          actions,
+          ...payload,
           status: "active",
           created_by: user.id,
         })

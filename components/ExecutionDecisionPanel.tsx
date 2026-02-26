@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertCircle, AlertTriangle, CheckCircle, Loader2, ShieldOff } from "lucide-react";
 import { NoGoResolveDrawer } from "@/components/NoGoResolveDrawer";
 import { useCockpitFilters } from "@/lib/CockpitFilterContext";
+import { getSeverityFromSignals, severityToBadgeVariant } from "@/lib/ui/severity";
 import { useSessionHealth } from "@/lib/SessionHealthContext";
 import { createClient } from "@/utils/supabase/client";
 
@@ -96,29 +97,33 @@ export function ExecutionDecisionPanel() {
   };
 
   const severityBadge = (row: DecisionRow) => {
-    switch (row.severity) {
-      case "RESOLVED":
-        return (
-          <Badge className="bg-green-100 text-green-700">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Resolved
-          </Badge>
-        );
-      case "WARNING":
-        return (
-          <Badge className="bg-amber-100 text-amber-800">
+    if (row.severity === "RESOLVED") {
+      return (
+        <Badge className="bg-green-100 text-green-700">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Resolved
+        </Badge>
+      );
+    }
+    const level = getSeverityFromSignals({
+      readiness: row.severity === "NO-GO" ? "NO_GO" : row.severity === "WARNING" ? "WARNING" : undefined,
+    });
+    const { variant, className } = severityToBadgeVariant(level);
+    return (
+      <Badge variant={variant} className={className}>
+        {row.severity === "WARNING" ? (
+          <>
             <AlertTriangle className="h-3 w-3 mr-1" />
             WARNING
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="destructive" className="bg-red-100 text-red-800">
+          </>
+        ) : (
+          <>
             <ShieldOff className="h-3 w-3 mr-1" />
             NO-GO
-          </Badge>
-        );
-    }
+          </>
+        )}
+      </Badge>
+    );
   };
 
   return (

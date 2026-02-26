@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type HRWorkflow = {
   code: string;
@@ -22,6 +23,7 @@ type HRWorkflow = {
 
 export default function HrTemplateDetailPage() {
   const params = useParams();
+  const { toast } = useToast();
   const id = (params.id as string) || "";
   const [workflow, setWorkflow] = useState<HRWorkflow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,18 +35,28 @@ export default function HrTemplateDetailPage() {
     }
     let cancelled = false;
     fetch("/api/hr/workflows", { credentials: "include" })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(res.statusText || "Failed to load");
+        return res.json();
+      })
       .then((data: HRWorkflow[]) => {
         if (cancelled || !Array.isArray(data)) return;
         const wf = data.find((w) => w.code === id);
         setWorkflow(wf ?? null);
       })
-      .catch(() => setWorkflow(null))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) {
+          setWorkflow(null);
+          toast({ title: err instanceof Error ? err.message : "Failed to load workflow", variant: "destructive" });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, toast]);
 
   if (loading) {
     return (

@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { fetchCockpitIssues, type CockpitIssue } from "@/lib/server/fetchCockpitIssues";
+import { fetchCockpitIssues, fetchCockpitIssuesGlobal, type CockpitIssue } from "@/lib/server/fetchCockpitIssues";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 
 export type CockpitIssueRow = CockpitIssue;
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
-  const date = (url.searchParams.get("date") ?? "").trim();
+  const mode = (url.searchParams.get("mode") ?? "shift").toLowerCase();
+  const dateParam = (url.searchParams.get("date") ?? "").trim();
   const shift_code =
     (url.searchParams.get("shift_code") ?? url.searchParams.get("shift") ?? "").trim();
-  if (!date || !shift_code) {
+
+  const isGlobal = mode === "global";
+
+  if (!isGlobal && (!dateParam || !shift_code)) {
     return NextResponse.json(
       { ok: false, error: "date and shift are required" },
       { status: 400 }
@@ -30,8 +34,8 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const normalized = normalizeShiftParam(shift_code);
-    if (!normalized) {
+    const normalized = shift_code ? normalizeShiftParam(shift_code) : undefined;
+    if (!isGlobal && !normalized) {
       const res = NextResponse.json(
         { ok: false, error: "Invalid shift parameter" },
         { status: 400 }
@@ -46,16 +50,25 @@ export async function GET(request: NextRequest) {
     const showResolved = url.searchParams.get("show_resolved") === "1";
     const debug = url.searchParams.get("debug") === "1";
 
-    const { issues, debug: debugInfo } = await fetchCockpitIssues({
-      org_id: org.activeOrgId,
-      site_id: org.activeSiteId,
-      date,
-      shift_code: normalized,
-      line: lineFilter,
-      include_go: includeGo,
-      show_resolved: showResolved,
-      debug,
-    });
+    const { issues, debug: debugInfo } = isGlobal
+      ? await fetchCockpitIssuesGlobal({
+          org_id: org.activeOrgId,
+          site_id: org.activeSiteId,
+          line: lineFilter,
+          include_go: includeGo,
+          show_resolved: showResolved,
+          debug,
+        })
+      : await fetchCockpitIssues({
+          org_id: org.activeOrgId,
+          site_id: org.activeSiteId,
+          date: dateParam,
+          shift_code: normalized!,
+          line: lineFilter,
+          include_go: includeGo,
+          show_resolved: showResolved,
+          debug,
+        });
 
     const res = NextResponse.json({
       ok: true,

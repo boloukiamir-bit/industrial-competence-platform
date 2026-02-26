@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { Loader2, AlertCircle, ArrowLeft, ClipboardList, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PageFrame } from "@/components/layout/PageFrame";
+import { CreateActionModal, type CreateActionPrefill } from "@/components/compliance/CreateActionModal";
 import { fetchJson } from "@/lib/coreFetch";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -85,6 +87,99 @@ export default function HrCompliancePage() {
   const [validNotes, setValidNotes] = useState("");
   const [waiveDialogOpen, setWaiveDialogOpen] = useState(false);
   const [waiveTarget, setWaiveTarget] = useState<{ employee_id: string; employee_name: string; code: string; name: string } | null>(null);
+  const [createActionOpen, setCreateActionOpen] = useState(false);
+  const [createActionPrefill, setCreateActionPrefill] = useState<CreateActionPrefill | null>(null);
+  const [createdActionKeys, setCreatedActionKeys] = useState<Set<string>>(new Set());
+
+  const actionsStatus = searchParams.get("actions_status")?.trim() ?? "";
+  const actionsOverdue = searchParams.get("actions_overdue") === "1";
+  const actionsDueDays = searchParams.get("actions_due_days")?.trim() ?? "";
+  const tabActions = searchParams.get("tab") === "actions";
+  const deepLinkActionId = searchParams.get("action_id")?.trim() ?? null;
+  const showActionsSection =
+    actionsStatus === "open" || actionsOverdue || actionsDueDays === "7" || tabActions || !!deepLinkActionId;
+
+  const [highlightedActionId, setHighlightedActionId] = useState<string | null>(null);
+  const lastHandledActionIdRef = useRef<string | null>(null);
+
+  const [actionsList, setActionsList] = useState<Array<{
+    id: string;
+    title: string;
+    due_date: string | null;
+    assignedToUserId: string | null;
+    status: string;
+  }>>([]);
+  const [actionsListLoading, setActionsListLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showActionsSection) {
+      setActionsList([]);
+      return;
+    }
+    let cancelled = false;
+    setActionsListLoading(true);
+    const params = new URLSearchParams();
+    params.set("status", "OPEN,IN_PROGRESS");
+    fetchJson<{ ok?: boolean; actions?: Array<{
+      id: string;
+      title?: string;
+      due_date: string | null;
+      assigned_to_user_id: string | null;
+      status: string;
+    }> }>(`/api/compliance/actions?${params.toString()}`)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok || !res.data?.ok || !Array.isArray(res.data.actions)) {
+          setActionsList([]);
+          return;
+        }
+        let list = (res.data.actions ?? []).map((a) => ({
+          id: a.id,
+          title: a.title ?? "—",
+          due_date: a.due_date ?? null,
+          assignedToUserId: a.assigned_to_user_id ?? null,
+          status: a.status ?? "",
+        }));
+        const today = new Date().toISOString().slice(0, 10);
+        const sevenDaysLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        if (actionsOverdue) {
+          list = list.filter((a) => a.due_date != null && a.due_date < today);
+        } else if (actionsDueDays === "7") {
+          list = list.filter((a) => a.due_date != null && a.due_date >= today && a.due_date <= sevenDaysLater);
+        }
+        setActionsList(list);
+      })
+      .catch(() => {
+        if (!cancelled) setActionsList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setActionsListLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [showActionsSection, actionsOverdue, actionsDueDays]);
+
+  useEffect(() => {
+    if (!deepLinkActionId || actionsListLoading || lastHandledActionIdRef.current === deepLinkActionId) return;
+    if (actionsList.length === 0) {
+      lastHandledActionIdRef.current = deepLinkActionId;
+      toast({ title: "Action not found (maybe closed or moved)", variant: "destructive" });
+      return;
+    }
+    const found = actionsList.find((a) => a.id === deepLinkActionId);
+    if (!found) {
+      lastHandledActionIdRef.current = deepLinkActionId;
+      toast({ title: "Action not found (maybe closed or moved)", variant: "destructive" });
+      return;
+    }
+    lastHandledActionIdRef.current = deepLinkActionId;
+    setHighlightedActionId(deepLinkActionId);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-action-id="${deepLinkActionId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    const t = setTimeout(() => setHighlightedActionId(null), 3000);
+    return () => clearTimeout(t);
+  }, [deepLinkActionId, actionsListLoading, actionsList, toast]);
 
   const loadDrilldown = useCallback(async () => {
     if (!date || !shiftCode || !stationId) {
@@ -179,6 +274,26 @@ export default function HrCompliancePage() {
     setWaiveDialogOpen(true);
   };
 
+  const openCreateAction = (employee: EmployeeBlocker, item: ComplianceItem) => {
+    const title = `${employee.employee_name} – ${item.name || item.code} – Compliance gap`;
+    setCreateActionPrefill({
+      employee_id: employee.employee_id,
+      employee_name: employee.employee_name,
+      requirement_name: item.name || item.code,
+      requirement_code: item.code,
+      title,
+    });
+    setCreateActionOpen(true);
+  };
+
+  const onActionCreated = () => {
+    if (createActionPrefill) {
+      const key = `${createActionPrefill.employee_id}:${createActionPrefill.requirement_code}`;
+      setCreatedActionKeys((prev) => new Set(prev).add(key));
+    }
+    loadDrilldown();
+  };
+
   const submitMarkValid = async () => {
     if (!validTarget) return;
     const key = `${validTarget.employee_id}:${validTarget.code}`;
@@ -257,6 +372,45 @@ export default function HrCompliancePage() {
   return (
     <PageFrame>
       <div className="space-y-6">
+        {showActionsSection && (
+          <section className="rounded-xl border border-border bg-muted/30 p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h2 className="text-sm font-semibold text-foreground">Compliance actions</h2>
+              <Link
+                href="/app/compliance/actions"
+                className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Action Inbox <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+            {actionsListLoading ? (
+              <div className="py-4 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : actionsList.length === 0 ? (
+              <p className="text-[0.8125rem] text-muted-foreground py-2">No actions match the filter.</p>
+            ) : (
+              <ul className="space-y-2">
+                {actionsList.map((a) => (
+                  <li
+                    key={a.id}
+                    data-action-id={a.id}
+                    className={cn(
+                      "flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0 text-[0.8125rem] transition-colors duration-300",
+                      highlightedActionId === a.id && "bg-primary/15 ring-1 ring-primary/30 rounded-md -mx-1 px-1"
+                    )}
+                  >
+                    <span className="font-medium text-foreground truncate min-w-0">{a.title}</span>
+                    <span className="text-muted-foreground shrink-0">
+                      {a.due_date ?? "—"} · {a.assignedToUserId ? "Assigned" : "Unassigned"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -360,6 +514,21 @@ export default function HrCompliancePage() {
                         >
                           {itemLoading[`${emp.employee_id}:${item.code}`] === "waive" ? "Waiving…" : "Waive"}
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 px-2 text-[0.6875rem]"
+                          onClick={() => openCreateAction(emp, item)}
+                        >
+                          <ClipboardList className="h-3 w-3 mr-1" />
+                          Create Action
+                        </Button>
+                        {createdActionKeys.has(`${emp.employee_id}:${item.code}`) && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Action created
+                          </Badge>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -422,6 +591,13 @@ export default function HrCompliancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CreateActionModal
+        open={createActionOpen}
+        onOpenChange={setCreateActionOpen}
+        prefill={createActionPrefill}
+        onCreated={onActionCreated}
+      />
     </PageFrame>
   );
 }
