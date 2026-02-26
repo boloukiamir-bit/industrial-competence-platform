@@ -3,13 +3,14 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export type InboxTab = "actions" | "lifecycle" | "governance";
+export type InboxTab = "actions" | "lifecycle" | "governance" | "contract";
 export type ActionsFilter = "open" | "overdue" | "due7" | "all";
 
 const TABS: { value: InboxTab; label: string }[] = [
   { value: "actions", label: "Actions" },
   { value: "lifecycle", label: "Lifecycle" },
   { value: "governance", label: "Governance" },
+  { value: "contract", label: "Contract" },
 ];
 
 const ACTION_FILTERS: { value: ActionsFilter; label: string }[] = [

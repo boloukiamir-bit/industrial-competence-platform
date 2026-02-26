@@ -7,12 +7,12 @@ import { HrInboxTabs, type InboxTab, type ActionsFilter } from "@/components/hr/
 import { InboxTable } from "@/components/hr/inbox/InboxTable";
 import { PriorityStrip } from "@/components/hr/inbox/PriorityStrip";
 import { fetchJson } from "@/lib/coreFetch";
-import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, PrioritySummary } from "@/types/domain";
+import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, PrioritySummary } from "@/types/domain";
 
 type InboxResponse = {
   ok: true;
   tab: string;
-  items: InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[];
+  items: InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[] | InboxContractItem[];
   meta: { limit: number };
 };
 
@@ -36,7 +36,7 @@ export default function HrInboxPage() {
   const tab = (searchParams.get("tab")?.toLowerCase()?.trim() || TAB_DEFAULT) as InboxTab;
   const filter = (searchParams.get("filter")?.toLowerCase()?.trim() || FILTER_DEFAULT) as ActionsFilter;
 
-  const [items, setItems] = useState<InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[]>([]);
+  const [items, setItems] = useState<InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[] | InboxContractItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +45,7 @@ export default function HrInboxPage() {
   const [priorityError, setPriorityError] = useState(false);
 
   const effectiveTab = useMemo((): InboxTab => {
-    if (tab === "lifecycle" || tab === "governance") return tab;
+    if (tab === "lifecycle" || tab === "governance" || tab === "contract") return tab;
     return "actions";
   }, [tab]);
 

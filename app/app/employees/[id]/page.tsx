@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { withDevBearer } from "@/lib/devBearer";
 import {
@@ -44,6 +44,8 @@ import type {
 } from "@/types/domain";
 import { logEmployeeAccess } from "@/services/gdpr";
 import { EmployeeLegitimacyProfile } from "@/components/employees/EmployeeLegitimacyProfile";
+import { EditableCard } from "@/components/shared/EditableCard";
+import { EmployeeEditDrawer } from "@/components/employees/EmployeeEditDrawer";
 
 type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "compliance" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
 
@@ -103,6 +105,7 @@ const EMPTY_EMPLOYEE_PROFILE: EmployeeProfileRow = {
 
 export default function EmployeeDetailPage() {
   const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params.id as string;
@@ -133,6 +136,51 @@ export default function EmployeeDetailPage() {
   type ComplianceItem = { category: string; name: string; status: string; valid_to: string | null; days_left: number | null };
   const [complianceItems, setComplianceItems] = useState<ComplianceItem[]>([]);
   const [complianceLoading, setComplianceLoading] = useState(false);
+  const [employmentEditOpen, setEmploymentEditOpen] = useState(false);
+  const openedFromEditParamRef = useRef(false);
+  const [employmentEditInitial, setEmploymentEditInitial] = useState<{
+    firstName?: string;
+    lastName?: string;
+    employeeNumber?: string;
+    email?: string;
+    phone?: string;
+    title?: string;
+    hireDate?: string;
+    employmentType?: "permanent" | "temporary" | "consultant";
+    contractEndDate?: string;
+  } | null>(null);
+
+  const refetchEmployee = useCallback(async () => {
+    if (!id) return;
+    const res = await fetch(`/api/employees/${id}`, { credentials: "include", headers: withDevBearer() });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.employee) return;
+    const raw = json.employee;
+    const emp: Employee = {
+      id: raw.id,
+      name: raw.name ?? "",
+      firstName: raw.firstName,
+      lastName: raw.lastName,
+      employeeNumber: raw.employeeNumber ?? "",
+      email: raw.email,
+      phone: raw.phone,
+      dateOfBirth: raw.dateOfBirth,
+      role: raw.role ?? "",
+      line: raw.line ?? "",
+      team: raw.team ?? "",
+      employmentType: (raw.employmentType ?? "permanent") as "permanent" | "temporary" | "consultant",
+      startDate: raw.startDate,
+      contractEndDate: raw.contractEndDate,
+      managerId: raw.managerId,
+      managerName: raw.managerName,
+      address: raw.address,
+      city: raw.city,
+      postalCode: raw.postalCode,
+      country: raw.country ?? "Sweden",
+      isActive: raw.isActive ?? true,
+    };
+    setData((prev) => (prev.employee ? { ...prev, employee: emp } : prev));
+  }, [id]);
 
   useEffect(() => {
     async function loadData() {
@@ -272,6 +320,26 @@ export default function EmployeeDetailPage() {
     }
     if (id) loadData();
   }, [id]);
+
+  // Deep-link: open edit drawer when landing with ?edit=1 (e.g. from HR Inbox contract tab)
+  useEffect(() => {
+    if (searchParams.get("edit") !== "1" || !id || openedFromEditParamRef.current) return;
+    if (!data.employee) return;
+    openedFromEditParamRef.current = true;
+    const emp = data.employee;
+    setEmploymentEditInitial({
+      firstName: emp.firstName ?? undefined,
+      lastName: emp.lastName ?? undefined,
+      employeeNumber: emp.employeeNumber ?? undefined,
+      email: emp.email ?? undefined,
+      phone: emp.phone ?? undefined,
+      title: (emp as { title?: string }).title ?? emp.role ?? undefined,
+      hireDate: (emp as { hireDate?: string }).hireDate ?? emp.startDate ?? undefined,
+      employmentType: emp.employmentType,
+      contractEndDate: emp.contractEndDate ?? undefined,
+    });
+    setEmploymentEditOpen(true);
+  }, [searchParams, id, data.employee]);
 
   const loadCompliance = useCallback(async () => {
     if (!id) return;
@@ -679,20 +747,33 @@ export default function EmployeeDetailPage() {
         )}
 
         {activeTab === "employment" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Job & Employment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <InfoRow icon={Briefcase} label="Role" value={employee.role || "-"} />
-                <InfoRow icon={Briefcase} label="Employment Type" value={employee.employmentType} />
-                <InfoRow icon={Calendar} label="Start Date" value={employee.startDate ? new Date(employee.startDate).toLocaleDateString("sv-SE") : "-"} />
-                <InfoRow icon={Calendar} label="Contract End Date" value={employee.contractEndDate ? new Date(employee.contractEndDate).toLocaleDateString("sv-SE") : "-"} />
-                <InfoRow icon={User} label="Status" value={employee.isActive ? "Active" : "Inactive"} />
-              </div>
-            </CardContent>
-          </Card>
+          <EditableCard
+            title="Job & Employment"
+            canEdit={true}
+            onEdit={() => {
+              setEmploymentEditInitial({
+                firstName: employee.firstName,
+                lastName: employee.lastName,
+                employeeNumber: employee.employeeNumber,
+                email: employee.email,
+                phone: employee.phone,
+                title: (employee as { title?: string }).title ?? employee.role,
+                hireDate: (employee as { hireDate?: string }).hireDate ?? employee.startDate,
+                employmentType: employee.employmentType,
+                contractEndDate: employee.contractEndDate,
+              });
+              setEmploymentEditOpen(true);
+            }}
+            editTestId="employment-card-edit"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <InfoRow icon={Briefcase} label="Role" value={employee.role || "-"} />
+              <InfoRow icon={Briefcase} label="Employment Type" value={employee.employmentType} />
+              <InfoRow icon={Calendar} label="Start Date" value={employee.startDate ? new Date(employee.startDate).toLocaleDateString("sv-SE") : "-"} />
+              <InfoRow icon={Calendar} label="Contract End Date" value={employee.contractEndDate ? new Date(employee.contractEndDate).toLocaleDateString("sv-SE") : "-"} />
+              <InfoRow icon={User} label="Status" value={employee.isActive ? "Active" : "Inactive"} />
+            </div>
+          </EditableCard>
         )}
 
         {activeTab === "compensation" && (
@@ -997,6 +1078,24 @@ export default function EmployeeDetailPage() {
           </Card>
         )}
       </main>
+      <EmployeeEditDrawer
+        open={employmentEditOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            const next = new URLSearchParams(searchParams.toString());
+            next.delete("edit");
+            const q = next.toString();
+            router.replace(q ? `${pathname}?${q}` : pathname);
+          }
+          setEmploymentEditOpen(open);
+        }}
+        employeeId={id}
+        initial={employmentEditInitial}
+        onSaved={async () => {
+          await refetchEmployee();
+          setEmploymentEditOpen(false);
+        }}
+      />
     </div>
   );
 }
