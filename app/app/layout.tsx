@@ -75,6 +75,7 @@ const coreNavItems: NavItem[] = [
 ];
 
 const hrNavItems: NavItem[] = [
+  { name: "HR Inbox", href: "/app/hr/inbox", icon: Inbox, hrAdminOnly: true },
   { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
   { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
@@ -112,10 +113,10 @@ const pilotModeCoreNavItems: NavItem[] = [
 ];
 
 const pilotModeHrNavItems: NavItem[] = [
+  { name: "HR Inbox", href: "/app/hr/inbox", icon: Inbox, hrAdminOnly: true },
   { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
   { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
   { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
-  { name: "HR Inbox", href: "/app/hr", icon: Clipboard, hrAdminOnly: true },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
