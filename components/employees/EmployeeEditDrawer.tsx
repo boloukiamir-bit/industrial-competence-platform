@@ -204,14 +204,14 @@ export function EmployeeEditDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md">
-        <SheetHeader>
+      <SheetContent className="sm:max-w-md flex flex-col h-full max-h-[100vh] overflow-hidden p-0">
+        <SheetHeader className="flex-shrink-0 px-6 pt-6 pr-12 pb-2 text-left">
           <SheetTitle>Edit employee</SheetTitle>
           <SheetDescription>
             Update basic details. Changes are saved to the current organization.
           </SheetDescription>
         </SheetHeader>
-        <div className="mt-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pb-8 space-y-4">
           {error && (
             <p className="text-sm text-destructive font-medium" role="alert">
               {error}
@@ -511,14 +511,14 @@ export function EmployeeEditDrawer({
               {certificateSaving ? "Saving…" : "Save certificate"}
             </Button>
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving} data-testid="employee-edit-save">
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </div>
+        </div>
+        <div className="flex-shrink-0 border-t bg-background px-6 py-4 flex gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving} data-testid="employee-edit-save">
+            {saving ? "Saving…" : "Save"}
+          </Button>
         </div>
       </SheetContent>
     </Sheet>
