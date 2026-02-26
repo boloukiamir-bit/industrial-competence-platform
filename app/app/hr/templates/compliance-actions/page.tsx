@@ -71,14 +71,19 @@ export default function ComplianceTemplatesPage() {
         headers: withDevBearer(),
       });
       const json = (await res.json()) as ListResponse & { error?: string };
-      if (res.ok && json.ok) setData(json);
-      else setData(null);
-    } catch {
+      if (res.ok && json.ok) {
+        setData(json);
+      } else {
+        setData(null);
+        toast({ title: json?.error ?? "Failed to load templates", variant: "destructive" });
+      }
+    } catch (err) {
       setData(null);
+      toast({ title: err instanceof Error ? err.message : "Failed to load templates", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadList();

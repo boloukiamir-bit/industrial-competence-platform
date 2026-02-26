@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { 
-  LayoutDashboard, 
-  Grid3X3, 
-  Upload, 
-  Users, 
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  LayoutDashboard,
+  Grid3X3,
+  Upload,
+  Users,
   Settings,
-  Settings2,
   ShieldAlert,
   Package,
   Newspaper,
@@ -18,7 +18,6 @@ import {
   Shield,
   Building2,
   BarChart3,
-  Workflow,
   LogOut,
   Wrench,
   TrendingUp,
@@ -29,20 +28,30 @@ import {
   Target,
   ClipboardCheck,
   Inbox,
-  Lightbulb
+  Lightbulb,
+  User,
 } from "lucide-react";
 import { getCurrentUser, type CurrentUser, isHrAdmin } from "@/lib/auth";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/services/auth";
 import { OrgProvider } from "@/components/OrgProvider";
+import { OrgIdentityProvider } from "@/contexts/OrgIdentityContext";
+import { OrgIdentity } from "@/components/nav/OrgIdentity";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { SessionDebugStrip } from "@/components/SessionDebugStrip";
 import { VersionStrip } from "@/components/VersionStrip";
 import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { COPY } from "@/lib/copy";
 import { getSpaliDevMode } from "@/lib/spaliDevMode";
+import { cn } from "@/lib/utils";
 
 type NavItem = {
   name: string;
@@ -66,6 +75,7 @@ const coreNavItems: NavItem[] = [
 ];
 
 const hrNavItems: NavItem[] = [
+  { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
   { name: "Manager Risks", href: "/app/manager/risks", icon: ShieldAlert },
   { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
   { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
@@ -102,6 +112,7 @@ const pilotModeCoreNavItems: NavItem[] = [
 ];
 
 const pilotModeHrNavItems: NavItem[] = [
+  { name: "HR Templates", href: "/app/hr/templates", icon: FileText, hrAdminOnly: true },
   { name: "Compliance Summary", href: "/app/compliance/summary", icon: BarChart3, hrAdminOnly: true },
   { name: "Action Inbox", href: "/app/compliance/actions", icon: Inbox, hrAdminOnly: true },
   { name: "HR Inbox", href: "/app/hr", icon: Clipboard, hrAdminOnly: true },
@@ -154,43 +165,142 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     return (
       <li key={item.name}>
-        <Link
-          href={item.href}
-          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-            isActive
-              ? "bg-surface text-foreground border border-border"
-              : "text-muted-foreground hover:bg-surface"
-          }`}
-          data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
-        >
-          <Icon className="h-4 w-4" />
-          {item.name}
-        </Link>
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <Link
+              href={item.href}
+              className={cn(
+                "flex items-center justify-center w-full h-10 rounded-r-md text-sm font-medium transition-colors border-l-2",
+                isActive
+                  ? "bg-muted text-foreground border-l-primary"
+                  : "border-l-transparent text-muted-foreground hover:bg-muted/70"
+              )}
+              data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8} className="font-normal">
+            {item.name}
+          </TooltipContent>
+        </Tooltip>
       </li>
     );
   };
 
   return (
-    <OrgProvider>
-      <AppLayoutContent 
-        pathname={pathname}
-        authUser={authUser}
-        user={user}
-        handleSignOut={handleSignOut}
-        isDevMode={isDevMode}
-        showSpaljistenNav={showSpaljistenNav}
-        isPilotMode={isPilotMode}
-        renderNavItem={renderNavItem}
-      >
-        {children}
-      </AppLayoutContent>
-    </OrgProvider>
+    <TooltipProvider delayDuration={200} skipDelayDuration={0}>
+      <OrgProvider>
+        <OrgIdentityProvider>
+        <AppLayoutContent
+          pathname={pathname}
+          authUser={authUser}
+          user={user}
+          handleSignOut={handleSignOut}
+          isDevMode={isDevMode}
+          showSpaljistenNav={showSpaljistenNav}
+          isPilotMode={isPilotMode}
+          renderNavItem={renderNavItem}
+        >
+          {children}
+        </AppLayoutContent>
+        </OrgIdentityProvider>
+      </OrgProvider>
+    </TooltipProvider>
   );
 }
 
-/** Predicate: true when role can see HR Tools (Compliance Summary, Action Inbox, etc.). Same as /api/admin/me membership_role semantics. */
+/** Predicate: true when role can see HR Tools (HR Templates, Compliance Summary, Action Inbox, etc.). Includes admin and hr. Same as /api/admin/me membership_role semantics. */
 function canSeeHrTools(role: string | null | undefined): boolean {
   return isHrAdmin((role ?? "").toLowerCase());
+}
+
+function initials(email: string | null | undefined, displayName?: string | null): string {
+  if (displayName && displayName.trim()) {
+    const parts = displayName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
+    return displayName.slice(0, 2).toUpperCase();
+  }
+  if (email) {
+    const local = email.split("@")[0] || "";
+    return local.slice(0, 2).toUpperCase();
+  }
+  return "?";
+}
+
+function SidebarUserCard({
+  authUser,
+  user,
+  roleForNav,
+  onSignOut,
+}: {
+  authUser: any;
+  user: CurrentUser | null;
+  roleForNav: string;
+  onSignOut: () => void;
+}) {
+  const displayName = (authUser?.user_metadata as { name?: string } | undefined)?.name ?? null;
+  const email = authUser?.email ?? user?.email ?? "";
+  const initial = initials(email, displayName);
+  const label = displayName && displayName.trim() ? displayName.trim() : email || "User";
+
+  return (
+    <DropdownMenu.Root>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center justify-center rounded-md p-1.5 hover:bg-muted/70 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+              data-testid="sidebar-user-trigger"
+              aria-label="User menu"
+            >
+              <span
+                className="h-9 w-9 shrink-0 rounded-full bg-muted flex items-center justify-center text-sm font-medium text-foreground"
+                aria-hidden
+              >
+                {initial}
+              </span>
+            </button>
+          </DropdownMenu.Trigger>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={8}>
+          <span className="font-medium">{label}</span>
+          {roleForNav && <span className="block text-xs text-muted-foreground mt-0.5">{roleForNav}</span>}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          side="right"
+          sideOffset={8}
+          align="end"
+          className="min-w-[180px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          <div className="px-2 py-1.5 text-xs text-muted-foreground border-b border-border mb-1">
+            {label}
+            {roleForNav && (
+              <span className="block mt-0.5 font-medium text-foreground/80">{roleForNav}</span>
+            )}
+          </div>
+          <DropdownMenu.Item disabled className="cursor-not-allowed text-muted-foreground">
+            <User className="mr-2 h-4 w-4" />
+            Profile
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={(e) => {
+              e.preventDefault();
+              onSignOut();
+            }}
+            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+            data-testid="dropdown-signout"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
 }
 
 function AppLayoutContent({
@@ -257,111 +367,102 @@ function AppLayoutContent({
         <DemoModeBanner />
         {process.env.NODE_ENV !== "production" && <SessionDebugStrip />}
           <div className="flex flex-1 overflow-hidden">
-          <aside className="w-64 bg-surface border-r border-border flex flex-col">
-            <div className="p-6 border-b border-border">
-              <h1 className="text-lg font-semibold text-foreground">
-                Industrial Competence
-              </h1>
-              <p className="text-xs text-muted-foreground mt-1">Platform</p>
+          <aside className="w-16 shrink-0 bg-surface border-r border-border flex flex-col">
+            <div className="h-14 shrink-0 flex items-center justify-center border-b border-border">
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <Link href="/app/cockpit" className="flex items-center justify-center w-10 h-10 rounded-md text-foreground hover:bg-muted/70" aria-label="Industrial Competence Platform">
+                    <Gauge className="h-6 w-6" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8}>Industrial Competence Platform</TooltipContent>
+              </Tooltip>
             </div>
-            <nav className="flex-1 p-4 overflow-y-auto">
+            <nav className="flex-1 py-3 overflow-y-auto flex flex-col items-stretch">
               {visibleCoreItems.length > 0 && (
-                <div className="mb-4">
-                  <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {COPY.nav.core}
-                  </p>
-                  <ul className="space-y-1">
-                    {visibleCoreItems.map(renderNavItem)}
-                  </ul>
-                </div>
+                <ul className="space-y-0.5 px-2">
+                  {visibleCoreItems.map(renderNavItem)}
+                </ul>
               )}
 
               {showHrToolsSection && (
-                <div className="mb-4" data-testid="nav-hr-tools-section">
-                  <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    HR Tools
-                  </p>
-                  {roleLoadStatus === "loading" ? (
-                    <ul className="space-y-1" aria-busy="true">
-                      {[1, 2, 3, 4].map((i) => (
-                        <li key={i}>
-                          <Skeleton className="h-9 w-full" />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <ul className="space-y-1">
-                      {visibleHrItems.map(renderNavItem)}
-                    </ul>
-                  )}
-                </div>
+                <>
+                  <div className="my-2 border-t border-border shrink-0" aria-hidden />
+                  <div data-testid="nav-hr-tools-section">
+                    {roleLoadStatus === "loading" ? (
+                      <ul className="space-y-0.5 px-2" aria-busy="true">
+                        {[1, 2, 3].map((i) => (
+                          <li key={i}>
+                            <Skeleton className="h-10 w-full rounded-r-md" />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <ul className="space-y-0.5 px-2">
+                        {visibleHrItems.map(renderNavItem)}
+                      </ul>
+                    )}
+                  </div>
+                </>
               )}
 
               {visibleStrategicPlanningItems.length > 0 && (
-                <div className="mb-4">
-                  <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Strategic Planning
-                  </p>
-                  <ul className="space-y-1">
+                <>
+                  <div className="my-2 border-t border-border shrink-0" aria-hidden />
+                  <ul className="space-y-0.5 px-2">
                     {visibleStrategicPlanningItems.map(renderNavItem)}
                   </ul>
-                </div>
+                </>
               )}
 
               {visibleMoreItems.length > 0 && (
-                <div className="mb-4">
-                  <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    More
-                  </p>
-                  <ul className="space-y-1">
+                <>
+                  <div className="my-2 border-t border-border shrink-0" aria-hidden />
+                  <ul className="space-y-0.5 px-2">
                     {visibleMoreItems.map(renderNavItem)}
                   </ul>
-                </div>
+                </>
               )}
 
               {visibleSpaljistenItems.length > 0 && (
-                <div className="mb-4">
-                  <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Spaljisten
-                  </p>
-                  <ul className="space-y-1">
+                <>
+                  <div className="my-2 border-t border-border shrink-0" aria-hidden />
+                  <ul className="space-y-0.5 px-2">
                     {visibleSpaljistenItems.map(renderNavItem)}
                   </ul>
-                </div>
+                </>
               )}
 
               {visibleSettingsItems.length > 0 && (
-                <div className="pt-4 border-t border-border">
-                  <ul className="space-y-1">
+                <>
+                  <div className="my-2 border-t border-border shrink-0" aria-hidden />
+                  <ul className="space-y-0.5 px-2">
                     {visibleSettingsItems.map(renderNavItem)}
                   </ul>
-                </div>
+                </>
               )}
             </nav>
+
+            <div className="shrink-0 border-t border-border p-2">
+              <SidebarUserCard
+                authUser={authUser}
+                user={user}
+                roleForNav={roleForNav}
+                onSignOut={handleSignOut}
+              />
+            </div>
           </aside>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            <header className="h-16 bg-surface border-b border-border flex items-center justify-between px-6">
-              <div className="text-sm text-muted-foreground">
+            <header className="h-14 shrink-0 bg-surface border-b border-border flex items-center justify-between px-6 gap-4">
+              <OrgIdentity />
+              <div className="text-sm text-muted-foreground shrink-0" data-testid="header-date">
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
                   year: "numeric",
                   month: "long",
                   day: "numeric",
                 })}
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-foreground" data-testid="text-user-email">
-                  {authUser?.email || user?.email || "User"}
-                </span>
-                <button
-                  onClick={handleSignOut}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface rounded-md transition-colors border border-border"
-                  data-testid="button-signout"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
               </div>
             </header>
 

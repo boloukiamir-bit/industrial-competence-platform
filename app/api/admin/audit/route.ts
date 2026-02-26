@@ -23,7 +23,7 @@ async function isOrgAdmin(supabase: ReturnType<typeof getServiceSupabase>, orgId
 
 export async function GET(request: NextRequest) {
   try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
+    const { supabase, pendingCookies } = await createSupabaseServerClient(request);
     const org = await getActiveOrgFromSession(request, supabase);
     if (!org.ok) {
       const res = NextResponse.json({ error: org.error, code: org.status === 401 ? 'AUTH_REQUIRED' : 'NO_ORG', message: org.error }, { status: org.status });
@@ -34,47 +34,47 @@ export async function GET(request: NextRequest) {
     const supabaseAdmin = getServiceSupabase();
     const isAdmin = await isOrgAdmin(supabaseAdmin, org.activeOrgId, org.userId);
     if (!isAdmin) {
-      return NextResponse.json({ 
-        error: 'Forbidden', 
+      return NextResponse.json({
+        error: 'Forbidden',
         code: 'NOT_ADMIN',
         message: 'Admin access required to view audit logs'
       }, { status: 403 });
     }
 
-    const { data: logs, error: fetchError } = await supabase
-      .from('audit_logs')
-      .select(`
-        id,
-        actor_user_id,
-        action,
-        target_type,
-        target_id,
-        metadata,
-        created_at
-      `)
+    let query = supabaseAdmin
+      .from('governance_events')
+      .select('id, actor_user_id, action, target_type, target_id, meta, created_at')
       .eq('org_id', org.activeOrgId)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .order('id', { ascending: false })
+      .limit(200);
+
+    if (org.activeSiteId) {
+      query = query.or(`site_id.is.null,site_id.eq.${org.activeSiteId}`);
+    }
+
+    const { data: rows, error: fetchError } = await query;
 
     if (fetchError) {
-      console.error('Error fetching audit logs:', fetchError);
-      return NextResponse.json({ 
-        error: 'Database error', 
+      console.error('Error fetching governance_events (audit):', fetchError);
+      return NextResponse.json({
+        error: 'Database error',
         code: 'DB_ERROR',
         message: fetchError.message,
         hint: fetchError.hint || null
       }, { status: 500 });
     }
 
-    const actorIds = [...new Set((logs || []).map((l: { actor_user_id: string | null }) => l.actor_user_id).filter(Boolean))];
-    
+    const logs = rows ?? [];
+    const actorIds = [...new Set(logs.map((l: { actor_user_id: string | null }) => l.actor_user_id).filter(Boolean))];
+
     let profilesMap: Record<string, string> = {};
     if (actorIds.length > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles } = await supabaseAdmin
         .from('profiles')
         .select('id, email')
         .in('id', actorIds);
-      
+
       if (profiles) {
         type ProfileRow = { id: string; email: string | null };
         profilesMap = Object.fromEntries(
@@ -83,17 +83,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    type AuditLogRow = {
+    type GovRow = {
       id: string;
       actor_user_id: string | null;
       action: string;
-      target_type: string | null;
+      target_type: string;
       target_id: string | null;
-      metadata: unknown;
+      meta: unknown;
       created_at: string;
     };
-    const enrichedLogs = (logs || []).map((log: AuditLogRow) => ({
-      ...log,
+    const enrichedLogs = logs.map((log: GovRow) => ({
+      id: log.id,
+      actor_user_id: log.actor_user_id ?? '',
+      action: log.action,
+      target_type: log.target_type,
+      target_id: log.target_id,
+      metadata: (log.meta != null && typeof log.meta === 'object' && !Array.isArray(log.meta)) ? log.meta as Record<string, unknown> : {},
+      created_at: log.created_at,
       actor_email: log.actor_user_id ? (profilesMap[log.actor_user_id] ?? null) : null
     }));
 

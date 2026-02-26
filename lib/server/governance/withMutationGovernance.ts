@@ -46,6 +46,8 @@ export type MutationGovernanceOptions = {
   target_type: string;
   /** If true, shift context (date + shift_code) is not required; org-only gate. */
   allowNoShiftContext?: boolean;
+  /** If true, invalid or empty JSON body is treated as {} instead of 400. Preserves legacy tolerance. */
+  tolerateInvalidJson?: boolean;
   /** If true, body.execution_token is required and verified. */
   requireExecutionToken?: boolean;
   /** When requireExecutionToken, allowed_actions must include this (e.g. "COCKPIT_DECISION_CREATE"). */
@@ -115,6 +117,7 @@ export function withMutationGovernance(
     action,
     target_type,
     allowNoShiftContext = false,
+    tolerateInvalidJson = false,
     requireExecutionToken = false,
     executionTokenAction,
     shiftCodeKey = "shift_code",
@@ -154,12 +157,16 @@ export function withMutationGovernance(
     try {
       body = (await request.json()) as Record<string, unknown>;
     } catch {
-      return jsonResponse(
-        { ok: false, error: "Invalid JSON body", code: "BAD_REQUEST" },
-        400,
-        pendingCookies,
-        undefined
-      );
+      if (tolerateInvalidJson) {
+        body = {};
+      } else {
+        return jsonResponse(
+          { ok: false, error: "Invalid JSON body", code: "BAD_REQUEST" },
+          400,
+          pendingCookies,
+          undefined
+        );
+      }
     }
 
     const searchParams = request.nextUrl.searchParams;

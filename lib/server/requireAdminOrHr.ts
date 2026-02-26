@@ -13,6 +13,7 @@ export type AdminOrHrResult =
       activeOrgId: string;
       activeSiteId: string | null;
       userId: string;
+      userEmail: string | null;
       role: string;
       /** Set only in dev; set as response header x-auth-debug for diagnosis */
       debugHeader?: string;
@@ -78,6 +79,7 @@ export async function requireAdminOrHr(
     activeOrgId,
     activeSiteId: (profile.active_site_id as string | null) ?? null,
     userId: user.id,
+    userEmail: user.email ?? null,
     role,
     ...(debugHeader ? { debugHeader } : {}),
   };

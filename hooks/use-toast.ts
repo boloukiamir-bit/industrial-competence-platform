@@ -2,11 +2,17 @@
 
 import { useState, useCallback } from "react";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: string;
   title?: string;
   description?: string;
   variant?: "default" | "destructive";
+  action?: ToastAction;
 }
 
 interface ToastState {
@@ -23,10 +29,10 @@ function genId() {
 export function useToast() {
   const [state, setState] = useState<ToastState>({ toasts: [] });
 
-  const toast = useCallback(({ title, description, variant }: Omit<Toast, "id">) => {
+  const toast = useCallback(({ title, description, variant, action }: Omit<Toast, "id">) => {
     const id = genId();
     setState((prev) => ({
-      toasts: [...prev.toasts, { id, title, description, variant }],
+      toasts: [...prev.toasts, { id, title, description, variant, action }],
     }));
 
     setTimeout(() => {

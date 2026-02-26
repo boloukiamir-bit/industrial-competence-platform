@@ -1,13 +1,11 @@
 /**
  * POST /api/compliance/pilot/seed — P1.8 Pilot Execution Pack.
- * Dev-only (or ALLOW_PILOT_SEED=true). Admin/HR only. Tenant: getActiveOrgFromSession.
- * Seeds employees, catalog, employee_compliance, compliance_actions, events, templates.
+ * Dev-only (or ALLOW_PILOT_SEED=true). Admin/HR only. Governed via withMutationGovernance.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
-import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { isHrAdmin } from "@/lib/auth";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 import { COMPLIANCE_ACTION_DRAFT_CATEGORY, buildCode } from "@/lib/hrTemplatesCompliance";
 
 const supabaseAdmin = createClient(
@@ -23,48 +21,39 @@ function errorPayload(step: string, error: unknown, details?: string) {
   return { ok: false as const, step, error: msg, ...(details != null && { details }) };
 }
 
-export async function POST(request: NextRequest) {
-  if (IS_PRODUCTION && !ALLOW_PILOT_SEED) {
-    return NextResponse.json(
-      errorPayload("guard", "Pilot seed is disabled in production. Set ALLOW_PILOT_SEED=true to allow."),
-      { status: 403 }
-    );
-  }
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    if (IS_PRODUCTION && !ALLOW_PILOT_SEED) {
+      return NextResponse.json(
+        errorPayload("guard", "Pilot seed is disabled in production. Set ALLOW_PILOT_SEED=true to allow."),
+        { status: 403 }
+      );
+    }
 
-  const { supabase, pendingCookies } = await createSupabaseServerClient();
-  const org = await getActiveOrgFromSession(request, supabase);
-  if (!org.ok) {
-    const res = NextResponse.json(errorPayload("getActiveOrg", org.error), { status: org.status });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("role")
-    .eq("user_id", org.userId)
-    .eq("org_id", org.activeOrgId)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (!isHrAdmin(membership?.role)) {
-    const res = NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
-  const orgId = org.activeOrgId;
-  let seedSiteId: string | null = org.activeSiteId ?? null;
-  if (seedSiteId == null) {
-    const { data: empSite } = await supabaseAdmin
-      .from("employees")
-      .select("site_id")
-      .eq("org_id", orgId)
-      .not("site_id", "is", null)
-      .limit(1)
+    const { data: membership } = await ctx.supabase
+      .from("memberships")
+      .select("role")
+      .eq("user_id", ctx.userId)
+      .eq("org_id", ctx.orgId)
+      .eq("status", "active")
       .maybeSingle();
-    seedSiteId = (empSite as { site_id: string } | null)?.site_id ?? null;
-  }
+
+    if (!isHrAdmin(membership?.role)) {
+      return NextResponse.json(errorPayload("forbidden", "Admin/HR only"), { status: 403 });
+    }
+
+    const orgId = ctx.orgId;
+    let seedSiteId: string | null = ctx.siteId ?? null;
+    if (seedSiteId == null) {
+      const { data: empSite } = await ctx.admin
+        .from("employees")
+        .select("site_id")
+        .eq("org_id", orgId)
+        .not("site_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      seedSiteId = (empSite as { site_id: string } | null)?.site_id ?? null;
+    }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -93,7 +82,7 @@ export async function POST(request: NextRequest) {
     ];
 
     for (const spec of empSpecs) {
-      const { data: emp, error: empErr } = await supabaseAdmin
+      const { data: emp, error: empErr } = await ctx.admin
         .from("employees")
         .upsert(
           {
@@ -111,9 +100,7 @@ export async function POST(request: NextRequest) {
         .single();
       if (empErr) {
         console.error("pilot/seed employees upsert", empErr);
-        const res = NextResponse.json(errorPayload("employees", empErr.message), { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+        return NextResponse.json(errorPayload("employees", empErr.message), { status: 500 });
       }
       if (emp) {
         counts.employees++;
@@ -132,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     const catalogIds: string[] = [];
     for (const spec of catalogSpecs) {
-      const { data: cat, error: catErr } = await supabaseAdmin
+      const { data: cat, error: catErr } = await ctx.admin
         .from("compliance_catalog")
         .upsert(
           {
@@ -150,9 +137,7 @@ export async function POST(request: NextRequest) {
         .single();
       if (catErr) {
         console.error("pilot/seed catalog upsert", catErr);
-        const res = NextResponse.json(errorPayload("catalog", catErr.message), { status: 500 });
-        applySupabaseCookies(res, pendingCookies);
-        return res;
+        return NextResponse.json(errorPayload("catalog", catErr.message), { status: 500 });
       }
       if (cat) {
         counts.catalog++;
@@ -161,19 +146,17 @@ export async function POST(request: NextRequest) {
     }
 
     const employeeIds = (
-      await supabaseAdmin.from("employees").select("id").eq("org_id", orgId).in("employee_number", empSpecs.map((e) => e.employee_number))
+      await ctx.admin.from("employees").select("id").eq("org_id", orgId).in("employee_number", empSpecs.map((e) => e.employee_number))
     ).data as { id: string }[] | null;
     const eids = (employeeIds ?? []).map((r) => r.id);
     if (eids.length < 2) {
-      const res = NextResponse.json(errorPayload("employees", "Could not resolve pilot employees"), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(errorPayload("employees", "Could not resolve pilot employees"), { status: 500 });
     }
 
     const [empMissing, empOverdue, empExpiring] = eids;
     const [lic1, lic2, med1, med2, con1, con2] = catalogIds;
 
-    await supabaseAdmin.from("employee_compliance").upsert(
+    await ctx.admin.from("employee_compliance").upsert(
       [
         {
           org_id: orgId,
@@ -229,7 +212,7 @@ export async function POST(request: NextRequest) {
         action_type: "request_renewal",
         status: "open",
         due_date: dueOverdue,
-        owner_user_id: org.userId,
+        owner_user_id: ctx.userId,
       },
       {
         org_id: orgId,
@@ -249,11 +232,11 @@ export async function POST(request: NextRequest) {
         action_type: actionTypeEvidence,
         status: "open",
         due_date: null,
-        owner_user_id: org.userId,
+        owner_user_id: ctx.userId,
         evidence_url: "https://example.com/pilot-cert.pdf",
         evidence_notes: "Pilot evidence",
         evidence_added_at: nowIso,
-        evidence_added_by: org.userId,
+        evidence_added_by: ctx.userId,
       },
       {
         org_id: orgId,
@@ -273,7 +256,7 @@ export async function POST(request: NextRequest) {
         action_type: "request_renewal",
         status: "open",
         due_date: todayStr,
-        owner_user_id: org.userId,
+        owner_user_id: ctx.userId,
       },
       {
         org_id: orgId,
@@ -283,21 +266,19 @@ export async function POST(request: NextRequest) {
         action_type: "request_renewal",
         status: "done",
         due_date: pastStr,
-        owner_user_id: org.userId,
+        owner_user_id: ctx.userId,
         done_at: nowIso,
       },
     ];
 
-    const { data: insertedActions, error: actionsErr } = await supabaseAdmin
+    const { data: insertedActions, error: actionsErr } = await ctx.admin
       .from("compliance_actions")
       .insert(actionsToInsert)
       .select("id, action_type");
 
     if (actionsErr) {
       console.error("pilot/seed compliance_actions insert", actionsErr);
-      const res = NextResponse.json(errorPayload("actions", actionsErr.message), { status: 500 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
+      return NextResponse.json(errorPayload("actions", actionsErr.message), { status: 500 });
     }
     const actions = (insertedActions ?? []) as Array<{ id: string; action_type: string }>;
     counts.actions = actions.length;
@@ -329,7 +310,7 @@ export async function POST(request: NextRequest) {
           template_id: null,
           copied_title: false,
           copied_body: false,
-          created_by: org.userId,
+          created_by: ctx.userId,
         });
         evidenceEventCount++;
       }
@@ -343,13 +324,13 @@ export async function POST(request: NextRequest) {
           template_id: null,
           copied_title: true,
           copied_body: true,
-          created_by: org.userId,
+          created_by: ctx.userId,
         });
         draftCount++;
       }
     }
     if (events.length > 0) {
-      const { error: evErr } = await supabaseAdmin.from("compliance_action_events").insert(events);
+      const { error: evErr } = await ctx.admin.from("compliance_action_events").insert(events);
       if (evErr) {
         console.error("pilot/seed compliance_action_events insert", evErr);
       } else {
@@ -358,14 +339,14 @@ export async function POST(request: NextRequest) {
     }
 
     const codeToDisable = buildCode(actionTypeMissingTpl, "email");
-    await supabaseAdmin
+    await ctx.admin
       .from("hr_templates")
       .update({ is_active: false, updated_at: nowIso })
       .eq("org_id", orgId)
       .eq("category", COMPLIANCE_ACTION_DRAFT_CATEGORY)
       .eq("code", codeToDisable);
 
-    const res = NextResponse.json({
+    return NextResponse.json({
       ok: true,
       counts: {
         employees: counts.employees,
@@ -376,12 +357,17 @@ export async function POST(request: NextRequest) {
       },
       examples: { oneActionId, oneEmployeeId },
     });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
   } catch (err) {
     console.error("POST /api/compliance/pilot/seed failed:", err);
-    const res = NextResponse.json(errorPayload("unexpected", err), { status: 500 });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
+    return NextResponse.json(errorPayload("unexpected", err), { status: 500 });
   }
-}
+  },
+  {
+    route: "/api/compliance/pilot/seed",
+    action: "COMPLIANCE_PILOT_SEED",
+    target_type: "compliance_pilot",
+    allowNoShiftContext: true,
+    tolerateInvalidJson: true,
+    getTargetIdAndMeta: () => ({ target_id: "seed", meta: {} }),
+  }
+);

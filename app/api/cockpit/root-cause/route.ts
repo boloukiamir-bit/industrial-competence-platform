@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getOrgIdFromSession } from "@/lib/orgSession";
-import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { normalizeShiftTypeOrDefault } from "@/lib/shift";
+import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 import type { RootCausePayload, RootCauseMissingItem, RootCauseType, CompetenceRootCause } from "@/types/cockpit";
 import { computeLineGaps, type LineOverviewData } from "@/services/gapEngine";
 import { getEligibilityByLine } from "@/services/eligibilityService";
@@ -465,137 +464,128 @@ async function computeRootCause(options: {
   };
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { supabase, pendingCookies } = await createSupabaseServerClient();
-    const session = await getOrgIdFromSession(request, supabase);
-    if (!session.success) {
-      const res = NextResponse.json({ error: session.error }, { status: session.status });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
+async function runRootCauseHandler(ctx: {
+  admin: ReturnType<typeof getServiceClient>;
+  orgId: string;
+  body: Record<string, unknown>;
+}) {
+  const shiftAssignmentId = ctx.body?.shift_assignment_id as string | undefined;
+  if (!shiftAssignmentId) {
+    return NextResponse.json({ error: "shift_assignment_id is required" }, { status: 400 });
+  }
 
-    const supabaseAdmin = getServiceClient();
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("active_org_id")
-      .eq("id", session.userId)
-      .single();
+  const assignment = await loadAssignment(ctx.admin, ctx.orgId, shiftAssignmentId);
+  if (!assignment) {
+    return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+  }
 
-    if (!profile?.active_org_id) {
-      const res = NextResponse.json({ error: "No active organization" }, { status: 403 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-    const activeOrgId = profile.active_org_id as string;
+  const referenceDate = toDateOnly(assignment.shift?.shift_date || assignment.assignment_date);
+  const rootCause = await computeRootCause({ supabaseAdmin: ctx.admin, assignment, referenceDate });
 
-    const body = await request.json().catch(() => ({}));
-    const shiftAssignmentId = body?.shift_assignment_id as string | undefined;
+  const line = assignment.station?.line;
+  const shiftType = assignment.shift?.shift_type;
+  let gaps = undefined;
 
-    if (!shiftAssignmentId) {
-      const res = NextResponse.json({ error: "shift_assignment_id is required" }, { status: 400 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
+  if (line && shiftType && referenceDate) {
+    try {
+      const lineOverviewData = await fetchLineOverviewData(
+        ctx.admin,
+        ctx.orgId,
+        referenceDate,
+        shiftType,
+        line
+      );
 
-    const assignment = await loadAssignment(supabaseAdmin, activeOrgId, shiftAssignmentId);
-    if (!assignment) {
-      const res = NextResponse.json({ error: "Assignment not found" }, { status: 404 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const referenceDate = toDateOnly(assignment.shift?.shift_date || assignment.assignment_date);
-    const rootCause = await computeRootCause({ supabaseAdmin, assignment, referenceDate });
-
-    // Compute gaps if we have line, date, and shift_type
-    const line = assignment.station?.line;
-    const shiftType = assignment.shift?.shift_type;
-    let gaps = undefined;
-
-    if (line && shiftType && referenceDate) {
-      try {
-        // Fetch line-overview data needed for gapEngine
-        const lineOverviewData = await fetchLineOverviewData(
-          supabaseAdmin,
-          activeOrgId,
-          referenceDate,
+      if (lineOverviewData) {
+        const gapResult = await computeLineGaps({
+          orgId: ctx.orgId,
+          line,
+          date: referenceDate,
           shiftType,
-          line
+          supabaseClient: ctx.admin,
+          lineOverviewData,
+          strictOrgScope: true,
+        });
+
+        const stationCode = assignment.station?.code;
+        const machineGap = gapResult.machineRows.find(
+          (mr) => mr.stationOrMachineCode === stationCode || mr.stationOrMachine === assignment.station?.name
         );
 
-        if (lineOverviewData) {
-          const gapResult = await computeLineGaps({
-            orgId: activeOrgId,
-            line,
-            date: referenceDate,
-            shiftType,
-            supabaseClient: supabaseAdmin,
-            lineOverviewData,
-            strictOrgScope: true,
-          });
-
-          // Filter to the specific station/machine
-          const stationCode = assignment.station?.code;
-          const machineGap = gapResult.machineRows.find(
-            (mr) => mr.stationOrMachineCode === stationCode || mr.stationOrMachine === assignment.station?.name
-          );
-
-          if (machineGap) {
-            gaps = {
-              requiredHeadcount: machineGap.required,
-              assignedHeadcount: machineGap.assigned,
-              staffing_gap: machineGap.staffingGap,
-              competence_status: machineGap.competenceStatus,
-              competence_gaps: machineGap.competenceGaps.map((cg) => ({
-                skill: cg.skill,
-                skillCode: cg.skillCode,
-                requiredLevel: cg.requiredLevel,
-                currentLevel: cg.currentLevel,
-                severity: cg.severity,
-                suggestedAction: cg.suggestedAction,
-              })),
-            };
-          }
+        if (machineGap) {
+          gaps = {
+            requiredHeadcount: machineGap.required,
+            assignedHeadcount: machineGap.assigned,
+            staffing_gap: machineGap.staffingGap,
+            competence_status: machineGap.competenceStatus,
+            competence_gaps: machineGap.competenceGaps.map((cg) => ({
+              skill: cg.skill,
+              skillCode: cg.skillCode,
+              requiredLevel: cg.requiredLevel,
+              currentLevel: cg.currentLevel,
+              severity: cg.severity,
+              suggestedAction: cg.suggestedAction,
+            })),
+          };
         }
-      } catch (err) {
-        console.error("root-cause: failed to compute gaps", err);
-        // Don't fail the request if gap computation fails
       }
+    } catch (err) {
+      console.error("root-cause: failed to compute gaps", err);
     }
-
-    let competence_root_cause: CompetenceRootCause | undefined;
-    if (line && (rootCause.type === "competence" || gaps?.competence_status === "NO-GO")) {
-      try {
-        const eligibility = await getEligibilityByLine(supabaseAdmin, activeOrgId, line);
-        competence_root_cause = {
-          requiredSkillCodes: eligibility.required_skill_codes,
-          requiredSkills: eligibility.required_skills,
-          stationsRequired: eligibility.stations_required,
-          eligibleOperators: eligibility.employees
-            .filter((e) => e.eligible)
-            .slice(0, 5)
-            .map((e) => ({ employee_number: e.employee_number ?? "", name: e.name })),
-        };
-      } catch (err) {
-        console.error("root-cause: failed to get eligibility", err);
-      }
-    }
-
-    const res = NextResponse.json({
-      root_cause: {
-        ...rootCause,
-        gaps,
-        competence_root_cause,
-      },
-    });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  } catch (error) {
-    console.error("root-cause endpoint error:", error);
-    return NextResponse.json(
-      { error: "Failed to determine root cause" },
-      { status: 500 }
-    );
   }
+
+  let competence_root_cause: CompetenceRootCause | undefined;
+  if (line && (rootCause.type === "competence" || gaps?.competence_status === "NO-GO")) {
+    try {
+      const eligibility = await getEligibilityByLine(ctx.admin, ctx.orgId, line);
+      competence_root_cause = {
+        requiredSkillCodes: eligibility.required_skill_codes,
+        requiredSkills: eligibility.required_skills,
+        stationsRequired: eligibility.stations_required,
+        eligibleOperators: eligibility.employees
+          .filter((e) => e.eligible)
+          .slice(0, 5)
+          .map((e) => ({ employee_number: e.employee_number ?? "", name: e.name })),
+      };
+    } catch (err) {
+      console.error("root-cause: failed to get eligibility", err);
+    }
+  }
+
+  return NextResponse.json({
+    root_cause: {
+      ...rootCause,
+      gaps,
+      competence_root_cause,
+    },
+  });
 }
+
+export const POST = withMutationGovernance(
+  async (ctx) => {
+    try {
+      return await runRootCauseHandler({
+        admin: ctx.admin,
+        orgId: ctx.orgId,
+        body: ctx.body as Record<string, unknown>,
+      });
+    } catch (error) {
+      console.error("root-cause endpoint error:", error);
+      return NextResponse.json(
+        { error: "Failed to determine root cause" },
+        { status: 500 }
+      );
+    }
+  },
+  {
+    route: "/api/cockpit/root-cause",
+    action: "COCKPIT_ROOT_CAUSE",
+    target_type: "shift_assignment",
+    allowNoShiftContext: true,
+    tolerateInvalidJson: true,
+    getTargetIdAndMeta: (body) => ({
+      target_id: (body?.shift_assignment_id as string) ?? "unknown",
+      meta: {},
+    }),
+  }
+);

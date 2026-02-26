@@ -2,14 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 import { getInitialDateFromUrlOrToday, useCockpitFilters } from "@/lib/CockpitFilterContext";
@@ -19,8 +14,21 @@ import { StaffingSuggestModal } from "@/components/cockpit/StaffingSuggestModal"
 import { LineRootCauseDrawer } from "@/components/line-overview/LineRootCauseDrawer";
 import { IssueTable } from "@/components/cockpit/IssueTable";
 import { IssueDrawer } from "@/components/cockpit/IssueDrawer";
+import { DecisionQueueInlinePanel } from "@/components/cockpit/DecisionQueue";
+import { ExecutiveHeader } from "@/components/cockpit/ExecutiveHeader";
+import { InlinePanelShell } from "@/components/cockpit/InlinePanelShell";
 import { InterventionQueue } from "@/components/cockpit/InterventionQueue";
+import { KpiTile } from "@/components/cockpit/KpiTile";
 import { TopOperationalRisksBlock } from "@/components/cockpit/TopOperationalRisksBlock";
+import { ComplianceActionsOverview } from "@/components/cockpit/ComplianceActionsOverview";
+import { ExpiringSoonPanel, type ExpiringRow } from "@/components/cockpit/panels/ExpiringSoonPanel";
+import { InterventionPanel, type InterventionJobRow } from "@/components/cockpit/panels/InterventionPanel";
+import {
+  ReadinessPanel,
+  type ReadinessCounts,
+  type ReadinessStatus,
+  type ReadinessTopStationRow,
+} from "@/components/cockpit/panels/ReadinessPanel";
 import type { CockpitIssueRow } from "@/app/api/cockpit/issues/route";
 import { isDemoMode } from "@/lib/demoRuntime";
 import {
@@ -64,6 +72,7 @@ import { fetchJson } from "@/lib/coreFetch";
 import { cockpitSummaryParams, dateDaysAgo } from "@/lib/client/cockpitUrl";
 import { isLegacyLine } from "@/lib/shared/isLegacyLine";
 import { PageFrame } from "@/components/layout/PageFrame";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { FRAGILITY_PTS } from "@/lib/cockpitCostEngine";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -78,6 +87,28 @@ type GapsLineRow = {
   missing_skill_codes: string[];
   recommended_action: "assign" | "call_in" | "swap";
 };
+
+/** Same mapping as backend executive-kpis: A..H from percent; null -> null. */
+function gradeFor(pct: number | null): string | null {
+  if (pct === null) return null;
+  if (pct >= 95) return "A";
+  if (pct >= 90) return "B";
+  if (pct >= 85) return "C";
+  if (pct >= 80) return "D";
+  if (pct >= 75) return "E";
+  if (pct >= 70) return "F";
+  if (pct >= 60) return "G";
+  return "H";
+}
+
+/** Deterministic bar fill color: null/0 -> neutral grey; A/B -> ok; C/D/E/F -> warn; G/H -> bad. */
+function barClassFor(pct: number | null): string {
+  if (pct === null || pct === 0) return "bg-[var(--surface-3)]";
+  const g = gradeFor(pct);
+  if (g === "A" || g === "B") return "bg-[var(--ds-status-ok)]";
+  if (g === "C" || g === "D" || g === "E" || g === "F") return "bg-[var(--ds-status-warn)]";
+  return "bg-[var(--ds-status-bad)]";
+}
 
 function CockpitSkeleton() {
   return (
@@ -119,7 +150,7 @@ function isLegacyShiftType(shiftCode: string): boolean {
 }
 
 export default function CockpitPage() {
-  const { toast } = useToast();
+  const { toast, toasts } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { date, shiftCode, line, setDate, setShiftCode, setLine } = useCockpitFilters();
@@ -172,12 +203,112 @@ export default function CockpitPage() {
   const [undoUntil, setUndoUntil] = useState<number>(0);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const [markedPlannedIds, setMarkedPlannedIds] = useState<Set<string>>(new Set());
+  const [mode, setMode] = useState<"global" | "shift">("global");
+  const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
+  const [auditEvent, setAuditEvent] = useState<{
+    id: string;
+    action: string;
+    target_type: string;
+    target_id: string | null;
+    legitimacy_status: string;
+    readiness_status: string;
+    reason_codes: string[];
+    meta: Record<string, unknown>;
+    created_at: string;
+  } | null>(null);
+  const handledAuditLinkRef = useRef<string | null>(null);
+  const [activePanel, setActivePanel] = useState<
+    "none" | "decisions" | "blockers" | "readiness" | "restricted" | "expiring" | "interventions"
+  >("none");
+  const [userName, setUserName] = useState<string | null>(null);
+  const [complianceExpiring, setComplianceExpiring] = useState<{
+    expiredCount: number;
+    expiringCount: number;
+    top10: ExpiringRow[];
+  } | null>(null);
+  const [complianceExpiringLoading, setComplianceExpiringLoading] = useState(false);
+  const [interventions, setInterventions] = useState<InterventionJobRow[]>([]);
+  const [interventionsLoading, setInterventionsLoading] = useState(false);
 
   const [legitimacyDrilldown, setLegitimacyDrilldown] = useState<ShiftLegitimacyDrilldown | null>(null);
   const [legitimacyDrilldownLoading, setLegitimacyDrilldownLoading] = useState(false);
-  const hasShiftCode = shiftCode.trim().length > 0;
 
-  // Only query params: date, shift_code, optional line, optional show_resolved=1. Default show_resolved OFF.
+  const [executiveKpis, setExecutiveKpis] = useState<{
+    ok: boolean;
+    overall_percent: number | null;
+    grade: string | null;
+    pillars: { safety: number | null; technical: number | null; compliance: number | null };
+    supported: boolean;
+    reasons?: string[];
+  } | null>(null);
+  const [executiveKpisLoading, setExecutiveKpisLoading] = useState(false);
+  const [governanceKpis, setGovernanceKpis] = useState<{
+    ok: boolean;
+    window_hours: number;
+    blocking_events_24h: number;
+  } | null>(null);
+  const [governanceKpisLoading, setGovernanceKpisLoading] = useState(false);
+  const [birthdays, setBirthdays] = useState<{
+    ok: boolean;
+    supported: boolean;
+    birthdays: Array<{
+      employee_id: string;
+      employee_name: string;
+      employee_number: string;
+      line: string | null;
+      date: string;
+      days_left: number;
+    }>;
+    reasons?: string[];
+  } | null>(null);
+  const [birthdaysLoading, setBirthdaysLoading] = useState(false);
+
+  const [regulatoryRadar, setRegulatoryRadar] = useState<{
+    ok: boolean;
+    supported: boolean;
+    signals: Array<{
+      id: string;
+      source_type: "AUTO" | "MANUAL";
+      impact_level: "LOW" | "MEDIUM" | "HIGH";
+      title: string;
+      summary: string | null;
+      source_name: string | null;
+      source_url: string | null;
+      effective_date: string | null;
+      time_to_impact_days: number | null;
+      relevance_score: number;
+      created_at: string;
+    }>;
+  } | null>(null);
+  const [regulatoryRadarLoading, setRegulatoryRadarLoading] = useState(false);
+  const [creatingRadarActionSignalId, setCreatingRadarActionSignalId] = useState<string | null>(null);
+
+  const [complianceActionsSummary, setComplianceActionsSummary] = useState<{
+    openCount: number;
+    overdueCount: number;
+    due7DaysCount: number;
+    topAssignees: Array<{ assignedToUserId: string | null; openCount: number; displayName: string }>;
+  } | null>(null);
+  const [complianceActionsSummaryLoading, setComplianceActionsSummaryLoading] = useState(false);
+
+  const isGlobal = mode === "global";
+  const hasShiftCode = shiftCode.trim().length > 0;
+  const shiftReady = isGlobal || (date && hasShiftCode);
+
+  // GLOBAL: mode=global, date optional (API uses today if omitted). SHIFT: mode=shift, date + shift_code required.
+  const issuesParams = (() => {
+    const p = new URLSearchParams();
+    p.set("mode", mode);
+    if (isGlobal) {
+      if (date) p.set("date", date);
+    } else {
+      p.set("date", date);
+      if (shiftCode) p.set("shift_code", shiftCode);
+    }
+    if (line && line !== "all") p.set("line", line);
+    if (showResolved) p.set("show_resolved", "1");
+    return p;
+  })();
   const summaryParams = (() => {
     const p = new URLSearchParams();
     if (date) p.set("date", date);
@@ -186,20 +317,16 @@ export default function CockpitPage() {
     if (showResolved) p.set("show_resolved", "1");
     return p;
   })();
-  const issuesParams = (() => {
-    const p = new URLSearchParams();
-    if (date) p.set("date", date);
-    if (shiftCode) p.set("shift_code", shiftCode);
-    if (line && line !== "all") p.set("line", line);
-    if (showResolved) p.set("show_resolved", "1");
-    return p;
-  })();
-  const summaryUrl = `/api/cockpit/summary?${summaryParams.toString()}`;
   const issuesUrl = `/api/cockpit/issues?${issuesParams.toString()}`;
+  const summaryUrl = `/api/cockpit/summary?${summaryParams.toString()}`;
 
-  // URL sync: read date, shift_code, line from URL on mount
+  // URL sync: read mode, date, shift_code, line from URL on mount; default mode=global
   useEffect(() => {
     if (urlSyncedRef.current) return;
+    const qMode = searchParams.get("mode")?.toLowerCase();
+    const initialMode = qMode === "shift" ? "shift" : "global";
+    setMode(initialMode);
+
     const rawDate = searchParams.get("date")?.trim();
     const urlDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
     const initialDate = urlDate ?? getInitialDateFromUrlOrToday(searchParams);
@@ -210,17 +337,22 @@ export default function CockpitPage() {
     if (qShift) setShiftCode(qShift);
     if (qLine != null) setLine(qLine === "" || qLine === "all" ? "all" : qLine);
 
-    if (!urlDate) {
-      const p = new URLSearchParams(searchParams.toString());
-      p.set("date", initialDate);
-      router.replace(`/app/cockpit?${p.toString()}`, { scroll: false });
-    }
+    const p = new URLSearchParams(searchParams.toString());
+    if (!p.get("mode")) p.set("mode", "global");
+    if (!urlDate) p.set("date", initialDate);
+    const next = p.toString();
+    const current = searchParams.toString();
+    if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
     urlSyncedRef.current = true;
   }, [searchParams, setDate, setShiftCode, setLine, router, date]);
 
-  // Data-driven shift selector: fetch shift codes for selected date, then validate/fallback shift_code.
+  const handleModeChange = (newMode: "global" | "shift") => {
+    setMode(newMode);
+  };
+
+  // Data-driven shift selector: fetch shift codes for selected date (SHIFT mode only).
   useEffect(() => {
-    if (isDemoMode()) return;
+    if (isDemoMode() || isGlobal) return;
     let cancelled = false;
     const p = new URLSearchParams({ date });
     fetchJson<{ ok: boolean; shift_codes?: string[] }>(`/api/cockpit/shift-codes?${p.toString()}`)
@@ -258,12 +390,13 @@ export default function CockpitPage() {
         setAvailableShiftCodes([]);
       });
     return () => { cancelled = true; };
-  }, [date, sessionOk]);
+  }, [date, sessionOk, isGlobal]);
 
-  // URL sync: push date, shift_code, line to URL when they change
+  // URL sync: push mode, date, shift_code, line to URL when they change
   useEffect(() => {
     if (!urlSyncedRef.current) return;
     const p = new URLSearchParams(searchParams.toString());
+    p.set("mode", mode);
     p.set("date", date);
     if (shiftCode) p.set("shift_code", shiftCode);
     else p.delete("shift_code");
@@ -272,7 +405,7 @@ export default function CockpitPage() {
     const next = p.toString();
     const current = searchParams.toString();
     if (next !== current) router.replace(`/app/cockpit?${next}`, { scroll: false });
-  }, [date, shiftCode, line, router]);
+  }, [mode, date, shiftCode, line, searchParams, router]);
 
   // Dev-only safety: warn if URL/date ever diverge after sync
   useEffect(() => {
@@ -283,6 +416,49 @@ export default function CockpitPage() {
       console.warn("[cockpit] Date diverged from URL", { stateDate: date, urlDate });
     }
   }, [date, searchParams]);
+
+  // Deep-link from HR Inbox (governance): action + target_id -> fetch audit event and open drawer
+  useEffect(() => {
+    const linkAction = searchParams.get("action")?.trim() ?? null;
+    const linkTargetId = searchParams.get("target_id")?.trim() ?? null;
+    if (!linkAction && !linkTargetId) {
+      handledAuditLinkRef.current = null;
+      return;
+    }
+    const key = `${linkAction ?? ""}|${linkTargetId ?? ""}`;
+    if (handledAuditLinkRef.current === key) return;
+    handledAuditLinkRef.current = key;
+    const params = new URLSearchParams();
+    if (linkAction) params.set("action", linkAction);
+    if (linkTargetId) params.set("target_id", linkTargetId);
+    fetchJson<{ ok: boolean; event?: { id: string; action: string; target_type: string; target_id: string | null; legitimacy_status: string; readiness_status: string; reason_codes: string[]; meta: Record<string, unknown>; created_at: string } | null }>(`/api/cockpit/audit?${params.toString()}`)
+      .then((res) => {
+        if (!res.ok) {
+          toast({ title: "Failed to load audit event", variant: "destructive" });
+          return;
+        }
+        const event = res.data?.event ?? null;
+        if (!event) {
+          toast({ title: "No matching audit event found", variant: "destructive" });
+          return;
+        }
+        setAuditEvent({
+          id: (event as { id: string }).id,
+          action: (event as { action: string }).action,
+          target_type: (event as { target_type: string }).target_type,
+          target_id: (event as { target_id: string | null }).target_id ?? null,
+          legitimacy_status: (event as { legitimacy_status: string }).legitimacy_status,
+          readiness_status: (event as { readiness_status: string }).readiness_status,
+          reason_codes: Array.isArray((event as { reason_codes?: string[] }).reason_codes) ? (event as { reason_codes: string[] }).reason_codes : [],
+          meta: (typeof (event as { meta?: unknown }).meta === "object" && (event as { meta?: unknown }).meta !== null ? (event as { meta: Record<string, unknown> }).meta : {}) as Record<string, unknown>,
+          created_at: (event as { created_at: string }).created_at,
+        });
+        setAuditDrawerOpen(true);
+      })
+      .catch(() => {
+        toast({ title: "No matching audit event found", variant: "destructive" });
+      });
+  }, [searchParams, toast]);
 
   // P1.3: Undo countdown (30s)
   useEffect(() => {
@@ -302,9 +478,9 @@ export default function CockpitPage() {
     return () => clearInterval(id);
   }, [lastResolvedIssue, undoUntil]);
 
-  // Load cockpit summary (date, shift_code, optional line). Skip when session invalid to avoid 401 spam.
+  // Load cockpit summary (SHIFT mode only; date + shift required). GLOBAL uses issues[] for counts.
   useEffect(() => {
-    if (!sessionOk || !hasShiftCode) {
+    if (!sessionOk || isGlobal || !hasShiftCode) {
       setSummary(null);
       setSummaryLoading(false);
       return;
@@ -343,10 +519,10 @@ export default function CockpitPage() {
         if (!cancelled) setSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionOk, hasShiftCode, summaryUrl, toast]);
+  }, [sessionOk, hasShiftCode, isGlobal, summaryUrl, toast]);
 
   const handleJumpLatest = async () => {
-    if (jumpingLatest || isDemoMode() || !hasShiftCode) return;
+    if (jumpingLatest || isDemoMode() || isGlobal || !hasShiftCode) return;
     setJumpingLatest(true);
     try {
       const searchBack = async (fromDate: string, daysLeft: number): Promise<string | null> => {
@@ -375,7 +551,16 @@ export default function CockpitPage() {
 
   // Load Tomorrow's Gaps (top risks) for same date/shift — same engine as Tomorrow's Gaps page. Do not set pageError so cockpit stays usable; block shows inline failure.
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (!isGlobal && !shiftReady) {
+      setIssues([]);
+      setIssuesLoading(false);
+      setIssuesError(null);
+    }
+  }, [isGlobal, shiftReady]);
+
+  // Load Tomorrow's Gaps (top risks) for same date/shift — SHIFT mode only
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk || isGlobal || !hasShiftCode) return;
     if (!isLegacyShiftType(shiftCode)) {
       setGapsLines([]);
       setGapsLoading(false);
@@ -413,9 +598,10 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [date, shiftCode, sessionOk, hasShiftCode]);
 
-  // Load Issue Inbox (date, shift_code, optional line)
+  // Load Issue Inbox: GLOBAL (mode=global, no shift required); SHIFT (date + shift required).
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (isDemoMode() || !sessionOk) return;
+    if (!isGlobal && !shiftReady) return;
     let cancelled = false;
     setIssuesLoading(true);
     setIssuesError(null);
@@ -442,11 +628,11 @@ export default function CockpitPage() {
         if (!cancelled) setIssuesLoading(false);
       });
     return () => { cancelled = true; };
-  }, [issuesUrl, sessionOk, hasShiftCode, toast, issuesRefreshKey]);
+  }, [issuesUrl, sessionOk, isGlobal, shiftReady, toast, issuesRefreshKey]);
 
-  // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (for blocking/at-risk lists)
+  // Fetch shift legitimacy drilldown when status is ILLEGAL or WARNING (SHIFT mode only)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !summary || !hasShiftCode) return;
+    if (isDemoMode() || !sessionOk || !summary || isGlobal || !hasShiftCode) return;
     const status = summary.shift_legitimacy_status;
     if (status !== "ILLEGAL" && status !== "WARNING") {
       setLegitimacyDrilldown(null);
@@ -482,7 +668,7 @@ export default function CockpitPage() {
         if (!cancelled) setLegitimacyDrilldownLoading(false);
       });
     return () => { cancelled = true; };
-  }, [date, shiftCode, line, sessionOk, hasShiftCode, summary?.shift_legitimacy_status, summary != null]);
+  }, [date, shiftCode, line, sessionOk, hasShiftCode, isGlobal, summary?.shift_legitimacy_status, summary != null]);
 
   const topRisks = gapsLines
     .filter((l) => l.competenceStatus === "NO-GO" || l.competenceStatus === "WARNING")
@@ -492,9 +678,9 @@ export default function CockpitPage() {
     })
     .slice(0, 5);
 
-  // Load line options from v_cockpit_station_summary.area for selected date+shift (no legacy codes)
+  // Load line options from v_cockpit_station_summary.area for selected date+shift (SHIFT mode only)
   useEffect(() => {
-    if (isDemoMode() || !sessionOk || !hasShiftCode) return;
+    if (isDemoMode() || !sessionOk || isGlobal || !hasShiftCode) return;
     const p = new URLSearchParams({ date, shift_code: shiftCode });
     const url = `/api/cockpit/lines?${p.toString()}`;
     fetchJson<{ lines?: string[] }>(url)
@@ -504,7 +690,241 @@ export default function CockpitPage() {
         if ("source" in res.data && res.data.source) console.debug("[cockpit lines] source:", res.data.source);
       })
       .catch((err) => console.error("[cockpit lines]", err));
-  }, [date, shiftCode, sessionOk, hasShiftCode]);
+  }, [date, shiftCode, sessionOk, hasShiftCode, isGlobal]);
+
+  // Compliance overview for Expiring soon tile + panel (single shared fetch)
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setComplianceExpiringLoading(true);
+    fetchJson<{
+      ok?: boolean;
+      kpis?: Record<string, { valid: number; expiring: number; expired: number; missing: number; waived: number }>;
+      rows?: Array<{
+        employee_id: string;
+        employee_name: string;
+        compliance_name: string;
+        status: string;
+        valid_to: string | null;
+        line: string | null;
+      }>;
+    }>("/api/compliance/overview")
+      .then((res) => {
+        if (!res.ok || !res.data?.ok || cancelled) return;
+        const kpis = res.data.kpis ?? {};
+        const expiredCount = Object.values(kpis).reduce((s, k) => s + (k.expired ?? 0), 0);
+        const expiringCount = Object.values(kpis).reduce((s, k) => s + (k.expiring ?? 0), 0);
+        let rows = (res.data.rows ?? []).filter(
+          (r) => r.status === "expired" || r.status === "expiring"
+        ) as Array<{ employee_id: string; employee_name: string; compliance_name: string; status: string; valid_to: string | null; line: string | null }>;
+        if (line && line !== "all") {
+          rows = rows.filter((r) => (r.line ?? "").trim() === line.trim());
+        }
+        rows.sort((a, b) => {
+          const aExpired = a.status === "expired" ? 0 : 1;
+          const bExpired = b.status === "expired" ? 0 : 1;
+          if (aExpired !== bExpired) return aExpired - bExpired;
+          const va = a.valid_to ?? "";
+          const vb = b.valid_to ?? "";
+          return va.localeCompare(vb);
+        });
+        const top10: ExpiringRow[] = rows.slice(0, 10).map((r) => ({
+          employee_id: r.employee_id,
+          employee_name: r.employee_name,
+          compliance_name: r.compliance_name,
+          valid_to: r.valid_to,
+          status: r.status === "expired" ? "expired" : "expiring",
+        }));
+        if (!cancelled) {
+          setComplianceExpiring({ expiredCount, expiringCount, top10 });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setComplianceExpiring(null);
+      })
+      .finally(() => {
+        if (!cancelled) setComplianceExpiringLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk, line]);
+
+  // Active HR jobs for Intervention Queue (CREATED, SENT, SIGNED)
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setInterventionsLoading(true);
+    fetchJson<InterventionJobRow[]>("/api/hr/jobs?active=true")
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && Array.isArray(res.data)) {
+          setInterventions(res.data);
+        } else {
+          setInterventions([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInterventions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setInterventionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Executive KPIs (global row) — roadmap B
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setExecutiveKpisLoading(true);
+    fetchJson<{
+      ok: boolean;
+      overall_percent: number | null;
+      grade: string | null;
+      pillars: { safety: number | null; technical: number | null; compliance: number | null };
+      supported: boolean;
+      reasons?: string[];
+    }>("/api/cockpit/executive-kpis")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setExecutiveKpis(res.data);
+        else if (!cancelled) setExecutiveKpis(null);
+      })
+      .catch(() => {
+        if (!cancelled) setExecutiveKpis(null);
+      })
+      .finally(() => {
+        if (!cancelled) setExecutiveKpisLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Blocking governance events (24h) — tenant-scoped KPI
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setGovernanceKpisLoading(true);
+    fetchJson<{ ok: boolean; window_hours: number; blocking_events_24h: number }>(
+      "/api/cockpit/governance-kpis?window_hours=24"
+    )
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setGovernanceKpis(res.data);
+        else if (!cancelled) setGovernanceKpis(null);
+      })
+      .catch(() => {
+        if (!cancelled) setGovernanceKpis(null);
+      })
+      .finally(() => {
+        if (!cancelled) setGovernanceKpisLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Compliance actions summary (org-level) for overview block
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setComplianceActionsSummaryLoading(true);
+    fetchJson<{
+      ok: boolean;
+        summary?: {
+        openCount: number;
+        overdueCount: number;
+        due7DaysCount: number;
+        topAssignees: Array<{ assignedToUserId: string | null; openCount: number; displayName: string }>;
+      };
+    }>("/api/cockpit/compliance-actions-summary")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data?.summary) setComplianceActionsSummary(res.data.summary);
+        else if (!cancelled) setComplianceActionsSummary(null);
+      })
+      .catch(() => {
+        if (!cancelled) setComplianceActionsSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setComplianceActionsSummaryLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Upcoming birthdays — roadmap B
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setBirthdaysLoading(true);
+    fetchJson<{
+      ok: boolean;
+      supported: boolean;
+      birthdays: Array<{
+        employee_id: string;
+        employee_name: string;
+        employee_number: string;
+        line: string | null;
+        date: string;
+        days_left: number;
+      }>;
+      reasons?: string[];
+    }>("/api/cockpit/birthdays?days=14")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setBirthdays(res.data);
+        else if (!cancelled) setBirthdays(null);
+      })
+      .catch(() => {
+        if (!cancelled) setBirthdays(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBirthdaysLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Regulatory Radar — read-only; do not render block on failure or supported=false
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setRegulatoryRadarLoading(true);
+    fetchJson<{
+      ok: boolean;
+      supported: boolean;
+      signals: Array<{
+        id: string;
+        source_type: "AUTO" | "MANUAL";
+        impact_level: "LOW" | "MEDIUM" | "HIGH";
+        title: string;
+        summary: string | null;
+        source_name: string | null;
+        source_url: string | null;
+        effective_date: string | null;
+        time_to_impact_days: number | null;
+        relevance_score: number;
+        created_at: string;
+      }>;
+    }>("/api/cockpit/regulatory-radar")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data) setRegulatoryRadar(res.data);
+        else if (!cancelled) setRegulatoryRadar(null);
+      })
+      .catch(() => {
+        if (!cancelled) setRegulatoryRadar(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRegulatoryRadarLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Optional: user display name from whoami (existing endpoint)
+  useEffect(() => {
+    if (isDemoMode()) return;
+    fetchJson<{ user?: { email?: string | null }; email?: string | null }>("/api/auth/whoami")
+      .then((res) => {
+        if (!res.ok) return;
+        const email = res.data?.user?.email ?? res.data?.email;
+        if (typeof email === "string" && email.includes("@")) {
+          const part = email.split("@")[0];
+          if (part) setUserName(part.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const demo = isDemoMode();
@@ -672,6 +1092,21 @@ export default function CockpitPage() {
     }
   };
 
+  /** Plan action/training: client-only planned state; do not close drawer or remove issue. */
+  const handlePlanAction = () => {
+    if (selectedIssue) {
+      setMarkedPlannedIds((prev) => new Set(prev).add(selectedIssue.issue_id));
+      toast({ title: "Planned" });
+    }
+  };
+
+  const handlePlanTraining = () => {
+    if (selectedIssue) {
+      setMarkedPlannedIds((prev) => new Set(prev).add(selectedIssue.issue_id));
+      toast({ title: "Planned" });
+    }
+  };
+
   const handleResolveUndo = () => {
     if (!lastResolvedIssue) return;
     setIssues((prev) => [...prev, lastResolvedIssue].sort((a, b) => (a.issue_id < b.issue_id ? -1 : 1)));
@@ -681,11 +1116,50 @@ export default function CockpitPage() {
     toast({ title: "Undo restored in UI; refresh to confirm." });
   };
 
+  const handleCreateRadarActionDraft = async (signalId: string) => {
+    if (creatingRadarActionSignalId) return;
+    setCreatingRadarActionSignalId(signalId);
+    try {
+      const res = await fetch("/api/cockpit/regulatory-radar/create-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signal_id: signalId }),
+        credentials: "include",
+      });
+      const data = (await res.json()) as { ok?: boolean; draft_id?: string; audit_url?: string; error?: string };
+      if (res.ok && data.ok && data.draft_id) {
+        const auditUrl = data.audit_url ?? `/app/admin/audit?id=${data.draft_id}`;
+        toast({
+          title: "Draft created",
+          description: "Saved to audit trail.",
+          action: {
+            label: "Open audit",
+            onClick: () => router.push(auditUrl),
+          },
+        });
+        return;
+      }
+      toast({
+        title: "Create action failed",
+        description: data.error ?? (res.status === 404 ? "Signal not found" : "Request failed"),
+        variant: "destructive",
+      });
+    } catch (err) {
+      toast({
+        title: "Create action failed",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingRadarActionSignalId(null);
+    }
+  };
+
   // Fragility Index 0–100 from severity (BLOCKING = 25 pts, WARNING = 8 pts). UI-only, no backend.
-  const blockingCount = summary?.active_blocking ?? issues.filter((i) => !i.resolved && i.severity === "BLOCKING").length;
-  const warningCount = summary?.active_nonblocking ?? issues.filter((i) => !i.resolved && i.severity === "WARNING").length;
-  const fragilityBlockingPts = blockingCount * 25;
-  const fragilityWarningPts = warningCount * 8;
+  const _blockingForFragility = issues.filter((i) => i.severity === "BLOCKING").length;
+  const _warningForFragility = issues.filter((i) => i.severity === "WARNING").length;
+  const fragilityBlockingPts = _blockingForFragility * 25;
+  const fragilityWarningPts = _warningForFragility * 8;
   const fragilityIndex = Math.min(100, fragilityBlockingPts + fragilityWarningPts);
 
   // Line options from /api/cockpit/lines only; exclude any legacy display names
@@ -703,90 +1177,321 @@ export default function CockpitPage() {
     return <CockpitSkeleton />;
   }
 
-  const filterBar = (
-    <>
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-8 px-2 rounded-sm border border-[var(--hairline)] bg-[var(--surface)] text-[var(--text)] cockpit-body"
-            data-testid="input-date"
-          />
-          <Select value={shiftCode || undefined} onValueChange={setShiftCode} disabled={availableShiftCodes.length === 0}>
-            <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-shift">
-              <SelectValue placeholder="Shift" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableShiftCodes.length > 0 ? (
-                availableShiftCodes.map((code) => (
-                  <SelectItem key={code} value={code}>{code}</SelectItem>
-                ))
-              ) : (
-                <SelectItem value="__no_shift_codes" disabled>No shifts</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-          {shiftCodesError ? (
-            <span className="cockpit-body text-[11px] text-red-600" data-testid="shift-codes-error">
-              {shiftCodesError}
-            </span>
-          ) : null}
-          <Select value={line} onValueChange={setLine}>
-            <SelectTrigger className="h-8 w-[110px] px-2 text-[13px]" data-testid="select-line">
-              <SelectValue placeholder="Line" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Lines</SelectItem>
-              {lineOptions.map((l) => (
-                <SelectItem key={l} value={l}>{l}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label className="flex items-center gap-1.5 cockpit-body cursor-pointer ml-2">
-            <input
-              type="checkbox"
-              checked={showResolved}
-              onChange={(e) => setShowResolved(e.target.checked)}
-              className="rounded-sm border-[var(--hairline)]"
-              data-testid="cockpit-show-resolved"
-            />
-            Show resolved
-          </label>
-        </div>
-        {!summaryLoading && summary != null && (
-          <span className="gov-kicker cockpit-num" data-testid="cockpit-active-count">
-            Open decisions: {summary.active_total}
-          </span>
-        )}
-      </header>
-    </>
-  );
+  const handleTileClick = (id: typeof activePanel) => {
+    setActivePanel((current) => (current === id ? "none" : id));
+  };
 
-  const debugPanel = (
-    <div data-testid="cockpit-debug-panel">
-      <p className="font-semibold text-muted-foreground mb-1">Debug (dev only)</p>
-      <p><span className="text-muted-foreground">Summary:</span> {typeof window !== "undefined" ? `${window.location.origin}${summaryUrl}` : summaryUrl}</p>
-      <p><span className="text-muted-foreground">Decisions API:</span> {typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl}</p>
-      <Button
-        size="sm"
-        variant="outline"
-        className="mt-2"
-        onClick={() => {
-          const full = typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl;
-          void navigator.clipboard.writeText(full);
-          toast({ title: "Copied decisions API URL" });
-        }}
-      >
-        Copy decisions API URL
+  function getRootCausePrimary(issue: CockpitIssueRow): string {
+    const rc = issue.root_cause as Record<string, unknown> | null | undefined;
+    const primary = rc?.primary;
+    return typeof primary === "string" ? primary : "—";
+  }
+
+  const debugPanel =
+    process.env.NODE_ENV === "production" ? null : (
+      <div data-testid="cockpit-debug-panel" className="text-xs opacity-70 text-muted-foreground">
+        <p className="font-semibold mb-1">Debug (dev only)</p>
+        <p><span>Summary:</span> {typeof window !== "undefined" ? `${window.location.origin}${summaryUrl}` : summaryUrl}</p>
+        <p><span>Decisions API:</span> {typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2"
+          onClick={() => {
+            const full = typeof window !== "undefined" ? `${window.location.origin}${issuesUrl}` : issuesUrl;
+            void navigator.clipboard.writeText(full);
+            toast({ title: "Copied decisions API URL" });
+          }}
+        >
+          Copy decisions API URL
+        </Button>
+      </div>
+    );
+
+  // Deterministic readiness from issues[] (no backend change)
+  const totalActive = issues.length;
+  const blockingCount = issues.filter((i) => i.severity === "BLOCKING").length;
+  const warningCount = issues.filter((i) => i.severity === "WARNING").length;
+  const illegalCount = issues.filter((i) => (i.issue_type ?? (i as { type?: string }).type) === "ILLEGAL").length;
+  const unstaffedCount = issues.filter((i) => (i.issue_type ?? (i as { type?: string }).type) === "UNSTAFFED").length;
+  const blockingIssues = issues.filter((i) => i.severity === "BLOCKING");
+  const warningIssues = issues.filter((i) => i.severity === "WARNING");
+  const uniqueStationsBlocking = new Set(blockingIssues.map((i) => i.station_id ?? i.station_name ?? "")).size;
+  const uniqueStationsWarning = new Set(warningIssues.map((i) => i.station_id ?? i.station_name ?? "")).size;
+  const readinessStatus: ReadinessStatus =
+    illegalCount > 0 ? "NO-GO" : blockingCount > 0 ? "NO-GO" : warningCount > 0 ? "WARNING" : "GO";
+  const readinessSubtitle =
+    readinessStatus === "NO-GO"
+      ? `${blockingCount} blocking issue(s) across ${uniqueStationsBlocking} station(s)`
+      : readinessStatus === "WARNING"
+        ? `${warningCount} warning(s) across ${uniqueStationsWarning} station(s)`
+        : "No active issues";
+  const issueTypeOrder = (t: string) => (t === "ILLEGAL" ? 0 : t === "UNSTAFFED" ? 1 : t === "NO_GO" ? 2 : 3);
+  const topStations: ReadinessTopStationRow[] = [...issues]
+    .sort((a, b) => {
+      if (a.severity !== b.severity) return a.severity === "BLOCKING" ? -1 : 1;
+      return issueTypeOrder((a.issue_type ?? (a as { type?: string }).type) ?? "") - issueTypeOrder((b.issue_type ?? (b as { type?: string }).type) ?? "");
+    })
+    .slice(0, 8)
+    .map((issue) => ({
+      station_name: issue.station_name ?? issue.station_code ?? "",
+      station_id: issue.station_id ?? "",
+      issue_type: (issue.issue_type ?? (issue as { type?: string }).type) ?? "",
+      root_cause_primary: getRootCausePrimary(issue),
+      shift_code: issue.shift_code ?? "",
+      date: issue.date ?? "",
+      issue,
+    }));
+  const readinessCounts: ReadinessCounts = {
+    totalActive,
+    blockingCount,
+    warningCount,
+    illegalCount,
+    unstaffedCount,
+  };
+  const blockersCount = blockingCount;
+
+  const emptyStatePanel = (
+    <div className="py-8 text-center">
+      <p className="text-sm" style={{ color: "var(--text-2)" }}>
+        Not configured yet for this pilot dataset.
+      </p>
+      <Button disabled className="mt-3" size="sm" variant="outline">
+        Configure
       </Button>
     </div>
   );
 
   return (
-    <PageFrame filterBar={filterBar} debugPanel={debugPanel}>
-      {summary && summary.active_total === 0 && !summaryLoading && (
+    <PageFrame debugPanel={debugPanel}>
+      {/* Executive KPI row + Birthdays (roadmap B) — first section */}
+      {!isDemoMode() && (
+        <div className="mb-6 space-y-4" data-testid="cockpit-executive-kpi-section">
+          {/* Executive Alert Strip: show only when blocking governance events (24h) > 0 */}
+          {!governanceKpisLoading &&
+            typeof governanceKpis?.blocking_events_24h === "number" &&
+            governanceKpis.blocking_events_24h > 0 && (
+              <div
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2"
+                data-testid="exec-alert-blocking-governance"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <TriangleAlert className="h-4 w-4 shrink-0 text-[var(--text-2)]" aria-hidden />
+                  <span className="text-sm font-medium truncate" style={{ color: "var(--text-2)" }}>
+                    Blocking governance activity detected (last 24h).
+                  </span>
+                </div>
+                <Link
+                  href="/app/admin/audit?impact=blocking&window_hours=24"
+                  className="shrink-0 text-xs font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--hairline)] focus:ring-offset-1 rounded"
+                  style={{ color: "var(--text)" }}
+                >
+                  Open audit
+                </Link>
+              </div>
+            )}
+          {/* Single Industrial Readiness card — Overall + 3 pillar rows */}
+          <div
+            className="w-full rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-md transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[var(--hairline)] focus-visible:ring-offset-2 outline-none"
+            data-testid="exec-kpi-overall"
+            tabIndex={0}
+          >
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Industrial Readiness</h3>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>Executive readiness status (global)</p>
+              </div>
+              {executiveKpis && !executiveKpis.supported && (
+                <span
+                  className="text-[10px] font-medium uppercase text-[var(--text-2)] shrink-0"
+                  title={executiveKpis.reasons?.length ? executiveKpis.reasons.join(", ") : "Some pillars are unavailable"}
+                >
+                  Partial data
+                </span>
+              )}
+            </div>
+            {(executiveKpisLoading || !executiveKpis) ? (
+              <>
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="h-7 w-10 rounded animate-pulse bg-[var(--surface-3)]" />
+                  <div className="h-5 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                </div>
+                <div className="mt-1 h-3 w-full rounded-full bg-[var(--surface-3)] overflow-hidden animate-pulse" />
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="mt-3 flex items-center justify-between gap-2">
+                    <div className="h-4 w-16 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="flex-1 max-w-[60%] ml-2 h-1.5 rounded-full bg-[var(--surface-3)] animate-pulse" />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                {/* Overall row — dominant */}
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    {executiveKpis.grade != null && (
+                      <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
+                        {executiveKpis.grade}
+                      </span>
+                    )}
+                    <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-2)" }}>Overall</span>
+                  </div>
+                  <span className="text-lg tabular-nums" style={{ color: "var(--text-2)" }}>
+                    {executiveKpis.overall_percent != null ? `${executiveKpis.overall_percent}%` : "—"}
+                  </span>
+                </div>
+                <div className="mt-1 h-3 w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+                  <div
+                    className={["h-full rounded-full shadow-sm transition-all duration-500 ease-out", barClassFor(executiveKpis.overall_percent)].join(" ")}
+                    style={{ width: `${executiveKpis.overall_percent != null ? Math.min(100, Math.max(0, executiveKpis.overall_percent)) : 0}%` }}
+                  />
+                </div>
+                {/* Pillar rows */}
+                {(["safety", "technical", "compliance"] as const).map((pillar) => {
+                  const pct = executiveKpis.pillars[pillar];
+                  const label = pillar.charAt(0).toUpperCase() + pillar.slice(1);
+                  return (
+                    <div key={pillar} className="mt-3 flex items-center gap-2 flex-wrap" data-testid={`exec-kpi-${pillar}`}>
+                      <span className="text-xs font-medium uppercase tracking-wider w-20 shrink-0" style={{ color: "var(--text-2)" }}>{label}</span>
+                      {pct != null ? (
+                        <>
+                          {gradeFor(pct) != null && (
+                            <span className="text-xs font-medium tabular-nums shrink-0" style={{ color: "var(--text-2)" }} title={`Grade ${gradeFor(pct)} based on percent thresholds`}>{gradeFor(pct)}</span>
+                          )}
+                          <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{pct}%</span>
+                          <div className="flex-1 min-w-0 max-w-[60%] h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                            <div className={["h-full rounded-full", barClassFor(pct)].join(" ")} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-sm shrink-0" style={{ color: "var(--text-2)" }}>—</span>
+                          <div className="flex-1 min-w-0 max-w-[60%] h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
+                            <div className="h-full w-0 rounded-full bg-[var(--surface-3)]" />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Blocking governance events (24h) */}
+                <div className="mt-3 flex items-center gap-2 flex-wrap" data-testid="exec-kpi-blocking-governance">
+                  <span className="text-xs font-medium uppercase tracking-wider shrink-0" style={{ color: "var(--text-2)" }}>Blocking governance events (24h)</span>
+                  {governanceKpisLoading ? (
+                    <div className="h-4 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                  ) : governanceKpis?.ok === true && typeof governanceKpis.blocking_events_24h === "number" ? (
+                    <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{governanceKpis.blocking_events_24h}</span>
+                  ) : (
+                    <span className="text-sm shrink-0" style={{ color: "var(--text-2)" }}>—</span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          {/* Regulatory Radar — skeleton when loading; content when supported and signals.length > 0 */}
+          {(regulatoryRadarLoading || (regulatoryRadar?.supported && (regulatoryRadar?.signals?.length ?? 0) > 0)) && (
+            <div
+              className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
+              data-testid="cockpit-regulatory-radar-block"
+            >
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Regulatory Radar</h3>
+              <p className="text-xs mt-0.5 mb-3" style={{ color: "var(--text-2)" }}>External regulatory signals impacting operations</p>
+              {regulatoryRadarLoading ? (
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="h-5 w-14 rounded animate-pulse bg-[var(--surface-3)] shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="h-4 rounded animate-pulse bg-[var(--surface-3)]" style={{ width: "80%" }} />
+                    <div className="h-3 rounded animate-pulse bg-[var(--surface-3)]" style={{ width: "33%" }} />
+                  </div>
+                </div>
+              ) : (
+                <>
+              <ul className="space-y-3">
+                {(regulatoryRadar?.signals ?? []).map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-start gap-2">
+                    <span
+                      className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shrink-0"
+                      title={`Impact level: ${s.impact_level}`}
+                      style={{
+                        background:
+                          s.impact_level === "HIGH"
+                            ? "var(--ds-status-bad)"
+                            : s.impact_level === "MEDIUM"
+                              ? "var(--ds-status-warn)"
+                              : "var(--surface-3)",
+                        color: s.impact_level === "LOW" ? "var(--text-2)" : undefined,
+                      }}
+                    >
+                      {s.impact_level}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{s.title}</span>
+                      {s.effective_date && (
+                        <span className="text-xs ml-2" style={{ color: "var(--text-2)" }}>{s.effective_date}</span>
+                      )}
+                      {s.time_to_impact_days != null && (
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-2)" }}>In {s.time_to_impact_days} days</p>
+                      )}
+                      <p className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>Relevance {s.relevance_score}</p>
+                    </div>
+                    {creatingRadarActionSignalId === s.id ? (
+                      <span className="text-xs text-[var(--text-2)] shrink-0">Creating…</span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 h-7 text-[12px]"
+                        onClick={() => handleCreateRadarActionDraft(s.id)}
+                        disabled={!!creatingRadarActionSignalId}
+                      >
+                        Create Action Draft
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+                </>
+              )}
+            </div>
+          )}
+          {/* Birthdays block */}
+          <div
+            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-4 shadow-sm"
+            data-testid="cockpit-birthdays-block"
+          >
+            <h3 className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-2)" }}>Upcoming birthdays</h3>
+            {birthdaysLoading ? (
+              <ul className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2">
+                    <div className="h-4 w-24 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-16 rounded animate-pulse bg-[var(--surface-3)]" />
+                    <div className="h-4 w-20 rounded animate-pulse bg-[var(--surface-3)]" />
+                  </li>
+                ))}
+              </ul>
+            ) : !birthdays?.supported ? (
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>Birthdays require DOB on employee records.</p>
+            ) : (birthdays?.birthdays?.length ?? 0) === 0 ? (
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>No birthdays in the next 14 days.</p>
+            ) : (
+              <ul className="space-y-2">
+                {(birthdays?.birthdays ?? []).slice(0, 5).map((b) => (
+                  <li key={b.employee_id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium" style={{ color: "var(--text)" }}>{b.employee_name}</span>
+                    {b.line && <span className="text-[var(--text-2)]">· {b.line}</span>}
+                    <span className="text-[var(--text-2)]">in {b.days_left} day{b.days_left !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-[var(--text-2)]">{b.date}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!isGlobal && summary && summary.active_total === 0 && !summaryLoading && (
         <div className="mb-6 gov-panel px-5 py-4 flex flex-wrap items-center justify-between gap-3" data-testid="cockpit-empty-state">
           <span className="cockpit-body" style={{ color: "var(--text-2)" }}>No decisions</span>
           <div className="flex flex-wrap items-center gap-2">
@@ -821,125 +1526,131 @@ export default function CockpitPage() {
         </div>
       )}
 
-      {/* Hero: shift legitimacy status */}
-      {!summaryLoading && summary != null && (
-        <section
-          className="gov-panel gov-panel--elevated py-16 md:py-20 text-center animate-in fade-in duration-300"
-          data-testid="cockpit-hero"
-        >
-          <div className="space-y-4 px-6">
-            <p className="gov-kicker">Execution Legitimacy</p>
-            <h1
-              className={[
-                "text-4xl font-extrabold tracking-tight md:text-5xl leading-none",
-                summary.shift_legitimacy_status === "GO" && "cockpit-status-ok",
-                summary.shift_legitimacy_status === "WARNING" && "cockpit-status-at-risk",
-                summary.shift_legitimacy_status === "ILLEGAL" && "cockpit-status-blocking",
-              ].filter(Boolean).join(" ")}
-            >
-              {summary.shift_legitimacy_status === "GO" && "SHIFT READY"}
-              {summary.shift_legitimacy_status === "WARNING" && "SHIFT AT RISK"}
-              {summary.shift_legitimacy_status === "ILLEGAL" && "SHIFT NOT LEGALLY READY"}
-            </h1>
-            <p className="text-sm" style={{ color: "var(--text-2)" }}>
-              {summary.illegal_count} blockers · {summary.warning_count} expiring soon
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* Conditional detail: blocking / at-risk operators */}
-      {!summaryLoading && summary != null && (summary.shift_legitimacy_status === "ILLEGAL" || summary.shift_legitimacy_status === "WARNING") && (
-        <section className="mt-8 max-w-2xl mx-auto gov-panel p-6" data-testid="cockpit-detail">
-          {summary.shift_legitimacy_status === "ILLEGAL" && (
-            <>
-              <h2 className="gov-kicker mb-3">
-                Blocking operators
-              </h2>
-              {legitimacyDrilldownLoading ? (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>Loading…</p>
-              ) : legitimacyDrilldown && legitimacyDrilldown.blocking_employees.length > 0 ? (
-                <ul>
-                  {legitimacyDrilldown.blocking_employees.map((emp) => (
-                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t first:border-t-0" style={{ borderColor: "var(--hairline-soft)" }}>
-                      <span className="font-medium" style={{ color: "var(--text)" }}>{emp.name || "—"}</span>
-                      <div className="flex flex-wrap gap-1.5 justify-end">
-                        {emp.reasons.map((r) => (
-                          <span key={r} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ color: "var(--text-2)", background: "var(--surface-2)" }}>
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>No blocking operators listed.</p>
-              )}
-            </>
-          )}
-          {summary.shift_legitimacy_status === "WARNING" && (
-            <>
-              <h2 className="gov-kicker mb-3">
-                At risk
-              </h2>
-              {legitimacyDrilldownLoading ? (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>Loading…</p>
-              ) : legitimacyDrilldown && legitimacyDrilldown.warning_employees.length > 0 ? (
-                <ul>
-                  {legitimacyDrilldown.warning_employees.map((emp) => (
-                    <li key={emp.id} className="flex items-center justify-between gap-4 py-3 border-t first:border-t-0" style={{ borderColor: "var(--hairline-soft)" }}>
-                      <span className="font-medium" style={{ color: "var(--text)" }}>{emp.name || "—"}</span>
-                      <div className="flex flex-wrap gap-1.5 justify-end">
-                        {emp.reasons.map((r) => (
-                          <span key={r} className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ color: "var(--text-2)", background: "var(--surface-2)" }}>
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm py-2" style={{ color: "var(--text-2)" }}>No at-risk operators listed.</p>
-              )}
-            </>
-          )}
-        </section>
-      )}
-
-      {/* Supporting metrics: compact row */}
-      {!summaryLoading && summary != null && (
-        <div className="mt-10 gov-panel p-6" data-testid="cockpit-metrics">
-          <div className="flex flex-wrap items-baseline gap-10">
-            <div>
-              <p className="gov-kicker">Open decisions</p>
-              <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{summary.active_total}</p>
-            </div>
-            <div>
-              <p className="gov-kicker">Blockers</p>
-              <p className="text-lg font-semibold tabular-nums mt-1 cockpit-status-blocking">{summary.illegal_count}</p>
-            </div>
-            <div>
-              <p className="gov-kicker">Restricted</p>
-              <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{summary.restricted_count ?? 0}</p>
-            </div>
-            <div>
-              <p className="gov-kicker">Expiring soon</p>
-              <p className="text-lg font-semibold tabular-nums mt-1 cockpit-status-at-risk">{summary.warning_count}</p>
-            </div>
-            {!isDemoMode() && (
-              <div title={`Blocking: ${blockingCount} × 25 · Warnings: ${warningCount} × 8`}>
-                <p className="gov-kicker">Readiness</p>
-                <p className="text-lg font-semibold tabular-nums mt-1" style={{ color: "var(--text)" }}>{fragilityIndex}</p>
-              </div>
-            )}
-          </div>
+      {/* SHIFT mode guardrail: require date + shift before fetching */}
+      {!isDemoMode() && !isGlobal && !shiftReady && (
+        <div className="mb-6 gov-panel px-5 py-4 border-l-[3px] border-l-amber-500" data-testid="cockpit-shift-warning">
+          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+            Select date and shift to load shift-scoped data.
+          </p>
         </div>
       )}
 
+      {/* Executive Overview */}
       {!isDemoMode() && (
-        <div className="mt-10">
+        <>
+          <ExecutiveHeader
+            userName={userName}
+            mode={mode}
+            onModeChange={handleModeChange}
+            date={date}
+            onDateChange={setDate}
+            shiftCode={shiftCode}
+            onShiftCodeChange={setShiftCode}
+            availableShiftCodes={availableShiftCodes}
+            shiftCodesError={shiftCodesError}
+            line={line}
+            onLineChange={setLine}
+            lineOptions={lineOptions}
+            showResolved={showResolved}
+            onShowResolvedChange={setShowResolved}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="kpi-tile-grid">
+            <KpiTile
+              tileId="kpi-readiness"
+              title="Readiness"
+              primaryValue={readinessStatus}
+              secondaryLabel={readinessStatus === "NO-GO" ? "Blocking" : readinessStatus === "WARNING" ? "Warnings" : "Active"}
+              secondaryValue={readinessStatus === "NO-GO" ? blockingCount : readinessStatus === "WARNING" ? warningCount : 0}
+              statusChip={readinessStatus === "NO-GO" ? "NO-GO" : readinessStatus === "WARNING" ? "AT RISK" : "GO"}
+              statusChipVariant={
+                readinessStatus === "NO-GO" ? "blocking" : readinessStatus === "WARNING" ? "warning" : "ok"
+              }
+              onClick={() => handleTileClick("readiness")}
+            />
+            <KpiTile
+              tileId="kpi-blockers"
+              title="Blockers"
+              primaryValue={blockersCount}
+              onClick={() => handleTileClick("blockers")}
+            />
+            <KpiTile
+              tileId="kpi-restricted"
+              title="Restricted"
+              primaryValue="—"
+              onClick={() => handleTileClick("restricted")}
+            />
+            <KpiTile
+              tileId="kpi-expiring"
+              title="Expiring soon"
+              primaryValue={complianceExpiring?.expiringCount ?? "—"}
+              secondaryLabel="Expired"
+              secondaryValue={complianceExpiring?.expiredCount}
+              statusChip={
+                (complianceExpiring?.expiredCount ?? 0) > 0
+                  ? "EXPIRED"
+                  : (complianceExpiring?.expiringCount ?? 0) > 0
+                    ? "EXPIRING"
+                    : "OK"
+              }
+              statusChipVariant={
+                (complianceExpiring?.expiredCount ?? 0) > 0
+                  ? "blocking"
+                  : (complianceExpiring?.expiringCount ?? 0) > 0
+                    ? "warning"
+                    : "ok"
+              }
+              onClick={() => handleTileClick("expiring")}
+            />
+            <KpiTile
+              tileId="kpi-decisions"
+              title="Open Decisions"
+              primaryValue={issues.length}
+              onClick={() => handleTileClick("decisions")}
+            />
+            <KpiTile
+              tileId="kpi-interventions"
+              title="Intervention Queue"
+              primaryValue={interventions.length}
+              secondaryLabel={
+                interventions.some((j) => (j.status ?? "").toUpperCase() === "SENT")
+                  ? "Awaiting signature"
+                  : interventions.some((j) => (j.status ?? "").toUpperCase() === "CREATED")
+                    ? "Planned"
+                    : undefined
+              }
+              statusChip={
+                interventions.some((j) => {
+                  const s = (j.status ?? "").toUpperCase();
+                  if (s !== "SENT") return false;
+                  const created = new Date(j.createdAt).getTime();
+                  return Date.now() - created > 7 * 24 * 60 * 60 * 1000;
+                })
+                  ? "OVERDUE"
+                  : interventions.some((j) => (j.status ?? "").toUpperCase() === "CREATED")
+                    ? "PLANNED"
+                    : interventions.length > 0
+                      ? "ACTIVE"
+                      : undefined
+              }
+              statusChipVariant={
+                interventions.some((j) => {
+                  const s = (j.status ?? "").toUpperCase();
+                  if (s !== "SENT") return false;
+                  const created = new Date(j.createdAt).getTime();
+                  return Date.now() - created > 7 * 24 * 60 * 60 * 1000;
+                })
+                  ? "blocking"
+                  : interventions.some((j) => (j.status ?? "").toUpperCase() === "CREATED")
+                    ? "warning"
+                    : interventions.length > 0
+                      ? "ok"
+                      : "default"
+              }
+              onClick={() => handleTileClick("interventions")}
+            />
+          </div>
+
           <TopOperationalRisksBlock
             risks={topRisks.slice(0, 3)}
             loading={gapsLoading}
@@ -947,28 +1658,117 @@ export default function CockpitPage() {
             date={date}
             shiftCode={shiftCode}
           />
-          <InterventionQueue
+
+          {!isDemoMode() && (
+            <div className="mt-6">
+              <ComplianceActionsOverview
+                summary={complianceActionsSummary}
+                loading={complianceActionsSummaryLoading}
+                sessionOk={sessionOk}
+              />
+            </div>
+          )}
+
+          <DecisionQueueInlinePanel
+            open={activePanel === "decisions"}
             issues={issues}
             markedPlannedIds={markedPlannedIds}
-            currentFragility={fragilityIndex}
+            mode={isGlobal ? "GLOBAL" : "SHIFT"}
+            shiftCode={shiftCode}
+            availableShiftCodes={availableShiftCodes}
+            onShiftCodeChange={setShiftCode}
+            onRowClick={handleIssueRowClick}
+            onClose={() => setActivePanel("none")}
             sessionOk={sessionOk}
-            onMarkPlanned={(issueId) => setMarkedPlannedIds((prev) => {
-              const next = new Set(prev);
-              if (next.has(issueId)) next.delete(issueId);
-              else next.add(issueId);
-              return next;
-            })}
-            onViewDecision={(issue) => {
-              setSelectedIssue(issue);
-              setIssueDrawerOpen(true);
-            }}
           />
-          <h2 className="gov-kicker mb-3 mt-6">Decision queue</h2>
+
+          <InlinePanelShell
+            open={activePanel === "blockers"}
+            title="Blockers"
+            subtitle="Blocking issues requiring review."
+            onClose={() => setActivePanel("none")}
+            dataTestId="blockers-panel"
+          >
+            {(() => {
+              const blockingList = issues.filter((i) => !i.resolved && i.severity === "BLOCKING");
+              if (blockingList.length === 0) {
+                return <p className="text-sm py-4" style={{ color: "var(--text-2)" }}>No blocking issues.</p>;
+              }
+              return (
+                <ul className="space-y-0">
+                  {blockingList.map((issue) => (
+                    <li key={issue.issue_id}>
+                      <button
+                        type="button"
+                        onClick={() => sessionOk && handleIssueRowClick(issue)}
+                        disabled={!sessionOk}
+                        className="w-full flex items-center gap-4 py-3 px-0 text-left rounded-md transition-colors border-b border-[var(--hairline-soft)] last:border-b-0 hover:bg-[var(--surface-2)] cursor-pointer"
+                        data-testid={`blockers-row-${issue.issue_id}`}
+                      >
+                        <span className="min-w-0 flex-1 truncate font-medium" style={{ color: "var(--text)" }}>
+                          {issue.station_name ?? issue.station_code ?? issue.station_id ?? "—"}
+                        </span>
+                        <span className="min-w-0 max-w-[50%] truncate text-sm" style={{ color: "var(--text-2)" }}>
+                          {getRootCausePrimary(issue)}
+                        </span>
+                        <span className="text-xs cockpit-status-blocking font-medium shrink-0">Review</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
+          </InlinePanelShell>
+
+          <ReadinessPanel
+            open={activePanel === "readiness"}
+            title="Readiness"
+            onClose={() => setActivePanel("none")}
+            status={readinessStatus}
+            subtitle={readinessSubtitle}
+            counts={readinessCounts}
+            topStations={topStations}
+            onRowClick={handleIssueRowClick}
+            sessionOk={sessionOk}
+          />
+          <InlinePanelShell
+            open={activePanel === "restricted"}
+            title="Restricted"
+            subtitle="Restricted coverage."
+            onClose={() => setActivePanel("none")}
+            dataTestId="restricted-panel"
+          >
+            {emptyStatePanel}
+          </InlinePanelShell>
+          <ExpiringSoonPanel
+            open={activePanel === "expiring"}
+            title="Expiring soon"
+            onClose={() => setActivePanel("none")}
+            expiredCount={complianceExpiring?.expiredCount ?? 0}
+            expiringCount={complianceExpiring?.expiringCount ?? 0}
+            top10={complianceExpiring?.top10 ?? []}
+            sessionOk={sessionOk}
+            loading={complianceExpiringLoading}
+          />
+          <InterventionPanel
+            open={activePanel === "interventions"}
+            title="Intervention Queue"
+            onClose={() => setActivePanel("none")}
+            jobs={interventions}
+            loading={interventionsLoading}
+            sessionOk={sessionOk}
+          />
+        </>
+      )}
+
+      {!isDemoMode() && (
+        <div className="mt-10" data-testid="cockpit-issues-section">
           <IssueTable
             issues={issues}
             loading={issuesLoading}
             error={issuesError}
             onRowClick={handleIssueRowClick}
+            markedPlannedIds={markedPlannedIds}
             sessionOk={sessionOk}
           />
         </div>
@@ -1006,12 +1806,69 @@ export default function CockpitPage() {
         onOpenChange={setIssueDrawerOpen}
         issue={selectedIssue}
         onAcknowledge={() => handleIssueDecision("acknowledged")}
-        onPlanTraining={() => handleIssueDecision("plan_training")}
+        onPlanAction={handlePlanAction}
+        onPlanTraining={handlePlanTraining}
         onSwap={() => handleIssueDecision("swap")}
         onEscalate={() => handleIssueDecision("escalate")}
+        onResolve={() => handleIssueDecision("acknowledged")}
         isAcknowledged={selectedIssue?.resolved ?? false}
+        onDecisionRecorded={() => setIssuesRefreshKey((k) => k + 1)}
+        planned={selectedIssue ? markedPlannedIds.has(selectedIssue.issue_id) : false}
         sessionOk={sessionOk}
+        cockpitMode={mode}
       />
+
+      <Sheet open={auditDrawerOpen} onOpenChange={(open) => { setAuditDrawerOpen(open); if (!open) setAuditEvent(null); }}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Audit event</SheetTitle>
+          </SheetHeader>
+          {auditEvent && (
+            <div className="mt-4 space-y-3 text-sm">
+              <p><span className="font-medium text-muted-foreground">Action:</span> {auditEvent.action}</p>
+              <p><span className="font-medium text-muted-foreground">Target:</span> {auditEvent.target_type} {auditEvent.target_id ?? "—"}</p>
+              <p><span className="font-medium text-muted-foreground">Legitimacy:</span> {auditEvent.legitimacy_status}</p>
+              <p><span className="font-medium text-muted-foreground">Readiness:</span> {auditEvent.readiness_status}</p>
+              {auditEvent.reason_codes.length > 0 && (
+                <p><span className="font-medium text-muted-foreground">Reason codes:</span> {auditEvent.reason_codes.join(", ")}</p>
+              )}
+              <p><span className="font-medium text-muted-foreground">When:</span> {auditEvent.created_at}</p>
+              {Object.keys(auditEvent.meta).length > 0 && (
+                <pre className="rounded bg-muted p-2 text-xs overflow-auto max-h-40">{JSON.stringify(auditEvent.meta, null, 2)}</pre>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`rounded-lg border px-4 py-3 shadow-lg ${
+                t.variant === "destructive"
+                  ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/80"
+                  : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
+              }`}
+            >
+              {t.title && <p className="font-medium text-sm">{t.title}</p>}
+              {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
+              {t.action && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={t.action.onClick}
+                >
+                  {t.action.label}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </PageFrame>
   );
 }
