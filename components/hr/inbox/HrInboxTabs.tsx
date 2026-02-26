@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export type InboxTab = "actions" | "lifecycle" | "governance" | "contract" | "medical" | "training";
+export type InboxTab = "actions" | "lifecycle" | "governance" | "contract" | "medical" | "training" | "certificates";
 export type ActionsFilter = "open" | "overdue" | "due7" | "all";
 
 const TABS: { value: InboxTab; label: string }[] = [
@@ -13,6 +13,7 @@ const TABS: { value: InboxTab; label: string }[] = [
   { value: "contract", label: "Contract" },
   { value: "medical", label: "Medical" },
   { value: "training", label: "Training" },
+  { value: "certificates", label: "Certificates" },
 ];
 
 const ACTION_FILTERS: { value: ActionsFilter; label: string }[] = [

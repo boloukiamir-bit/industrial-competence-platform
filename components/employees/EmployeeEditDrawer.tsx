@@ -73,6 +73,10 @@ export function EmployeeEditDrawer({
   const [trainingCompletedOn, setTrainingCompletedOn] = useState("");
   const [trainingSaving, setTrainingSaving] = useState(false);
   const [trainingError, setTrainingError] = useState<string | null>(null);
+  const [certificateValidTo, setCertificateValidTo] = useState("");
+  const [certificateIssuedOn, setCertificateIssuedOn] = useState("");
+  const [certificateSaving, setCertificateSaving] = useState(false);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setFirstName(initial?.firstName ?? "");
@@ -121,6 +125,26 @@ export function EmployeeEditDrawer({
       .catch(() => {
         setTrainingValidTo("");
         setTrainingCompletedOn("");
+      });
+  }, [open, employeeId]);
+
+  useEffect(() => {
+    if (!open || !employeeId) return;
+    setCertificateError(null);
+    fetch(`/api/employees/${employeeId}/certificate`, { credentials: "include", headers: withDevBearer() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.ok) {
+          setCertificateValidTo(json.valid_to ? String(json.valid_to).slice(0, 10) : "");
+          setCertificateIssuedOn(json.issued_on ? String(json.issued_on).slice(0, 10) : "");
+        } else {
+          setCertificateValidTo("");
+          setCertificateIssuedOn("");
+        }
+      })
+      .catch(() => {
+        setCertificateValidTo("");
+        setCertificateIssuedOn("");
       });
   }, [open, employeeId]);
 
@@ -418,6 +442,73 @@ export function EmployeeEditDrawer({
               }}
             >
               {trainingSaving ? "Saving…" : "Save training"}
+            </Button>
+          </div>
+          <div className="border-t border-border pt-4 space-y-2">
+            <Label className="text-sm font-medium">Certificate</Label>
+            <p className="text-xs text-muted-foreground">FORKLIFT certificate validity.</p>
+            {certificateError && (
+              <p className="text-sm text-destructive font-medium" role="alert">
+                {certificateError}
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-certificate-valid-to">Valid to</Label>
+              <Input
+                id="edit-certificate-valid-to"
+                type="date"
+                value={certificateValidTo}
+                onChange={(e) => setCertificateValidTo(e.target.value)}
+                className="bg-background"
+                data-testid="edit-certificate-valid-to"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-certificate-issued-on">Issued on (optional)</Label>
+              <Input
+                id="edit-certificate-issued-on"
+                type="date"
+                value={certificateIssuedOn}
+                onChange={(e) => setCertificateIssuedOn(e.target.value)}
+                className="bg-background"
+                data-testid="edit-certificate-issued-on"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={certificateSaving}
+              data-testid="employee-edit-save-certificate"
+              onClick={async () => {
+                if (!employeeId) return;
+                setCertificateError(null);
+                setCertificateSaving(true);
+                try {
+                  const res = await fetch(`/api/employees/${employeeId}/certificate`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", ...withDevBearer() },
+                    credentials: "include",
+                    body: JSON.stringify({
+                      certificate_code: "FORKLIFT",
+                      valid_to: certificateValidTo.trim() || null,
+                      issued_on: certificateIssuedOn.trim() || null,
+                    }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.ok) {
+                    toast({ title: "Certificate updated" });
+                    onSaved?.();
+                  } else {
+                    const msg = data?.error?.message ?? data?.error ?? "Failed to save certificate";
+                    setCertificateError(typeof msg === "string" ? msg : "Failed to save certificate");
+                  }
+                } finally {
+                  setCertificateSaving(false);
+                }
+              }}
+            >
+              {certificateSaving ? "Saving…" : "Save certificate"}
             </Button>
           </div>
           <div className="flex gap-2 pt-2">

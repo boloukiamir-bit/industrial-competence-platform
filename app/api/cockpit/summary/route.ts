@@ -36,6 +36,8 @@ export type CockpitSummaryResponse = {
   medical_warning_count: number;
   training_illegal_count: number;
   training_warning_count: number;
+  certificate_illegal_count: number;
+  certificate_warning_count: number;
 };
 
 export async function GET(request: NextRequest) {
@@ -131,6 +133,8 @@ export async function GET(request: NextRequest) {
     let medical_warning_count = 0;
     let training_illegal_count = 0;
     let training_warning_count = 0;
+    let certificate_illegal_count = 0;
+    let certificate_warning_count = 0;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -244,6 +248,24 @@ export async function GET(request: NextRequest) {
       ).length;
       illegal_count += training_illegal_count;
       warning_count += training_warning_count;
+
+      let certificateQuery = admin
+        .from("v_employee_certificate_status")
+        .select("status")
+        .eq("org_id", org.activeOrgId)
+        .in("status", ["ILLEGAL", "WARNING"]);
+      if (org.activeSiteId) {
+        certificateQuery = certificateQuery.or(`site_id.is.null,site_id.eq.${org.activeSiteId}`);
+      }
+      const { data: certificateRows } = await certificateQuery;
+      certificate_illegal_count = (certificateRows ?? []).filter(
+        (r: { status: string }) => r.status === "ILLEGAL"
+      ).length;
+      certificate_warning_count = (certificateRows ?? []).filter(
+        (r: { status: string }) => r.status === "WARNING"
+      ).length;
+      illegal_count += certificate_illegal_count;
+      warning_count += certificate_warning_count;
     }
 
     const body: CockpitSummaryResponse & { _debug?: unknown; _debug_error?: { message: string; code?: string } } = {
@@ -262,6 +284,8 @@ export async function GET(request: NextRequest) {
       medical_warning_count,
       training_illegal_count,
       training_warning_count,
+      certificate_illegal_count,
+      certificate_warning_count,
     };
     if (debugInfo) body._debug = debugInfo;
 

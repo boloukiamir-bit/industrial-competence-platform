@@ -7,9 +7,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
 import { normalizeComplianceActionStatus } from "@/types/domain";
-import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, InboxMedicalItem, InboxTrainingItem } from "@/types/domain";
+import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, InboxMedicalItem, InboxTrainingItem, InboxCertificateItem } from "@/types/domain";
 
-const TAB_VALUES = ["actions", "lifecycle", "governance", "contract", "medical", "training"] as const;
+const TAB_VALUES = ["actions", "lifecycle", "governance", "contract", "medical", "training", "certificates"] as const;
 const FILTER_VALUES = ["all", "overdue", "due7", "open"] as const;
 const DEFAULT_TAB = "actions";
 const DEFAULT_FILTER = "open";
@@ -428,6 +428,62 @@ export async function GET(request: NextRequest) {
         due_date: r.reason_code === "TRAINING_MISSING" ? today : (r.valid_to ?? today),
         severity: r.status === "ILLEGAL" ? "ILLEGAL" : "WARNING",
         training_code: r.training_code ?? "SAFETY",
+        valid_to: r.valid_to ?? null,
+        days_to_expiry: r.days_to_expiry ?? null,
+      }));
+
+      const res = NextResponse.json({
+        ok: true,
+        tab: effectiveTab,
+        items,
+        meta: { limit },
+      });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    if (effectiveTab === "certificates") {
+      let query = supabase
+        .from("v_employee_certificate_status")
+        .select("employee_id, employee_name, status, reason_code, certificate_code, valid_to, days_to_expiry")
+        .eq("org_id", auth.activeOrgId)
+        .in("status", ["ILLEGAL", "WARNING"])
+        .limit(limit + 50);
+
+      if (auth.activeSiteId) {
+        query = query.or(`site_id.is.null,site_id.eq.${auth.activeSiteId}`);
+      }
+
+      const { data: rows, error } = await query.order("status", { ascending: true }).order("days_to_expiry", { ascending: true, nullsFirst: true });
+
+      if (error) {
+        console.error("[hr/inbox] certificates query failed", error);
+        const res = NextResponse.json(
+          { ok: false, error: { code: "QUERY_FAILED" } },
+          { status: 500 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+
+      const today = todayIso();
+      const list = (rows ?? []) as Array<{
+        employee_id: string;
+        employee_name: string | null;
+        status: string;
+        reason_code: string | null;
+        certificate_code: string | null;
+        valid_to: string | null;
+        days_to_expiry: number | null;
+      }>;
+
+      const items: InboxCertificateItem[] = list.slice(0, limit).map((r) => ({
+        employee_id: r.employee_id,
+        employee_name: r.employee_name ?? "",
+        reason_code: r.reason_code ?? "CERTIFICATE",
+        due_date: r.reason_code === "CERT_MISSING" ? today : (r.valid_to ?? today),
+        severity: r.status === "ILLEGAL" ? "ILLEGAL" : "WARNING",
+        certificate_code: r.certificate_code ?? "FORKLIFT",
         valid_to: r.valid_to ?? null,
         days_to_expiry: r.days_to_expiry ?? null,
       }));
