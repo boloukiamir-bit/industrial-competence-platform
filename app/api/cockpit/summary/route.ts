@@ -32,6 +32,8 @@ export type CockpitSummaryResponse = {
   warning_count: number;
   contract_illegal_count: number;
   contract_warning_count: number;
+  medical_illegal_count: number;
+  medical_warning_count: number;
 };
 
 export async function GET(request: NextRequest) {
@@ -123,6 +125,8 @@ export async function GET(request: NextRequest) {
     let warning_count = 0;
     let contract_illegal_count = 0;
     let contract_warning_count = 0;
+    let medical_illegal_count = 0;
+    let medical_warning_count = 0;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -200,6 +204,24 @@ export async function GET(request: NextRequest) {
       ).length;
       illegal_count += contract_illegal_count;
       warning_count += contract_warning_count;
+
+      let medicalQuery = admin
+        .from("v_employee_medical_status")
+        .select("status")
+        .eq("org_id", org.activeOrgId)
+        .in("status", ["ILLEGAL", "WARNING"]);
+      if (org.activeSiteId) {
+        medicalQuery = medicalQuery.or(`site_id.is.null,site_id.eq.${org.activeSiteId}`);
+      }
+      const { data: medicalRows } = await medicalQuery;
+      medical_illegal_count = (medicalRows ?? []).filter(
+        (r: { status: string }) => r.status === "ILLEGAL"
+      ).length;
+      medical_warning_count = (medicalRows ?? []).filter(
+        (r: { status: string }) => r.status === "WARNING"
+      ).length;
+      illegal_count += medical_illegal_count;
+      warning_count += medical_warning_count;
     }
 
     const body: CockpitSummaryResponse & { _debug?: unknown; _debug_error?: { message: string; code?: string } } = {
@@ -214,6 +236,8 @@ export async function GET(request: NextRequest) {
       warning_count,
       contract_illegal_count,
       contract_warning_count,
+      medical_illegal_count,
+      medical_warning_count,
     };
     if (debugInfo) body._debug = debugInfo;
 

@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem } from "@/types/domain";
+import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, InboxMedicalItem } from "@/types/domain";
 import type { InboxTab } from "./HrInboxTabs";
 import { getSeverityFromSignals, severityToBadgeVariant } from "@/lib/ui/severity";
 
@@ -53,7 +53,7 @@ function formatDateTime(dateStr: string): string {
 
 export type InboxTableProps = {
   tab: InboxTab;
-  items: InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[] | InboxContractItem[];
+  items: InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[] | InboxContractItem[] | InboxMedicalItem[];
   loading: boolean;
   error: string | null;
 };
@@ -85,7 +85,9 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
           ? { message: "No lifecycle events", href: "/app/employees", label: "Go to Employees" }
           : tab === "contract"
             ? { message: "No contract issues", href: "/app/employees", label: "Go to Employees" }
-            : { message: "No governance events", href: "/app/cockpit", label: "Go to Cockpit" };
+            : tab === "medical"
+              ? { message: "No medical issues", href: "/app/employees", label: "Go to Employees" }
+              : { message: "No governance events", href: "/app/cockpit", label: "Go to Cockpit" };
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
         <p className="text-muted-foreground text-sm">{emptyConfig.message}</p>
@@ -260,6 +262,53 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs">{r.reason_code}</TableCell>
                 <TableCell>{formatDate(r.contract_end_date)}</TableCell>
+                <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
+                <TableCell>
+                  <Button variant="default" size="sm" asChild>
+                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1`}>
+                      Edit employee
+                    </Link>
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  if (tab === "medical") {
+    const rows = items as InboxMedicalItem[];
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Employee</TableHead>
+            <TableHead>Severity</TableHead>
+            <TableHead className="min-w-0">Reason</TableHead>
+            <TableHead>Valid to</TableHead>
+            <TableHead>Days to expiry</TableHead>
+            <TableHead className="w-[1%]">Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            const level = getSeverityFromSignals({
+              legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
+              readiness: r.severity === "WARNING" ? "WARNING" : undefined,
+            });
+            const { variant, className } = severityToBadgeVariant(level);
+            return (
+              <TableRow key={r.employee_id}>
+                <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={variant} className={className} size="sm">
+                    {r.severity}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs">{r.reason_code}</TableCell>
+                <TableCell>{formatDate(r.valid_to)}</TableCell>
                 <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
                 <TableCell>
                   <Button variant="default" size="sm" asChild>

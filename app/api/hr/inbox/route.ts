@@ -7,9 +7,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
 import { normalizeComplianceActionStatus } from "@/types/domain";
-import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem } from "@/types/domain";
+import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, InboxMedicalItem } from "@/types/domain";
 
-const TAB_VALUES = ["actions", "lifecycle", "governance"] as const;
+const TAB_VALUES = ["actions", "lifecycle", "governance", "contract", "medical"] as const;
 const FILTER_VALUES = ["all", "overdue", "due7", "open"] as const;
 const DEFAULT_TAB = "actions";
 const DEFAULT_FILTER = "open";
@@ -264,6 +264,116 @@ export async function GET(request: NextRequest) {
         readiness_status: r.readiness_status,
         reason_codes: Array.isArray(r.reason_codes) ? r.reason_codes : [],
         meta: (r.meta as Record<string, unknown>) ?? {},
+      }));
+
+      const res = NextResponse.json({
+        ok: true,
+        tab: effectiveTab,
+        items,
+        meta: { limit },
+      });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    if (effectiveTab === "contract") {
+      let query = supabase
+        .from("v_employee_contract_status")
+        .select("employee_id, employee_name, status, reason_code, contract_end_date, days_to_expiry")
+        .eq("org_id", auth.activeOrgId)
+        .in("status", ["ILLEGAL", "WARNING"])
+        .limit(limit + 50);
+
+      if (auth.activeSiteId) {
+        query = query.or(`site_id.is.null,site_id.eq.${auth.activeSiteId}`);
+      }
+
+      const { data: rows, error } = await query.order("status", { ascending: true }).order("days_to_expiry", { ascending: true, nullsFirst: true });
+
+      if (error) {
+        console.error("[hr/inbox] contract query failed", error);
+        const res = NextResponse.json(
+          { ok: false, error: { code: "QUERY_FAILED" } },
+          { status: 500 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+
+      const today = todayIso();
+      const list = (rows ?? []) as Array<{
+        employee_id: string;
+        employee_name: string | null;
+        status: string;
+        reason_code: string | null;
+        contract_end_date: string | null;
+        days_to_expiry: number | null;
+      }>;
+
+      const items: InboxContractItem[] = list.slice(0, limit).map((r) => ({
+        employee_id: r.employee_id,
+        employee_name: r.employee_name ?? "",
+        reason_code: r.reason_code ?? "CONTRACT",
+        due_date: r.reason_code === "CONTRACT_MISSING_END_DATE" ? today : (r.contract_end_date ?? today),
+        severity: r.status === "ILLEGAL" ? "ILLEGAL" : "WARNING",
+        contract_end_date: r.contract_end_date ?? null,
+        days_to_expiry: r.days_to_expiry ?? null,
+      }));
+
+      const res = NextResponse.json({
+        ok: true,
+        tab: effectiveTab,
+        items,
+        meta: { limit },
+      });
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    if (effectiveTab === "medical") {
+      let query = supabase
+        .from("v_employee_medical_status")
+        .select("employee_id, employee_name, status, reason_code, medical_type, valid_to, days_to_expiry")
+        .eq("org_id", auth.activeOrgId)
+        .in("status", ["ILLEGAL", "WARNING"])
+        .limit(limit + 50);
+
+      if (auth.activeSiteId) {
+        query = query.or(`site_id.is.null,site_id.eq.${auth.activeSiteId}`);
+      }
+
+      const { data: rows, error } = await query.order("status", { ascending: true }).order("days_to_expiry", { ascending: true, nullsFirst: true });
+
+      if (error) {
+        console.error("[hr/inbox] medical query failed", error);
+        const res = NextResponse.json(
+          { ok: false, error: { code: "QUERY_FAILED" } },
+          { status: 500 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+
+      const today = todayIso();
+      const list = (rows ?? []) as Array<{
+        employee_id: string;
+        employee_name: string | null;
+        status: string;
+        reason_code: string | null;
+        medical_type: string | null;
+        valid_to: string | null;
+        days_to_expiry: number | null;
+      }>;
+
+      const items: InboxMedicalItem[] = list.slice(0, limit).map((r) => ({
+        employee_id: r.employee_id,
+        employee_name: r.employee_name ?? "",
+        reason_code: r.reason_code ?? "MEDICAL",
+        due_date: r.reason_code === "MEDICAL_MISSING" ? today : (r.valid_to ?? today),
+        severity: r.status === "ILLEGAL" ? "ILLEGAL" : "WARNING",
+        medical_type: r.medical_type ?? "GENERAL",
+        valid_to: r.valid_to ?? null,
+        days_to_expiry: r.days_to_expiry ?? null,
       }));
 
       const res = NextResponse.json({

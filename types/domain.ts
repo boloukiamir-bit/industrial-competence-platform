@@ -462,4 +462,27 @@ export type InboxGovernanceItem = {
   meta: Record<string, unknown>;
 };
 
-export type InboxItem = InboxActionItem | InboxLifecycleItem | InboxGovernanceItem;
+/** HR Inbox: contract tab item (v_employee_contract_status ILLEGAL/WARNING). CTA = open Employee Edit. */
+export type InboxContractItem = {
+  employee_id: string;
+  employee_name: string;
+  reason_code: string;
+  due_date: string;
+  severity: "ILLEGAL" | "WARNING";
+  contract_end_date: string | null;
+  days_to_expiry: number | null;
+};
+
+/** HR Inbox: medical tab item (v_employee_medical_status ILLEGAL/WARNING). CTA = open Employee Edit. */
+export type InboxMedicalItem = {
+  employee_id: string;
+  employee_name: string;
+  reason_code: string;
+  due_date: string;
+  severity: "ILLEGAL" | "WARNING";
+  medical_type: string;
+  valid_to: string | null;
+  days_to_expiry: number | null;
+};
+
+export type InboxItem = InboxActionItem | InboxLifecycleItem | InboxGovernanceItem | InboxContractItem | InboxMedicalItem;

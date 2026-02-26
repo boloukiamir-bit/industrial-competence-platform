@@ -11,8 +11,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
+
+const EMPLOYMENT_TYPE_OPTIONS = [
+  { value: "permanent" as const, label: "Permanent" },
+  { value: "temporary" as const, label: "Visstid" },
+  { value: "consultant" as const, label: "Provanställd" },
+] as const;
 
 export type EmployeeEditDrawerProps = {
   open: boolean;
@@ -26,6 +39,8 @@ export type EmployeeEditDrawerProps = {
     phone?: string;
     title?: string;
     hireDate?: string;
+    employmentType?: "permanent" | "temporary" | "consultant";
+    contractEndDate?: string;
   } | null;
   onSaved?: () => void;
 };
@@ -47,8 +62,13 @@ export function EmployeeEditDrawer({
   const [phone, setPhone] = useState("");
   const [title, setTitle] = useState("");
   const [hireDate, setHireDate] = useState("");
+  const [employmentType, setEmploymentType] = useState<"permanent" | "temporary" | "consultant">("permanent");
+  const [contractEndDate, setContractEndDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [medicalValidTo, setMedicalValidTo] = useState("");
+  const [medicalSaving, setMedicalSaving] = useState(false);
+  const [medicalError, setMedicalError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setFirstName(initial?.firstName ?? "");
@@ -58,6 +78,9 @@ export function EmployeeEditDrawer({
     setPhone(initial?.phone ?? "");
     setTitle(initial?.title ?? "");
     setHireDate(initial?.hireDate ?? "");
+    const et = initial?.employmentType ?? "permanent";
+    setEmploymentType(et);
+    setContractEndDate(et === "permanent" ? "" : (initial?.contractEndDate ?? ""));
     setError(null);
   }, [initial]);
 
@@ -65,24 +88,44 @@ export function EmployeeEditDrawer({
     if (open) resetForm();
   }, [open, resetForm]);
 
+  useEffect(() => {
+    if (!open || !employeeId) return;
+    setMedicalError(null);
+    fetch(`/api/employees/${employeeId}/medical`, { credentials: "include", headers: withDevBearer() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.ok && json.valid_to) setMedicalValidTo(String(json.valid_to).slice(0, 10));
+        else setMedicalValidTo("");
+      })
+      .catch(() => setMedicalValidTo(""));
+  }, [open, employeeId]);
+
   const handleSave = async () => {
     if (!employeeId) return;
-    setSaving(true);
     setError(null);
+    const needsContractEnd = employmentType === "temporary" || employmentType === "consultant";
+    if (needsContractEnd && !contractEndDate.trim()) {
+      setError("Contract end date is required for Visstid and Provanställd.");
+      return;
+    }
+    setSaving(true);
     try {
+      const body: Record<string, unknown> = {
+        first_name: firstName.trim() || undefined,
+        last_name: lastName.trim() || undefined,
+        employee_number: employeeNumber.trim() || undefined,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        title: title.trim() || null,
+        hire_date: hireDate.trim() || undefined,
+        employment_type: employmentType,
+        contract_end_date: employmentType === "permanent" ? null : (contractEndDate.trim() || null),
+      };
       const res = await fetch(`/api/employees/${employeeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...withDevBearer() },
         credentials: "include",
-        body: JSON.stringify({
-          first_name: firstName.trim() || undefined,
-          last_name: lastName.trim() || undefined,
-          employee_number: employeeNumber.trim() || undefined,
-          email: email.trim() || null,
-          phone: phone.trim() || null,
-          title: title.trim() || null,
-          hire_date: hireDate.trim() || undefined,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
@@ -196,6 +239,95 @@ export function EmployeeEditDrawer({
               onChange={(e) => setHireDate(e.target.value)}
               className="bg-background"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-employment-type">Employment type</Label>
+            <Select
+              value={employmentType}
+              onValueChange={(value: "permanent" | "temporary" | "consultant") => {
+                setEmploymentType(value);
+                if (value === "permanent") setContractEndDate("");
+              }}
+            >
+              <SelectTrigger id="edit-employment-type" className="bg-background" data-testid="edit-employment-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {(employmentType === "temporary" || employmentType === "consultant") && (
+            <div className="space-y-2">
+              <Label htmlFor="edit-contract-end-date">Contract end date</Label>
+              <Input
+                id="edit-contract-end-date"
+                type="date"
+                value={contractEndDate}
+                onChange={(e) => setContractEndDate(e.target.value)}
+                className="bg-background"
+                data-testid="edit-contract-end-date"
+              />
+            </div>
+          )}
+          <div className="border-t border-border pt-4 space-y-2">
+            <Label className="text-sm font-medium">Medical</Label>
+            <p className="text-xs text-muted-foreground">General medical check validity.</p>
+            {medicalError && (
+              <p className="text-sm text-destructive font-medium" role="alert">
+                {medicalError}
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-medical-valid-to">Valid to</Label>
+              <Input
+                id="edit-medical-valid-to"
+                type="date"
+                value={medicalValidTo}
+                onChange={(e) => setMedicalValidTo(e.target.value)}
+                className="bg-background"
+                data-testid="edit-medical-valid-to"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={medicalSaving}
+              data-testid="employee-edit-save-medical"
+              onClick={async () => {
+                if (!employeeId) return;
+                setMedicalError(null);
+                setMedicalSaving(true);
+                try {
+                  const res = await fetch(`/api/employees/${employeeId}/medical`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", ...withDevBearer() },
+                    credentials: "include",
+                    body: JSON.stringify({
+                      medical_type: "GENERAL",
+                      valid_to: medicalValidTo.trim() || null,
+                    }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.ok) {
+                    toast({ title: "Medical updated" });
+                    onSaved?.();
+                  } else {
+                    const msg = data?.error?.message ?? data?.error ?? "Failed to save medical";
+                    setMedicalError(typeof msg === "string" ? msg : "Failed to save medical");
+                  }
+                } finally {
+                  setMedicalSaving(false);
+                }
+              }}
+            >
+              {medicalSaving ? "Saving…" : "Save medical"}
+            </Button>
           </div>
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
