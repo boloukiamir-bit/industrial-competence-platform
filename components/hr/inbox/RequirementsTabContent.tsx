@@ -24,6 +24,8 @@ export type RequirementStatusRow = {
   org_id: string;
   site_id: string | null;
   employee_id: string;
+  employee_name?: string;
+  employee_number?: string;
   requirement_code: string;
   requirement_name: string;
   requirement_id: string | null;
@@ -333,7 +335,12 @@ export function RequirementsTabContent() {
                       href={`/app/employees/${encodeURIComponent(r.employee_id)}`}
                       className="text-primary hover:underline font-medium"
                     >
-                      {shortId(r.employee_id)}
+                      <span className="block">
+                        {r.employee_name?.trim() || shortId(r.employee_id)}
+                      </span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">
+                        {r.employee_number ?? shortId(r.employee_id)}
+                      </span>
                     </Link>
                   </TableCell>
                   <TableCell className="tabular-nums">

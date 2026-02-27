@@ -25,12 +25,21 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchJson } from "@/lib/coreFetch";
 import { ChevronLeft, Loader2, Plus, Trash2 } from "lucide-react";
 
+const CRITICALITY_OPTIONS = [
+  { value: "", label: "Inherit" },
+  { value: "CRITICAL", label: "CRITICAL" },
+  { value: "HIGH", label: "HIGH" },
+  { value: "MEDIUM", label: "MEDIUM" },
+  { value: "LOW", label: "LOW" },
+] as const;
+
 type RuleRow = {
   id: string;
   role: string;
   requirement_code: string;
   requirement_name: string;
   is_mandatory: boolean;
+  criticality_override: string | null;
   created_at: string;
 };
 
@@ -52,9 +61,12 @@ export default function RequirementRulesPage() {
   const [formRequirementCode, setFormRequirementCode] = useState("");
   const [formRequirementName, setFormRequirementName] = useState("");
   const [formMandatory, setFormMandatory] = useState(true);
+  const [formCriticality, setFormCriticality] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [updatingCriticalityId, setUpdatingCriticalityId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [demoScenarioAction, setDemoScenarioAction] = useState<"seed" | "remove" | null>(null);
   const catalogDropdownRef = useRef<HTMLDivElement>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogDropdownOpen, setCatalogDropdownOpen] = useState(false);
@@ -100,6 +112,7 @@ export default function RequirementRulesPage() {
     setFormRequirementCode("");
     setFormRequirementName("");
     setFormMandatory(true);
+    setFormCriticality("");
     setAddOpen(true);
   };
 
@@ -130,6 +143,7 @@ export default function RequirementRulesPage() {
         requirement_code: formRequirementCode.trim(),
         requirement_name: formRequirementName.trim(),
         is_mandatory: formMandatory,
+        criticality_override: formCriticality && CRITICALITY_OPTIONS.some((o) => o.value === formCriticality) ? formCriticality : null,
       }),
     });
     setSaving(false);
@@ -142,12 +156,12 @@ export default function RequirementRulesPage() {
     loadRules();
   };
 
-  const handleToggleMandatory = async (id: string, is_mandatory: boolean) => {
+  const handleToggleMandatory = async (id: string, is_mandatory: boolean, criticality_override: string | null) => {
     setTogglingId(id);
     const res = await fetchJson<{ ok: true }>(`/api/hr/requirements-rules/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_mandatory }),
+      body: JSON.stringify({ is_mandatory, criticality_override: criticality_override ?? null }),
     });
     setTogglingId(null);
     if (!res.ok) {
@@ -155,6 +169,22 @@ export default function RequirementRulesPage() {
       return;
     }
     toast({ title: is_mandatory ? "Mandatory" : "Optional" });
+    loadRules();
+  };
+
+  const handleCriticalityChange = async (id: string, criticality_override: string | null, is_mandatory: boolean) => {
+    setUpdatingCriticalityId(id);
+    const res = await fetchJson<{ ok: true }>(`/api/hr/requirements-rules/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_mandatory, criticality_override: criticality_override ?? null }),
+    });
+    setUpdatingCriticalityId(null);
+    if (!res.ok) {
+      toast({ title: res.error ?? "Failed to update criticality", variant: "destructive" });
+      return;
+    }
+    toast({ title: criticality_override ? `Criticality: ${criticality_override}` : "Criticality: Inherit" });
     loadRules();
   };
 
@@ -169,6 +199,32 @@ export default function RequirementRulesPage() {
       return;
     }
     toast({ title: "Rule deleted" });
+    loadRules();
+  };
+
+  const handleDemoScenario = async (action: "seed" | "remove") => {
+    setDemoScenarioAction(action);
+    const res = await fetchJson<{ ok: true; seeded?: boolean; removed?: boolean; catalogDeactivated?: boolean }>(
+      "/api/admin/demo-scenarios/requirements",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      }
+    );
+    setDemoScenarioAction(null);
+    if (!res.ok) {
+      toast({ title: res.error ?? "Failed", variant: "destructive" });
+      return;
+    }
+    if (action === "seed") {
+      toast({ title: "Demo scenario seeded" });
+    } else {
+      const msg = res.data?.catalogDeactivated
+        ? "Demo scenario removed; catalog item deactivated"
+        : "Demo scenario removed";
+      toast({ title: msg });
+    }
     loadRules();
   };
 
@@ -191,10 +247,31 @@ export default function RequirementRulesPage() {
           </div>
         </header>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button onClick={openAdd} size="sm">
             <Plus className="h-4 w-4 mr-1" />
             Add rule
+          </Button>
+          <Link href="/app/hr/requirements-catalog">
+            <Button variant="outline" size="sm">Requirement catalog</Button>
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleDemoScenario("seed")}
+            disabled={demoScenarioAction !== null}
+          >
+            {demoScenarioAction === "seed" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            Seed demo scenario
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleDemoScenario("remove")}
+            disabled={demoScenarioAction !== null}
+          >
+            {demoScenarioAction === "remove" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            Remove demo scenario
           </Button>
         </div>
 
@@ -214,6 +291,7 @@ export default function RequirementRulesPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Requirement</TableHead>
                 <TableHead className="w-[120px]">Mandatory</TableHead>
+                <TableHead className="w-[140px]">Criticality</TableHead>
                 <TableHead className="w-[80px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -230,9 +308,36 @@ export default function RequirementRulesPage() {
                   <TableCell>
                     <Switch
                       checked={r.is_mandatory}
-                      onCheckedChange={(checked) => handleToggleMandatory(r.id, checked)}
+                      onCheckedChange={(checked) => handleToggleMandatory(r.id, checked, r.criticality_override)}
                       disabled={togglingId === r.id}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {r.criticality_override ? (
+                        <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground shrink-0">
+                          {r.criticality_override}
+                        </span>
+                      ) : null}
+                      <select
+                        value={r.criticality_override ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          handleCriticalityChange(r.id, v ? v : null, r.is_mandatory);
+                        }}
+                        disabled={updatingCriticalityId === r.id}
+                        className="h-8 min-w-[100px] rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      >
+                        {CRITICALITY_OPTIONS.map((o) => (
+                          <option key={o.value || "inherit"} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      {updatingCriticalityId === r.id ? (
+                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Button
@@ -353,6 +458,23 @@ export default function RequirementRulesPage() {
                   checked={formMandatory}
                   onCheckedChange={setFormMandatory}
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="add-criticality">Criticality</Label>
+                <select
+                  id="add-criticality"
+                  value={formCriticality}
+                  onChange={(e) => setFormCriticality(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                >
+                  {CRITICALITY_OPTIONS.map((o) => (
+                    <option key={o.value || "inherit"} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">Override for synthetic MISSING_REQUIRED rows; Inherit = MEDIUM.</p>
               </div>
 
               <div className="flex gap-2 pt-2">

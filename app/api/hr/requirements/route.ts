@@ -21,6 +21,8 @@ export type RequirementStatusRow = {
   org_id: string;
   site_id: string | null;
   employee_id: string;
+  employee_name?: string;
+  employee_number?: string;
   requirement_code: string;
   requirement_name: string;
   requirement_id: string | null;
@@ -109,9 +111,48 @@ export async function GET(request: NextRequest) {
       return (a.requirement_code ?? "").localeCompare(b.requirement_code ?? "");
     });
 
+    const employeeIds = [...new Set(list.map((r) => r.employee_id).filter(Boolean))];
+    const employeeLookup = new Map<
+      string,
+      { employee_name: string; employee_number: string | null }
+    >();
+    if (employeeIds.length > 0) {
+      const { data: employees, error: empError } = await supabase
+        .from("employees")
+        .select("id, first_name, last_name, employee_number")
+        .eq("org_id", auth.activeOrgId)
+        .in("id", employeeIds);
+
+      if (!empError && employees?.length) {
+        for (const e of employees as Array<{
+          id: string;
+          first_name: string | null;
+          last_name: string | null;
+          employee_number: string | null;
+        }>) {
+          const first = (e.first_name ?? "").trim();
+          const last = (e.last_name ?? "").trim();
+          const employee_name = [first, last].filter(Boolean).join(" ").trim() || null;
+          employeeLookup.set(e.id, {
+            employee_name: employee_name ?? "",
+            employee_number: e.employee_number ?? null,
+          });
+        }
+      }
+    }
+
+    const enriched = list.map((r) => {
+      const emp = employeeLookup.get(r.employee_id);
+      return {
+        ...r,
+        employee_name: emp?.employee_name,
+        employee_number: emp?.employee_number ?? undefined,
+      };
+    });
+
     const res = NextResponse.json({
       ok: true,
-      rows: list,
+      rows: enriched,
       total: count ?? list.length,
     });
     applySupabaseCookies(res, pendingCookies);

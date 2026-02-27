@@ -17,6 +17,9 @@ export type CatalogRequirement = {
   code: string;
   name: string;
   category: string | null;
+  description: string | null;
+  criticality: string;
+  is_active: boolean;
 };
 
 export async function GET(request: NextRequest) {
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest) {
   try {
     let query = supabase
       .from("compliance_requirements")
-      .select("id, code, name, category")
+      .select("id, code, name, category, description, criticality, is_active")
       .eq("org_id", auth.activeOrgId);
 
     if (activeOnly) {
@@ -60,11 +63,22 @@ export async function GET(request: NextRequest) {
     }
 
     const requirements: CatalogRequirement[] = (rows ?? []).map(
-      (r: { id: string; code: string; name: string; category: string | null }) => ({
+      (r: {
+        id: string;
+        code: string;
+        name: string;
+        category: string | null;
+        description: string | null;
+        criticality: string;
+        is_active: boolean;
+      }) => ({
         id: r.id,
         code: r.code,
         name: r.name,
         category: r.category ?? null,
+        description: r.description ?? null,
+        criticality: r.criticality ?? "MEDIUM",
+        is_active: r.is_active ?? true,
       })
     );
 

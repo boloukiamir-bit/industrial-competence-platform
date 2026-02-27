@@ -309,6 +309,13 @@ export default function CockpitPage() {
       blocking_critical: number;
       blocking_high: number;
     };
+    top_requirements: Array<{
+      requirement_code: string;
+      requirement_name: string;
+      illegal: number;
+      warning: number;
+      total: number;
+    }>;
   } | null>(null);
   const [requirementsSummaryLoading, setRequirementsSummaryLoading] = useState(false);
 
@@ -854,9 +861,20 @@ export default function CockpitPage() {
         blocking_critical: number;
         blocking_high: number;
       };
+      top_requirements?: Array<{
+        requirement_code: string;
+        requirement_name: string;
+        illegal: number;
+        warning: number;
+        total: number;
+      }>;
     }>("/api/cockpit/requirements-summary")
       .then((res) => {
-        if (!cancelled && res.ok && res.data?.counts) setRequirementsSummary({ counts: res.data.counts });
+        if (!cancelled && res.ok && res.data?.counts)
+          setRequirementsSummary({
+            counts: res.data.counts,
+            top_requirements: res.data.top_requirements ?? [],
+          });
         else if (!cancelled) setRequirementsSummary(null);
       })
       .catch(() => {
@@ -1621,6 +1639,30 @@ export default function CockpitPage() {
                     </span>
                   </div>
                 )}
+                {requirementsSummary.top_requirements?.[0] && (
+                  <p className="text-xs pt-2 border-t border-[var(--hairline-soft)] mt-2 flex flex-wrap items-center gap-2" style={{ color: "var(--text-2)" }}>
+                    Top: <code className="rounded px-1 py-0.5 bg-[var(--surface-2)] text-[11px] font-mono">{requirementsSummary.top_requirements[0].requirement_code}</code>
+                    — {requirementsSummary.top_requirements[0].illegal} issue{requirementsSummary.top_requirements[0].illegal !== 1 ? "s" : ""}
+                    <Link
+                      href={`/app/hr/inbox?tab=requirements&status=ILLEGAL&q=${encodeURIComponent(requirementsSummary.top_requirements[0].requirement_code)}`}
+                      className="text-xs font-medium underline hover:no-underline"
+                      style={{ color: "var(--text)" }}
+                      data-testid="requirements-top-view-link"
+                    >
+                      View
+                    </Link>
+                  </p>
+                )}
+                <div className="pt-3 mt-2">
+                  <Link
+                    href="/app/hr/inbox?tab=requirements&status=ILLEGAL"
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium h-8 px-3 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--hairline)] transition-colors"
+                    style={{ color: "var(--text)" }}
+                    data-testid="requirements-open-inbox-cta"
+                  >
+                    Open Requirements Inbox
+                  </Link>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">—</p>

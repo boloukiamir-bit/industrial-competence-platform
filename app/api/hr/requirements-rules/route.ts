@@ -13,6 +13,7 @@ export type RequirementRuleRow = {
   requirement_code: string;
   requirement_name: string;
   is_mandatory: boolean;
+  criticality_override: string | null;
   created_at: string;
 };
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   try {
     const { data: rows, error } = await supabase
       .from("requirement_role_rules")
-      .select("id, role, requirement_code, requirement_name, is_mandatory, created_at")
+      .select("id, role, requirement_code, requirement_name, is_mandatory, criticality_override, created_at")
       .eq("org_id", auth.activeOrgId)
       .order("role", { ascending: true })
       .order("requirement_code", { ascending: true });
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
         requirement_code: string;
         requirement_name: string;
         is_mandatory: boolean;
+        criticality_override: string | null;
         created_at: string;
       }) => ({
         id: r.id,
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
         requirement_code: r.requirement_code,
         requirement_name: r.requirement_name,
         is_mandatory: r.is_mandatory,
+        criticality_override: r.criticality_override ?? null,
         created_at: r.created_at,
       })
     );
@@ -100,6 +103,12 @@ export async function POST(request: NextRequest) {
   const requirement_code = typeof body.requirement_code === "string" ? body.requirement_code.trim() : "";
   const requirement_name = typeof body.requirement_name === "string" ? body.requirement_name.trim() : "";
   const is_mandatory = body.is_mandatory === false ? false : true;
+  const criticality_override =
+    body.criticality_override === null || body.criticality_override === ""
+      ? null
+      : typeof body.criticality_override === "string" && ["CRITICAL", "HIGH", "MEDIUM", "LOW"].includes(body.criticality_override.trim())
+        ? body.criticality_override.trim()
+        : null;
 
   if (!role || !requirement_code || !requirement_name) {
     const res = NextResponse.json(
@@ -118,6 +127,7 @@ export async function POST(request: NextRequest) {
       p_requirement_name: requirement_name,
       p_is_mandatory: is_mandatory,
       p_idempotency_key: null,
+      p_criticality_override: criticality_override,
     });
 
     if (error) {
@@ -158,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     const { data: row, error: fetchError } = await supabase
       .from("requirement_role_rules")
-      .select("id, role, requirement_code, requirement_name, is_mandatory, created_at")
+      .select("id, role, requirement_code, requirement_name, is_mandatory, criticality_override, created_at")
       .eq("id", ruleId)
       .single();
 
@@ -178,6 +188,7 @@ export async function POST(request: NextRequest) {
       requirement_code: row.requirement_code,
       requirement_name: row.requirement_name,
       is_mandatory: row.is_mandatory,
+      criticality_override: row.criticality_override ?? null,
       created_at: row.created_at,
     };
 
