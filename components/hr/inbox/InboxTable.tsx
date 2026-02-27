@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, InboxMedicalItem, InboxTrainingItem, InboxCertificateItem } from "@/types/domain";
 import type { InboxTab } from "./HrInboxTabs";
 import { getSeverityFromSignals, severityToBadgeVariant } from "@/lib/ui/severity";
@@ -51,6 +50,51 @@ function formatDateTime(dateStr: string): string {
   }
 }
 
+/** Compact label for reason_code in compliance tabs. */
+function reasonCodeToLabel(code: string): string {
+  const u = (code ?? "").trim().toUpperCase().replace(/-/g, "_");
+  if (u === "EXPIRED" || u === "MISSING") return u;
+  if (u === "EXPIRING_SOON" || u === "EXPIRING SOON") return "EXPIRING SOON";
+  if (u) return u.replace(/_/g, " ");
+  return "—";
+}
+
+/** Sort key: ILLEGAL first, then WARNING. */
+function severityOrder(s: "ILLEGAL" | "WARNING"): number {
+  return s === "ILLEGAL" ? 0 : 1;
+}
+
+type ComplianceRow = InboxContractItem | InboxMedicalItem | InboxTrainingItem | InboxCertificateItem;
+
+function sortComplianceRows<T extends ComplianceRow>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const sev = severityOrder(a.severity) - severityOrder(b.severity);
+    if (sev !== 0) return sev;
+    const daysA = a.days_to_expiry ?? Infinity;
+    const daysB = b.days_to_expiry ?? Infinity;
+    if (daysA !== daysB) return daysA - daysB;
+    return (a.employee_name ?? "").localeCompare(b.employee_name ?? "", undefined, { sensitivity: "base" });
+  });
+}
+
+function ComplianceSummaryHeader({ illegal, warning }: { illegal: number; warning: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 mb-3 text-sm tabular-nums">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-flex items-center rounded-md border border-destructive/30 bg-destructive/5 px-2 py-0.5 font-medium text-destructive">
+          ILLEGAL: {illegal}
+        </span>
+      </span>
+      <span className="text-muted-foreground">|</span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          WARNING: {warning}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 export type InboxTableProps = {
   tab: InboxTab;
   items: InboxActionItem[] | InboxLifecycleItem[] | InboxGovernanceItem[] | InboxContractItem[] | InboxMedicalItem[] | InboxTrainingItem[] | InboxCertificateItem[];
@@ -83,7 +127,7 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
         ? { message: "No open actions", href: "/app/hr/compliance", label: "Go to HR Compliance" }
         : tab === "lifecycle"
           ? { message: "No lifecycle events", href: "/app/employees", label: "Go to Employees" }
-          :       tab === "contract"
+          : tab === "contract"
             ? { message: "No contract issues", href: "/app/employees", label: "Go to Employees" }
             : tab === "medical"
               ? { message: "No medical issues", href: "/app/employees", label: "Go to Employees" }
@@ -93,11 +137,11 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
                   ? { message: "No certificate issues", href: "/app/employees", label: "Go to Employees" }
                   : { message: "No governance events", href: "/app/cockpit", label: "Go to Cockpit" };
     return (
-      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-        <p className="text-muted-foreground text-sm">{emptyConfig.message}</p>
+      <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+        <p className="text-muted-foreground text-sm max-w-sm">{emptyConfig.message}</p>
         <Link
           href={emptyConfig.href}
-          className="text-sm font-medium text-primary hover:underline"
+          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
         >
           {emptyConfig.label}
         </Link>
@@ -236,190 +280,226 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
   }
 
   if (tab === "contract") {
-    const rows = items as InboxContractItem[];
+    const rows = sortComplianceRows(items as InboxContractItem[]);
+    const illegal = rows.filter((r) => r.severity === "ILLEGAL").length;
+    const warning = rows.filter((r) => r.severity === "WARNING").length;
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Severity</TableHead>
-            <TableHead className="min-w-0">Reason</TableHead>
-            <TableHead>Contract end</TableHead>
-            <TableHead>Days to expiry</TableHead>
-            <TableHead className="w-[1%]">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => {
-            const level = getSeverityFromSignals({
-              legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
-              readiness: r.severity === "WARNING" ? "WARNING" : undefined,
-            });
-            const { variant, className } = severityToBadgeVariant(level);
-            return (
-              <TableRow key={r.employee_id}>
-                <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={variant} className={className} size="sm">
-                    {r.severity}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">{r.reason_code}</TableCell>
-                <TableCell>{formatDate(r.contract_end_date)}</TableCell>
-                <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
-                <TableCell>
-                  <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
-                      Edit employee
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <>
+        <ComplianceSummaryHeader illegal={illegal} warning={warning} />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Employee</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead className="min-w-0">Reason</TableHead>
+              <TableHead className="tabular-nums">Contract end</TableHead>
+              <TableHead className="tabular-nums w-24">Days</TableHead>
+              <TableHead className="w-[1%]">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const level = getSeverityFromSignals({
+                legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
+                readiness: r.severity === "WARNING" ? "WARNING" : undefined,
+              });
+              const { variant, className } = severityToBadgeVariant(level);
+              return (
+                <TableRow key={r.employee_id}>
+                  <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={variant} className={className} size="sm">
+                      {r.severity}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs font-medium">
+                    {reasonCodeToLabel(r.reason_code)}
+                  </TableCell>
+                  <TableCell className="tabular-nums font-medium">{formatDate(r.contract_end_date)}</TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
+                        Edit
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </>
     );
   }
 
   if (tab === "medical") {
-    const rows = items as InboxMedicalItem[];
+    const rows = sortComplianceRows(items as InboxMedicalItem[]);
+    const illegal = rows.filter((r) => r.severity === "ILLEGAL").length;
+    const warning = rows.filter((r) => r.severity === "WARNING").length;
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Severity</TableHead>
-            <TableHead className="min-w-0">Reason</TableHead>
-            <TableHead>Valid to</TableHead>
-            <TableHead>Days to expiry</TableHead>
-            <TableHead className="w-[1%]">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => {
-            const level = getSeverityFromSignals({
-              legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
-              readiness: r.severity === "WARNING" ? "WARNING" : undefined,
-            });
-            const { variant, className } = severityToBadgeVariant(level);
-            return (
-              <TableRow key={r.employee_id}>
-                <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={variant} className={className} size="sm">
-                    {r.severity}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">{r.reason_code}</TableCell>
-                <TableCell>{formatDate(r.valid_to)}</TableCell>
-                <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
-                <TableCell>
-                  <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
-                      Edit employee
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <>
+        <ComplianceSummaryHeader illegal={illegal} warning={warning} />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Employee</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead className="min-w-0">Reason</TableHead>
+              <TableHead className="tabular-nums">Valid to</TableHead>
+              <TableHead className="tabular-nums w-24">Days</TableHead>
+              <TableHead className="w-[1%]">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const level = getSeverityFromSignals({
+                legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
+                readiness: r.severity === "WARNING" ? "WARNING" : undefined,
+              });
+              const { variant, className } = severityToBadgeVariant(level);
+              return (
+                <TableRow key={r.employee_id}>
+                  <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={variant} className={className} size="sm">
+                      {r.severity}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs font-medium">
+                    {reasonCodeToLabel(r.reason_code)}
+                  </TableCell>
+                  <TableCell className="tabular-nums font-medium">{formatDate(r.valid_to)}</TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
+                        Edit
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </>
     );
   }
 
   if (tab === "training") {
-    const rows = items as InboxTrainingItem[];
+    const rows = sortComplianceRows(items as InboxTrainingItem[]);
+    const illegal = rows.filter((r) => r.severity === "ILLEGAL").length;
+    const warning = rows.filter((r) => r.severity === "WARNING").length;
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Severity</TableHead>
-            <TableHead className="min-w-0">Reason</TableHead>
-            <TableHead>Valid to</TableHead>
-            <TableHead>Days to expiry</TableHead>
-            <TableHead className="w-[1%]">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => {
-            const level = getSeverityFromSignals({
-              legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
-              readiness: r.severity === "WARNING" ? "WARNING" : undefined,
-            });
-            const { variant, className } = severityToBadgeVariant(level);
-            return (
-              <TableRow key={r.employee_id}>
-                <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={variant} className={className} size="sm">
-                    {r.severity}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">{r.reason_code}</TableCell>
-                <TableCell>{formatDate(r.valid_to)}</TableCell>
-                <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
-                <TableCell>
-                  <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
-                      Edit employee
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <>
+        <ComplianceSummaryHeader illegal={illegal} warning={warning} />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Employee</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead className="min-w-0">Reason</TableHead>
+              <TableHead className="tabular-nums">Valid to</TableHead>
+              <TableHead className="tabular-nums w-24">Days</TableHead>
+              <TableHead className="w-[1%]">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const level = getSeverityFromSignals({
+                legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
+                readiness: r.severity === "WARNING" ? "WARNING" : undefined,
+              });
+              const { variant, className } = severityToBadgeVariant(level);
+              return (
+                <TableRow key={r.employee_id}>
+                  <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={variant} className={className} size="sm">
+                      {r.severity}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs font-medium">
+                    {reasonCodeToLabel(r.reason_code)}
+                  </TableCell>
+                  <TableCell className="tabular-nums font-medium">{formatDate(r.valid_to)}</TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
+                        Edit
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </>
     );
   }
 
   if (tab === "certificates") {
-    const rows = items as InboxCertificateItem[];
+    const rows = sortComplianceRows(items as InboxCertificateItem[]);
+    const illegal = rows.filter((r) => r.severity === "ILLEGAL").length;
+    const warning = rows.filter((r) => r.severity === "WARNING").length;
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Severity</TableHead>
-            <TableHead className="min-w-0">Reason</TableHead>
-            <TableHead>Valid to</TableHead>
-            <TableHead>Days to expiry</TableHead>
-            <TableHead className="w-[1%]">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => {
-            const level = getSeverityFromSignals({
-              legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
-              readiness: r.severity === "WARNING" ? "WARNING" : undefined,
-            });
-            const { variant, className } = severityToBadgeVariant(level);
-            return (
-              <TableRow key={r.employee_id}>
-                <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
-                <TableCell>
-                  <Badge variant={variant} className={className} size="sm">
-                    {r.severity}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">{r.reason_code}</TableCell>
-                <TableCell>{formatDate(r.valid_to)}</TableCell>
-                <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
-                <TableCell>
-                  <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
-                      Edit employee
-                    </Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <>
+        <ComplianceSummaryHeader illegal={illegal} warning={warning} />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Employee</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead className="min-w-0">Reason</TableHead>
+              <TableHead className="tabular-nums">Valid to</TableHead>
+              <TableHead className="tabular-nums w-24">Days</TableHead>
+              <TableHead className="w-[1%]">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const level = getSeverityFromSignals({
+                legitimacy: r.severity === "ILLEGAL" ? "LEGAL_STOP" : undefined,
+                readiness: r.severity === "WARNING" ? "WARNING" : undefined,
+              });
+              const { variant, className } = severityToBadgeVariant(level);
+              return (
+                <TableRow key={r.employee_id}>
+                  <TableCell className="font-medium">{r.employee_name || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={variant} className={className} size="sm">
+                      {r.severity}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs font-medium">
+                    {reasonCodeToLabel(r.reason_code)}
+                  </TableCell>
+                  <TableCell className="tabular-nums font-medium">{formatDate(r.valid_to)}</TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
+                        Edit
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </>
     );
   }
 
