@@ -150,6 +150,11 @@ export default function EmployeeDetailPage() {
     hireDate?: string;
     employmentType?: "permanent" | "temporary" | "consultant";
     contractEndDate?: string;
+    dateOfBirth?: string;
+    siteId?: string | null;
+    orgUnitId?: string | null;
+    team?: string;
+    managerId?: string | null;
   } | null>(null);
 
   const refetchEmployee = useCallback(async () => {
@@ -180,6 +185,8 @@ export default function EmployeeDetailPage() {
       postalCode: raw.postalCode,
       country: raw.country ?? "Sweden",
       isActive: raw.isActive ?? true,
+      siteId: raw.siteId,
+      orgUnitId: raw.orgUnitId,
     };
     setData((prev) => (prev.employee ? { ...prev, employee: emp } : prev));
   }, [id]);
@@ -246,6 +253,8 @@ export default function EmployeeDetailPage() {
             postalCode: raw.postalCode,
             country: raw.country ?? "Sweden",
             isActive: raw.isActive ?? true,
+            siteId: raw.siteId,
+            orgUnitId: raw.orgUnitId,
           }
         : null;
 
@@ -339,6 +348,11 @@ export default function EmployeeDetailPage() {
       hireDate: (emp as { hireDate?: string }).hireDate ?? emp.startDate ?? undefined,
       employmentType: emp.employmentType,
       contractEndDate: emp.contractEndDate ?? undefined,
+      dateOfBirth: emp.dateOfBirth ?? undefined,
+      siteId: emp.siteId ?? undefined,
+      orgUnitId: emp.orgUnitId ?? undefined,
+      team: emp.team ?? undefined,
+      managerId: emp.managerId ?? undefined,
     });
     setEmploymentEditOpen(true);
   }, [searchParams, id, data.employee]);

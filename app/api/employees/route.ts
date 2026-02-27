@@ -250,7 +250,7 @@ export async function GET(request: NextRequest) {
       `SELECT id, name, first_name, last_name, employee_number, employment_external_id, email, phone, date_of_birth,
               role, line, line_code, team, employment_type, start_date, contract_end_date, manager_id,
               address, city, postal_code, country, is_active, employment_status, hire_date,
-              employment_form, contract_start_date
+              employment_form, contract_start_date, site_id, org_unit_id
        FROM employees 
        WHERE org_id = $1
          AND (employment_status IS NULL OR employment_status != 'ARCHIVED')
@@ -304,6 +304,8 @@ export async function GET(request: NextRequest) {
       isActive: row.is_active ?? true,
       employmentStatus: (row as { employment_status?: string }).employment_status ?? "ACTIVE",
       hireDate: (row as { hire_date?: string }).hire_date ?? undefined,
+      siteId: (row as { site_id?: string | null }).site_id ?? undefined,
+      orgUnitId: (row as { org_unit_id?: string | null }).org_unit_id ?? undefined,
     }));
     const res = NextResponse.json({
       employees,

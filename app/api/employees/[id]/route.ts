@@ -37,6 +37,13 @@ type PatchBody = {
   contract_start_date?: string | null;
   contract_end_date?: string | null;
   start_date?: string | null;
+  // Master fields (Daniel HR v1)
+  date_of_birth?: string | null;
+  site_id?: string | null;
+  org_unit_id?: string | null;
+  manager_id?: string | null;
+  team?: string | null;
+  role?: string | null; // Role/Title -> employees.role
 };
 
 function parseDate(s: unknown): string | null {
@@ -139,6 +146,43 @@ function validatePatchBody(
         : parseDate(b.hire_date);
     if (v !== undefined) updates.start_date = v;
   }
+  // Master fields
+  if (b.date_of_birth !== undefined) {
+    const v =
+      b.date_of_birth === null ||
+      (typeof b.date_of_birth === "string" && b.date_of_birth.trim() === "")
+        ? null
+        : parseDate(b.date_of_birth);
+    if (v !== undefined) updates.date_of_birth = v;
+    else if (b.date_of_birth !== null && b.date_of_birth !== undefined)
+      details.push("date_of_birth must be YYYY-MM-DD or null");
+  }
+  if (b.site_id !== undefined) {
+    if (b.site_id === null || b.site_id === "") updates.site_id = null;
+    else if (typeof b.site_id === "string" && /^[0-9a-f-]{36}$/i.test(b.site_id.trim()))
+      updates.site_id = b.site_id.trim();
+    else details.push("site_id must be uuid or null");
+  }
+  if (b.org_unit_id !== undefined) {
+    if (b.org_unit_id === null || b.org_unit_id === "") updates.org_unit_id = null;
+    else if (typeof b.org_unit_id === "string" && /^[0-9a-f-]{36}$/i.test(b.org_unit_id.trim()))
+      updates.org_unit_id = b.org_unit_id.trim();
+    else details.push("org_unit_id must be uuid or null");
+  }
+  if (b.manager_id !== undefined) {
+    if (b.manager_id === null || b.manager_id === "") updates.manager_id = null;
+    else if (typeof b.manager_id === "string" && /^[0-9a-f-]{36}$/i.test(b.manager_id.trim()))
+      updates.manager_id = b.manager_id.trim();
+    else details.push("manager_id must be uuid or null");
+  }
+  if (b.team !== undefined) {
+    updates.team = b.team === null ? null : typeof b.team === "string" ? b.team : undefined;
+    if (updates.team === undefined && b.team !== null) details.push("team must be string or null");
+  }
+  if (b.role !== undefined) {
+    updates.role = b.role === null ? null : typeof b.role === "string" ? b.role : undefined;
+    if (updates.role === undefined && b.role !== null) details.push("role must be string or null");
+  }
 
   if (details.length > 0) return { ok: false, code: "VALIDATION_ERROR", details };
 
@@ -189,6 +233,8 @@ function toEmployeeDto(row: Record<string, unknown>) {
     country: row.country ?? "Sweden",
     isActive: row.is_active ?? true,
     orgId: row.org_id,
+    siteId: row.site_id ?? undefined,
+    orgUnitId: row.org_unit_id ?? undefined,
   };
 }
 
@@ -359,25 +405,111 @@ export async function PATCH(
       }
     }
 
+    // Tenant safety: manager must exist in same org
+    if (updates.manager_id !== undefined && updates.manager_id) {
+      const { data: manager } = await supabaseAdmin
+        .from("employees")
+        .select("id")
+        .eq("id", updates.manager_id)
+        .eq("org_id", activeOrgId)
+        .maybeSingle();
+      if (!manager) {
+        return apply(
+          NextResponse.json(
+            { ok: false, error: { code: "NOT_FOUND", details: ["Manager not found in organization"] }, requestId },
+            { status: 404 }
+          )
+        );
+      }
+    }
+    if (updates.org_unit_id !== undefined && updates.org_unit_id) {
+      const { data: unit } = await supabaseAdmin
+        .from("org_units")
+        .select("id")
+        .eq("id", updates.org_unit_id)
+        .eq("org_id", activeOrgId)
+        .maybeSingle();
+      if (!unit) {
+        return apply(
+          NextResponse.json(
+            { ok: false, error: { code: "NOT_FOUND", details: ["Org unit not found in organization"] }, requestId },
+            { status: 404 }
+          )
+        );
+      }
+    }
+    if (updates.site_id !== undefined && updates.site_id) {
+      const { data: site } = await supabaseAdmin
+        .from("sites")
+        .select("id")
+        .eq("id", updates.site_id)
+        .eq("org_id", activeOrgId)
+        .maybeSingle();
+      if (!site) {
+        return apply(
+          NextResponse.json(
+            { ok: false, error: { code: "NOT_FOUND", details: ["Site not found in organization"] }, requestId },
+            { status: 404 }
+          )
+        );
+      }
+    }
+
     const contractFieldsUpdated =
       updates.contract_start_date !== undefined ||
       updates.contract_end_date !== undefined ||
       updates.employment_type !== undefined;
+    const masterFieldsUpdated =
+      updates.date_of_birth !== undefined ||
+      updates.site_id !== undefined ||
+      updates.org_unit_id !== undefined ||
+      updates.manager_id !== undefined ||
+      updates.team !== undefined ||
+      updates.role !== undefined;
+
     let beforeContract: Record<string, unknown> | null = null;
-    if (contractFieldsUpdated) {
+    let beforeMaster: Record<string, unknown> | null = null;
+
+    const currentSelect =
+      contractFieldsUpdated || masterFieldsUpdated
+        ? [
+            "contract_start_date",
+            "contract_end_date",
+            "employment_type",
+            "employment_status",
+            ...(masterFieldsUpdated
+              ? ["date_of_birth", "site_id", "org_unit_id", "manager_id", "team", "role"]
+              : []),
+          ].join(", ")
+        : null;
+
+    if (currentSelect) {
       const { data: currentRow } = await supabaseAdmin
         .from("employees")
-        .select("contract_start_date, contract_end_date, employment_type, employment_status")
+        .select(currentSelect)
         .eq("id", id)
         .eq("org_id", activeOrgId)
         .maybeSingle();
       if (currentRow) {
-        beforeContract = {
-          contract_start_date: (currentRow as Record<string, unknown>).contract_start_date ?? null,
-          contract_end_date: (currentRow as Record<string, unknown>).contract_end_date ?? null,
-          employment_type: (currentRow as Record<string, unknown>).employment_type ?? null,
-          employment_status: (currentRow as Record<string, unknown>).employment_status ?? null,
-        };
+        const row = currentRow as unknown as Record<string, unknown>;
+        if (contractFieldsUpdated) {
+          beforeContract = {
+            contract_start_date: row.contract_start_date ?? null,
+            contract_end_date: row.contract_end_date ?? null,
+            employment_type: row.employment_type ?? null,
+            employment_status: row.employment_status ?? null,
+          };
+        }
+        if (masterFieldsUpdated) {
+          beforeMaster = {
+            date_of_birth: row.date_of_birth ?? null,
+            site_id: row.site_id ?? null,
+            org_unit_id: row.org_unit_id ?? null,
+            manager_id: row.manager_id ?? null,
+            team: row.team ?? null,
+            role: row.role ?? null,
+          };
+        }
       }
     }
 
@@ -387,13 +519,19 @@ export async function PATCH(
     if (updates.employee_number !== undefined) dbPayload.employee_number = updates.employee_number;
     if (updates.email !== undefined) dbPayload.email = updates.email;
     if (updates.phone !== undefined) dbPayload.phone = updates.phone;
-    if (updates.title !== undefined) dbPayload.role = updates.title;
+    if (updates.role !== undefined) dbPayload.role = updates.role;
+    else if (updates.title !== undefined) dbPayload.role = updates.title;
     if (updates.is_active !== undefined) dbPayload.is_active = updates.is_active;
     if (updates.position_id !== undefined) dbPayload.position_id = updates.position_id;
     if (updates.employment_type !== undefined) dbPayload.employment_type = updates.employment_type;
     if (updates.contract_start_date !== undefined) dbPayload.contract_start_date = updates.contract_start_date;
     if (updates.contract_end_date !== undefined) dbPayload.contract_end_date = updates.contract_end_date;
     if (updates.start_date !== undefined) dbPayload.start_date = updates.start_date;
+    if (updates.date_of_birth !== undefined) dbPayload.date_of_birth = updates.date_of_birth;
+    if (updates.site_id !== undefined) dbPayload.site_id = updates.site_id;
+    if (updates.org_unit_id !== undefined) dbPayload.org_unit_id = updates.org_unit_id;
+    if (updates.manager_id !== undefined) dbPayload.manager_id = updates.manager_id;
+    if (updates.team !== undefined) dbPayload.team = updates.team;
     if (updates.first_name !== undefined || updates.last_name !== undefined) {
       const first = updates.first_name ?? "";
       const last = updates.last_name ?? "";
@@ -415,7 +553,7 @@ export async function PATCH(
 
     const { data: requery, error: fetchErr } = await supabaseAdmin
       .from("employees")
-      .select("id, name, first_name, last_name, employee_number, email, phone, date_of_birth, role, line, line_code, team, employment_type, start_date, contract_start_date, contract_end_date, employment_status, manager_id, position_id, address, city, postal_code, country, is_active, org_id")
+      .select("id, name, first_name, last_name, employee_number, email, phone, date_of_birth, role, line, line_code, team, employment_type, start_date, contract_start_date, contract_end_date, employment_status, manager_id, position_id, address, city, postal_code, country, is_active, org_id, site_id, org_unit_id")
       .eq("id", id)
       .eq("org_id", activeOrgId)
       .limit(1)
@@ -453,7 +591,32 @@ export async function PATCH(
         before: beforeContract,
         after: afterContract,
         requestId,
-        idempotencyKey: `EMPLOYEE_UPDATE:${id}:${requestId}`,
+        idempotencyKey: `EMPLOYEE_UPDATE:${id}:${requestId}:CONTRACT`,
+      });
+    }
+    if (beforeMaster != null && requery) {
+      const requeryRow = requery as Record<string, unknown>;
+      const afterMaster = {
+        date_of_birth: requeryRow.date_of_birth ?? null,
+        site_id: requeryRow.site_id ?? null,
+        org_unit_id: requeryRow.org_unit_id ?? null,
+        manager_id: requeryRow.manager_id ?? null,
+        team: requeryRow.team ?? null,
+        role: requeryRow.role ?? null,
+      };
+      await auditWrite({
+        admin: supabaseAdmin,
+        orgId: activeOrgId,
+        siteId: auth.activeSiteId ?? null,
+        actorUserId: auth.userId,
+        action: "EMPLOYEE_UPDATE",
+        targetType: "EMPLOYEE",
+        targetId: id,
+        reasonCodes: ["MASTER"],
+        before: beforeMaster,
+        after: afterMaster,
+        requestId,
+        idempotencyKey: `EMPLOYEE_UPDATE:${id}:${requestId}:MASTER`,
       });
     }
 

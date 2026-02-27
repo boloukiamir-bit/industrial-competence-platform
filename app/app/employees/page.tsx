@@ -50,6 +50,11 @@ export default function EmployeesPage() {
     hireDate?: string;
     employmentType?: "permanent" | "temporary" | "consultant";
     contractEndDate?: string;
+    dateOfBirth?: string;
+    siteId?: string | null;
+    orgUnitId?: string | null;
+    team?: string;
+    managerId?: string | null;
   } | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const { toast } = useToast();
@@ -115,6 +120,8 @@ export default function EmployeesPage() {
           employmentForm: (row as { employmentForm?: string }).employmentForm,
           contractStartDate: (row as { contractStartDate?: string }).contractStartDate,
           hireDate: (row as { hireDate?: string }).hireDate,
+          siteId: (row as { siteId?: string | null }).siteId ?? undefined,
+          orgUnitId: (row as { orgUnitId?: string | null }).orgUnitId ?? undefined,
         }))
       );
     } finally {
@@ -185,10 +192,15 @@ export default function EmployeesPage() {
       employeeNumber: emp.employeeNumber,
       email: emp.email,
       phone: emp.phone,
-      title: (emp as { title?: string }).title,
-      hireDate: (emp as { hireDate?: string }).hireDate,
+      title: (emp as { title?: string }).title ?? emp.role,
+      hireDate: (emp as { hireDate?: string }).hireDate ?? emp.startDate,
       employmentType: ((emp.employmentType ?? (emp as { employment_type?: string }).employment_type) ?? "permanent") as "permanent" | "temporary" | "consultant",
       contractEndDate: emp.contractEndDate ?? (emp as { contract_end_date?: string }).contract_end_date,
+      dateOfBirth: emp.dateOfBirth,
+      siteId: emp.siteId ?? undefined,
+      orgUnitId: emp.orgUnitId ?? undefined,
+      team: emp.team,
+      managerId: emp.managerId ?? undefined,
     });
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-employee-id="${highlightId}"]`);
@@ -436,6 +448,11 @@ export default function EmployeesPage() {
                           hireDate: (employee as { hireDate?: string }).hireDate ?? employee.startDate,
                           employmentType: ((employee.employmentType ?? (employee as { employment_type?: string }).employment_type) ?? "permanent") as "permanent" | "temporary" | "consultant",
                           contractEndDate: employee.contractEndDate ?? (employee as { contract_end_date?: string }).contract_end_date,
+                          dateOfBirth: employee.dateOfBirth,
+                          siteId: employee.siteId ?? undefined,
+                          orgUnitId: employee.orgUnitId ?? undefined,
+                          team: employee.team,
+                          managerId: employee.managerId ?? undefined,
                         });
                       }}
                       onDeactivate={() => setDeactivateEmployee(employee)}

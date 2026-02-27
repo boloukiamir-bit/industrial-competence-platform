@@ -43,6 +43,11 @@ export type EmployeeEditDrawerProps = {
     hireDate?: string;
     employmentType?: "permanent" | "temporary" | "consultant";
     contractEndDate?: string;
+    dateOfBirth?: string;
+    siteId?: string | null;
+    orgUnitId?: string | null;
+    team?: string;
+    managerId?: string | null;
   } | null;
   /** When set, after successful save close drawer and redirect here (only /app/ paths). */
   returnTo?: string;
@@ -90,6 +95,15 @@ export function EmployeeEditDrawer({
   const [trainingCompletedOn, setTrainingCompletedOn] = useState("");
   const [certificateValidTo, setCertificateValidTo] = useState("");
   const [certificateIssuedOn, setCertificateIssuedOn] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const [orgUnitId, setOrgUnitId] = useState<string | null>(null);
+  const [team, setTeam] = useState("");
+  const [managerId, setManagerId] = useState<string | null>(null);
+
+  const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
+  const [orgUnits, setOrgUnits] = useState<{ id: string; name: string; parent_id?: string | null }[]>([]);
+  const [managers, setManagers] = useState<{ id: string; name: string }[]>([]);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,12 +124,33 @@ export function EmployeeEditDrawer({
     const et = initial?.employmentType ?? "permanent";
     setEmploymentType(et);
     setContractEndDate(et === "permanent" ? "" : (initial?.contractEndDate ?? ""));
+    setDateOfBirth(initial?.dateOfBirth ?? "");
+    setSiteId(initial?.siteId ?? null);
+    setOrgUnitId(initial?.orgUnitId ?? null);
+    setTeam(initial?.team ?? "");
+    setManagerId(initial?.managerId ?? null);
     setError(null);
   }, [initial]);
 
   useEffect(() => {
     if (open) resetEmploymentForm();
   }, [open, resetEmploymentForm]);
+
+  // On open: fetch sites, org units, managers (for master section)
+  useEffect(() => {
+    if (!open) return;
+    const headers = withDevBearer();
+    Promise.all([
+      fetch("/api/sites", { credentials: "include", headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/org-units", { credentials: "include", headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/employees/min", { credentials: "include", headers }).then((r) => (r.ok ? r.json() : null)),
+    ]).then(([sitesRes, orgUnitsRes, employeesRes]) => {
+      setSites(sitesRes?.sites ?? []);
+      setOrgUnits(orgUnitsRes?.org_units ?? []);
+      const list = Array.isArray(employeesRes?.employees) ? employeesRes.employees : [];
+      setManagers(list.map((e: { id: string; name?: string }) => ({ id: e.id, name: e.name ?? "" })));
+    });
+  }, [open]);
 
   // On open: fetch medical, training, certificate and set initial + draft
   useEffect(() => {
@@ -159,7 +194,7 @@ export function EmployeeEditDrawer({
     });
   }, [open, employeeId]);
 
-  // Dirty detection
+  // Dirty detection (including master fields; use normDate for DOB)
   const employmentDirty = useMemo(() => {
     const a = initial?.firstName ?? "";
     const b = initial?.lastName ?? "";
@@ -170,6 +205,11 @@ export function EmployeeEditDrawer({
     const g = initial?.hireDate ?? "";
     const et = initial?.employmentType ?? "permanent";
     const h = et === "permanent" ? "" : (initial?.contractEndDate ?? "");
+    const dob = normDate(initial?.dateOfBirth ?? "");
+    const sid = initial?.siteId ?? null;
+    const oid = initial?.orgUnitId ?? null;
+    const t = initial?.team ?? "";
+    const mid = initial?.managerId ?? null;
     return (
       firstName.trim() !== a ||
       lastName.trim() !== b ||
@@ -179,7 +219,12 @@ export function EmployeeEditDrawer({
       (title ?? "").trim() !== f ||
       (hireDate ?? "").trim() !== g ||
       employmentType !== et ||
-      (employmentType === "permanent" ? "" : (contractEndDate ?? "").trim()) !== h
+      (employmentType === "permanent" ? "" : (contractEndDate ?? "").trim()) !== h ||
+      normDate(dateOfBirth) !== dob ||
+      (siteId ?? null) !== sid ||
+      (orgUnitId ?? null) !== oid ||
+      (team ?? "").trim() !== t ||
+      (managerId ?? null) !== mid
     );
   }, [
     initial,
@@ -192,6 +237,11 @@ export function EmployeeEditDrawer({
     hireDate,
     employmentType,
     contractEndDate,
+    dateOfBirth,
+    siteId,
+    orgUnitId,
+    team,
+    managerId,
   ]);
 
   const medicalDirty = useMemo(() => {
@@ -245,10 +295,15 @@ export function EmployeeEditDrawer({
             employee_number: employeeNumber.trim() || undefined,
             email: email.trim() || null,
             phone: phone.trim() || null,
-            title: title.trim() || null,
+            role: title.trim() || null,
             hire_date: hireDate.trim() || undefined,
             employment_type: employmentType,
             contract_end_date: employmentType === "permanent" ? null : (contractEndDate.trim() || null),
+            date_of_birth: dateOfBirth.trim() ? dateOfBirth.trim() : null,
+            site_id: siteId && siteId.trim() ? siteId : null,
+            org_unit_id: orgUnitId && orgUnitId.trim() ? orgUnitId : null,
+            manager_id: managerId && managerId.trim() ? managerId : null,
+            team: team.trim() ? team.trim() : null,
           };
           const res = await fetch(`/api/employees/${employeeId}`, {
             method: "PATCH",
@@ -351,6 +406,100 @@ export function EmployeeEditDrawer({
               {error}
             </p>
           )}
+          <div className="border-b border-border pb-4 space-y-3">
+            <Label className="text-sm font-medium">Employee master</Label>
+            <div className="grid gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="edit-dob">Date of birth</Label>
+                <Input
+                  id="edit-dob"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-site">Site</Label>
+                <Select
+                  value={siteId ?? ""}
+                  onValueChange={(v) => setSiteId(v === "" ? null : v)}
+                >
+                  <SelectTrigger id="edit-site" className="bg-background">
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">—</SelectItem>
+                    {sites.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-org-unit">Org unit</Label>
+                <Select
+                  value={orgUnitId ?? ""}
+                  onValueChange={(v) => setOrgUnitId(v === "" ? null : v)}
+                >
+                  <SelectTrigger id="edit-org-unit" className="bg-background">
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">—</SelectItem>
+                    {orgUnits.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-team">Team</Label>
+                <Input
+                  id="edit-team"
+                  value={team}
+                  onChange={(e) => setTeam(e.target.value)}
+                  placeholder="Team"
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-manager">Manager</Label>
+                <Select
+                  value={managerId ?? ""}
+                  onValueChange={(v) => setManagerId(v === "" ? null : v)}
+                >
+                  <SelectTrigger id="edit-manager" className="bg-background">
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">—</SelectItem>
+                    {managers
+                      .filter((m) => m.id !== employeeId)
+                      .map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-role-title">Role/Title</Label>
+                <Input
+                  id="edit-role-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Role/Title"
+                  className="bg-background"
+                />
+              </div>
+            </div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="edit-first-name">First name</Label>
             <Input
@@ -399,16 +548,6 @@ export function EmployeeEditDrawer({
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="Phone"
-              className="bg-background"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-title">Title</Label>
-            <Input
-              id="edit-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title"
               className="bg-background"
             />
           </div>

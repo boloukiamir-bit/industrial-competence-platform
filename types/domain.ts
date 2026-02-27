@@ -26,6 +26,7 @@ export type Employee = {
   postalCode?: string;
   country?: string;
   orgUnitId?: string;
+  siteId?: string | null;
   isActive: boolean;
   /** Lifecycle: ACTIVE | INACTIVE | TERMINATED (ARCHIVED not exposed in UI). */
   employmentStatus?: string;
