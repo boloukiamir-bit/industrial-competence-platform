@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sheet,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
-import { isSafeAppReturnTo } from "@/lib/utils";
+import { isSafeAppReturnTo, normDate } from "@/lib/utils";
 
 const EMPLOYMENT_TYPE_OPTIONS = [
   { value: "permanent" as const, label: "Permanent" },
@@ -51,6 +51,10 @@ export type EmployeeEditDrawerProps = {
 
 type PatchError = { code?: string; details?: string[] };
 
+type SectionMedical = { valid_to: string; valid_from: string };
+type SectionTraining = { valid_to: string; completed_on: string };
+type SectionCertificate = { valid_to: string; issued_on: string };
+
 export function EmployeeEditDrawer({
   open,
   onOpenChange,
@@ -69,6 +73,8 @@ export function EmployeeEditDrawer({
       router.push(returnTo);
     }
   }, [onSaved, onOpenChange, returnTo, router]);
+
+  // Draft state (all sections)
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [employeeNumber, setEmployeeNumber] = useState("");
@@ -78,21 +84,22 @@ export function EmployeeEditDrawer({
   const [hireDate, setHireDate] = useState("");
   const [employmentType, setEmploymentType] = useState<"permanent" | "temporary" | "consultant">("permanent");
   const [contractEndDate, setContractEndDate] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [medicalValidTo, setMedicalValidTo] = useState("");
-  const [medicalSaving, setMedicalSaving] = useState(false);
-  const [medicalError, setMedicalError] = useState<string | null>(null);
+  const [medicalValidFrom, setMedicalValidFrom] = useState("");
   const [trainingValidTo, setTrainingValidTo] = useState("");
   const [trainingCompletedOn, setTrainingCompletedOn] = useState("");
-  const [trainingSaving, setTrainingSaving] = useState(false);
-  const [trainingError, setTrainingError] = useState<string | null>(null);
   const [certificateValidTo, setCertificateValidTo] = useState("");
   const [certificateIssuedOn, setCertificateIssuedOn] = useState("");
-  const [certificateSaving, setCertificateSaving] = useState(false);
-  const [certificateError, setCertificateError] = useState<string | null>(null);
 
-  const resetForm = useCallback(() => {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initial snapshots (set when drawer opens + fetch completes) for dirty detection
+  const [initialMedical, setInitialMedical] = useState<SectionMedical | null>(null);
+  const [initialTraining, setInitialTraining] = useState<SectionTraining | null>(null);
+  const [initialCertificate, setInitialCertificate] = useState<SectionCertificate | null>(null);
+
+  const resetEmploymentForm = useCallback(() => {
     setFirstName(initial?.firstName ?? "");
     setLastName(initial?.lastName ?? "");
     setEmployeeNumber(initial?.employeeNumber ?? "");
@@ -107,109 +114,223 @@ export function EmployeeEditDrawer({
   }, [initial]);
 
   useEffect(() => {
-    if (open) resetForm();
-  }, [open, resetForm]);
+    if (open) resetEmploymentForm();
+  }, [open, resetEmploymentForm]);
 
+  // On open: fetch medical, training, certificate and set initial + draft
   useEffect(() => {
     if (!open || !employeeId) return;
-    setMedicalError(null);
-    fetch(`/api/employees/${employeeId}/medical`, { credentials: "include", headers: withDevBearer() })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json?.ok && json.valid_to) setMedicalValidTo(String(json.valid_to).slice(0, 10));
-        else setMedicalValidTo("");
-      })
-      .catch(() => setMedicalValidTo(""));
+    setInitialMedical(null);
+    setInitialTraining(null);
+    setInitialCertificate(null);
+    const headers = withDevBearer();
+    Promise.all([
+      fetch(`/api/employees/${employeeId}/medical`, { credentials: "include", headers }).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch(`/api/employees/${employeeId}/training`, { credentials: "include", headers }).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch(`/api/employees/${employeeId}/certificate`, { credentials: "include", headers }).then((r) =>
+        r.ok ? r.json() : null
+      ),
+    ]).then(([med, train, cert]) => {
+      const m: SectionMedical = {
+        valid_to: med?.ok && med.valid_to ? String(med.valid_to).slice(0, 10) : "",
+        valid_from: med?.ok && med.valid_from ? String(med.valid_from).slice(0, 10) : "",
+      };
+      const t: SectionTraining = {
+        valid_to: train?.ok && train.valid_to ? String(train.valid_to).slice(0, 10) : "",
+        completed_on: train?.ok && train.completed_on ? String(train.completed_on).slice(0, 10) : "",
+      };
+      const c: SectionCertificate = {
+        valid_to: cert?.ok && cert.valid_to ? String(cert.valid_to).slice(0, 10) : "",
+        issued_on: cert?.ok && cert.issued_on ? String(cert.issued_on).slice(0, 10) : "",
+      };
+      setInitialMedical(m);
+      setInitialTraining(t);
+      setInitialCertificate(c);
+      setMedicalValidTo(m.valid_to);
+      setMedicalValidFrom(m.valid_from);
+      setTrainingValidTo(t.valid_to);
+      setTrainingCompletedOn(t.completed_on);
+      setCertificateValidTo(c.valid_to);
+      setCertificateIssuedOn(c.issued_on);
+    });
   }, [open, employeeId]);
 
-  useEffect(() => {
-    if (!open || !employeeId) return;
-    setTrainingError(null);
-    fetch(`/api/employees/${employeeId}/training`, { credentials: "include", headers: withDevBearer() })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json?.ok) {
-          setTrainingValidTo(json.valid_to ? String(json.valid_to).slice(0, 10) : "");
-          setTrainingCompletedOn(json.completed_on ? String(json.completed_on).slice(0, 10) : "");
-        } else {
-          setTrainingValidTo("");
-          setTrainingCompletedOn("");
-        }
-      })
-      .catch(() => {
-        setTrainingValidTo("");
-        setTrainingCompletedOn("");
-      });
-  }, [open, employeeId]);
+  // Dirty detection
+  const employmentDirty = useMemo(() => {
+    const a = initial?.firstName ?? "";
+    const b = initial?.lastName ?? "";
+    const c = initial?.employeeNumber ?? "";
+    const d = initial?.email ?? "";
+    const e = initial?.phone ?? "";
+    const f = initial?.title ?? "";
+    const g = initial?.hireDate ?? "";
+    const et = initial?.employmentType ?? "permanent";
+    const h = et === "permanent" ? "" : (initial?.contractEndDate ?? "");
+    return (
+      firstName.trim() !== a ||
+      lastName.trim() !== b ||
+      employeeNumber.trim() !== c ||
+      (email ?? "").trim() !== d ||
+      (phone ?? "").trim() !== e ||
+      (title ?? "").trim() !== f ||
+      (hireDate ?? "").trim() !== g ||
+      employmentType !== et ||
+      (employmentType === "permanent" ? "" : (contractEndDate ?? "").trim()) !== h
+    );
+  }, [
+    initial,
+    firstName,
+    lastName,
+    employeeNumber,
+    email,
+    phone,
+    title,
+    hireDate,
+    employmentType,
+    contractEndDate,
+  ]);
 
-  useEffect(() => {
-    if (!open || !employeeId) return;
-    setCertificateError(null);
-    fetch(`/api/employees/${employeeId}/certificate`, { credentials: "include", headers: withDevBearer() })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json?.ok) {
-          setCertificateValidTo(json.valid_to ? String(json.valid_to).slice(0, 10) : "");
-          setCertificateIssuedOn(json.issued_on ? String(json.issued_on).slice(0, 10) : "");
-        } else {
-          setCertificateValidTo("");
-          setCertificateIssuedOn("");
-        }
-      })
-      .catch(() => {
-        setCertificateValidTo("");
-        setCertificateIssuedOn("");
-      });
-  }, [open, employeeId]);
+  const medicalDirty = useMemo(() => {
+    if (initialMedical == null) return false;
+    return (
+      normDate(medicalValidTo) !== normDate(initialMedical.valid_to) ||
+      normDate(medicalValidFrom) !== normDate(initialMedical.valid_from)
+    );
+  }, [initialMedical, medicalValidTo, medicalValidFrom]);
 
-  const handleSave = async () => {
+  const trainingDirty = useMemo(() => {
+    if (initialTraining == null) return false;
+    return (
+      normDate(trainingValidTo) !== normDate(initialTraining.valid_to) ||
+      normDate(trainingCompletedOn) !== normDate(initialTraining.completed_on)
+    );
+  }, [initialTraining, trainingValidTo, trainingCompletedOn]);
+
+  const certificateDirty = useMemo(() => {
+    if (initialCertificate == null) return false;
+    return (
+      normDate(certificateValidTo) !== normDate(initialCertificate.valid_to) ||
+      normDate(certificateIssuedOn) !== normDate(initialCertificate.issued_on)
+    );
+  }, [initialCertificate, certificateValidTo, certificateIssuedOn]);
+
+  const anyDirty = employmentDirty || medicalDirty || trainingDirty || certificateDirty;
+
+  const handleSaveAll = async () => {
     if (!employeeId) return;
     setError(null);
     const needsContractEnd = employmentType === "temporary" || employmentType === "consultant";
     if (needsContractEnd && !contractEndDate.trim()) {
       setError("Contract end date is required for Visstid and Provanställd.");
+      toast({ title: "Contract end date required", variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
-      const body: Record<string, unknown> = {
-        first_name: firstName.trim() || undefined,
-        last_name: lastName.trim() || undefined,
-        employee_number: employeeNumber.trim() || undefined,
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-        title: title.trim() || null,
-        hire_date: hireDate.trim() || undefined,
-        employment_type: employmentType,
-        contract_end_date: employmentType === "permanent" ? null : (contractEndDate.trim() || null),
-      };
-      const res = await fetch(`/api/employees/${employeeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...withDevBearer() },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        toast({ title: "Employee updated" });
-        closeAndMaybeRedirect();
-        return;
+      const order: Array<"employment" | "medical" | "training" | "certificate"> = [
+        "employment",
+        "medical",
+        "training",
+        "certificate",
+      ];
+      for (const section of order) {
+        if (section === "employment" && employmentDirty) {
+          const body: Record<string, unknown> = {
+            first_name: firstName.trim() || undefined,
+            last_name: lastName.trim() || undefined,
+            employee_number: employeeNumber.trim() || undefined,
+            email: email.trim() || null,
+            phone: phone.trim() || null,
+            title: title.trim() || null,
+            hire_date: hireDate.trim() || undefined,
+            employment_type: employmentType,
+            contract_end_date: employmentType === "permanent" ? null : (contractEndDate.trim() || null),
+          };
+          const res = await fetch(`/api/employees/${employeeId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...withDevBearer() },
+            credentials: "include",
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            const err = data?.error as PatchError | undefined;
+            if (res.status === 403) {
+              toast({ title: "You do not have access", variant: "destructive" });
+            } else if (res.status === 404) {
+              toast({ title: "Employee not found", variant: "destructive" });
+            } else {
+              const msg = Array.isArray(err?.details) ? err.details.join(". ") : err?.code ?? data?.error ?? "Update failed";
+              toast({ title: msg, variant: "destructive" });
+            }
+            setError("Save failed");
+            return;
+          }
+        }
+        if (section === "medical" && medicalDirty) {
+          const res = await fetch(`/api/employees/${employeeId}/medical`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...withDevBearer() },
+            credentials: "include",
+            body: JSON.stringify({
+              medical_type: "GENERAL",
+              valid_to: medicalValidTo.trim() || null,
+              valid_from: medicalValidFrom.trim() || null,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            const msg = data?.error?.message ?? data?.error ?? "Failed to save medical";
+            toast({ title: typeof msg === "string" ? msg : "Failed to save medical", variant: "destructive" });
+            setError("Save failed");
+            return;
+          }
+        }
+        if (section === "training" && trainingDirty) {
+          const res = await fetch(`/api/employees/${employeeId}/training`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...withDevBearer() },
+            credentials: "include",
+            body: JSON.stringify({
+              training_code: "SAFETY",
+              valid_to: trainingValidTo.trim() || null,
+              completed_on: trainingCompletedOn.trim() || null,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            const msg = data?.error?.message ?? data?.error ?? "Failed to save training";
+            toast({ title: typeof msg === "string" ? msg : "Failed to save training", variant: "destructive" });
+            setError("Save failed");
+            return;
+          }
+        }
+        if (section === "certificate" && certificateDirty) {
+          const res = await fetch(`/api/employees/${employeeId}/certificate`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...withDevBearer() },
+            credentials: "include",
+            body: JSON.stringify({
+              certificate_code: "FORKLIFT",
+              valid_to: certificateValidTo.trim() || null,
+              issued_on: certificateIssuedOn.trim() || null,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            const msg = data?.error?.message ?? data?.error ?? "Failed to save certificate";
+            toast({ title: typeof msg === "string" ? msg : "Failed to save certificate", variant: "destructive" });
+            setError("Save failed");
+            return;
+          }
+        }
       }
-      const err = data?.error as PatchError | undefined;
-      if (res.status === 403) {
-        toast({ title: "You do not have access", variant: "destructive" });
-        setError("You do not have access.");
-        return;
-      }
-      if (res.status === 404) {
-        toast({ title: "Employee not found", variant: "destructive" });
-        setError("Employee not found (maybe moved org).");
-        return;
-      }
-      const details = Array.isArray(err?.details) ? err.details.join(". ") : "";
-      const msg = details || err?.code || data?.error || "Update failed";
-      toast({ title: msg, variant: "destructive" });
-      setError(details || msg);
+      toast({ title: "Saved" });
+      closeAndMaybeRedirect();
     } finally {
       setSaving(false);
     }
@@ -338,11 +459,16 @@ export function EmployeeEditDrawer({
           <div className="border-t border-border pt-4 space-y-2">
             <Label className="text-sm font-medium">Medical</Label>
             <p className="text-xs text-muted-foreground">General medical check validity.</p>
-            {medicalError && (
-              <p className="text-sm text-destructive font-medium" role="alert">
-                {medicalError}
-              </p>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-medical-valid-from">Valid from (optional)</Label>
+              <Input
+                id="edit-medical-valid-from"
+                type="date"
+                value={medicalValidFrom}
+                onChange={(e) => setMedicalValidFrom(e.target.value)}
+                className="bg-background"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-medical-valid-to">Valid to</Label>
               <Input
@@ -354,50 +480,10 @@ export function EmployeeEditDrawer({
                 data-testid="edit-medical-valid-to"
               />
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={medicalSaving}
-              data-testid="employee-edit-save-medical"
-              onClick={async () => {
-                if (!employeeId) return;
-                setMedicalError(null);
-                setMedicalSaving(true);
-                try {
-                  const res = await fetch(`/api/employees/${employeeId}/medical`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json", ...withDevBearer() },
-                    credentials: "include",
-                    body: JSON.stringify({
-                      medical_type: "GENERAL",
-                      valid_to: medicalValidTo.trim() || null,
-                    }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (res.ok && data.ok) {
-                    toast({ title: "Medical updated" });
-                    closeAndMaybeRedirect();
-                  } else {
-                    const msg = data?.error?.message ?? data?.error ?? "Failed to save medical";
-                    setMedicalError(typeof msg === "string" ? msg : "Failed to save medical");
-                  }
-                } finally {
-                  setMedicalSaving(false);
-                }
-              }}
-            >
-              {medicalSaving ? "Saving…" : "Save medical"}
-            </Button>
           </div>
           <div className="border-t border-border pt-4 space-y-2">
             <Label className="text-sm font-medium">Training</Label>
             <p className="text-xs text-muted-foreground">SAFETY training validity.</p>
-            {trainingError && (
-              <p className="text-sm text-destructive font-medium" role="alert">
-                {trainingError}
-              </p>
-            )}
             <div className="space-y-2">
               <Label htmlFor="edit-training-valid-to">Valid to</Label>
               <Input
@@ -420,51 +506,10 @@ export function EmployeeEditDrawer({
                 data-testid="edit-training-completed-on"
               />
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={trainingSaving}
-              data-testid="employee-edit-save-training"
-              onClick={async () => {
-                if (!employeeId) return;
-                setTrainingError(null);
-                setTrainingSaving(true);
-                try {
-                  const res = await fetch(`/api/employees/${employeeId}/training`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json", ...withDevBearer() },
-                    credentials: "include",
-                    body: JSON.stringify({
-                      training_code: "SAFETY",
-                      valid_to: trainingValidTo.trim() || null,
-                      completed_on: trainingCompletedOn.trim() || null,
-                    }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (res.ok && data.ok) {
-                    toast({ title: "Training updated" });
-                    closeAndMaybeRedirect();
-                  } else {
-                    const msg = data?.error?.message ?? data?.error ?? "Failed to save training";
-                    setTrainingError(typeof msg === "string" ? msg : "Failed to save training");
-                  }
-                } finally {
-                  setTrainingSaving(false);
-                }
-              }}
-            >
-              {trainingSaving ? "Saving…" : "Save training"}
-            </Button>
           </div>
           <div className="border-t border-border pt-4 space-y-2">
             <Label className="text-sm font-medium">Certificate</Label>
             <p className="text-xs text-muted-foreground">FORKLIFT certificate validity.</p>
-            {certificateError && (
-              <p className="text-sm text-destructive font-medium" role="alert">
-                {certificateError}
-              </p>
-            )}
             <div className="space-y-2">
               <Label htmlFor="edit-certificate-valid-to">Valid to</Label>
               <Input
@@ -487,51 +532,26 @@ export function EmployeeEditDrawer({
                 data-testid="edit-certificate-issued-on"
               />
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={certificateSaving}
-              data-testid="employee-edit-save-certificate"
-              onClick={async () => {
-                if (!employeeId) return;
-                setCertificateError(null);
-                setCertificateSaving(true);
-                try {
-                  const res = await fetch(`/api/employees/${employeeId}/certificate`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json", ...withDevBearer() },
-                    credentials: "include",
-                    body: JSON.stringify({
-                      certificate_code: "FORKLIFT",
-                      valid_to: certificateValidTo.trim() || null,
-                      issued_on: certificateIssuedOn.trim() || null,
-                    }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (res.ok && data.ok) {
-                    toast({ title: "Certificate updated" });
-                    closeAndMaybeRedirect();
-                  } else {
-                    const msg = data?.error?.message ?? data?.error ?? "Failed to save certificate";
-                    setCertificateError(typeof msg === "string" ? msg : "Failed to save certificate");
-                  }
-                } finally {
-                  setCertificateSaving(false);
-                }
-              }}
-            >
-              {certificateSaving ? "Saving…" : "Save certificate"}
-            </Button>
           </div>
         </div>
-        <div className="flex-shrink-0 border-t bg-background px-6 py-4 flex gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving} data-testid="employee-edit-save">
-            {saving ? "Saving…" : "Save"}
-          </Button>
+        <div className="flex-shrink-0 border-t bg-background px-6 py-4 flex flex-col gap-2">
+          {anyDirty && (
+            <p className="text-xs text-muted-foreground" data-testid="employee-edit-unsaved-hint">
+              Unsaved changes
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveAll}
+              disabled={saving || !anyDirty}
+              data-testid="employee-edit-save"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
