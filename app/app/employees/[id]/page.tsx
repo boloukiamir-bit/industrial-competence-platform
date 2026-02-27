@@ -46,6 +46,7 @@ import { logEmployeeAccess } from "@/services/gdpr";
 import { EmployeeLegitimacyProfile } from "@/components/employees/EmployeeLegitimacyProfile";
 import { EditableCard } from "@/components/shared/EditableCard";
 import { EmployeeEditDrawer } from "@/components/employees/EmployeeEditDrawer";
+import { isSafeAppReturnTo } from "@/lib/utils";
 
 type TabId = "personal" | "contact" | "organisation" | "employment" | "compensation" | "competence" | "compliance" | "profile" | "one-to-ones" | "documents" | "events" | "equipment";
 
@@ -110,6 +111,7 @@ export default function EmployeeDetailPage() {
   const searchParams = useSearchParams();
   const id = params.id as string;
   const dateParam = searchParams.get("date");
+  const returnTo = isSafeAppReturnTo(searchParams.get("return_to")) ? searchParams.get("return_to")! : undefined;
   const asOfDate =
     dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
       ? dateParam
@@ -1091,6 +1093,7 @@ export default function EmployeeDetailPage() {
         }}
         employeeId={id}
         initial={employmentEditInitial}
+        returnTo={returnTo}
         onSaved={async () => {
           await refetchEmployee();
           setEmploymentEditOpen(false);

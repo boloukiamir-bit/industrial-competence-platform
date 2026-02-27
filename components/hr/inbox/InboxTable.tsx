@@ -269,7 +269,7 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
                 <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
                 <TableCell>
                   <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1`}>
+                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
                       Edit employee
                     </Link>
                   </Button>
@@ -316,7 +316,7 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
                 <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
                 <TableCell>
                   <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1`}>
+                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
                       Edit employee
                     </Link>
                   </Button>
@@ -363,7 +363,7 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
                 <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
                 <TableCell>
                   <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1`}>
+                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
                       Edit employee
                     </Link>
                   </Button>
@@ -410,7 +410,7 @@ export function InboxTable({ tab, items, loading, error }: InboxTableProps) {
                 <TableCell>{r.days_to_expiry != null ? String(r.days_to_expiry) : "—"}</TableCell>
                 <TableCell>
                   <Button variant="default" size="sm" asChild>
-                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1`}>
+                    <Link href={`/app/employees/${encodeURIComponent(r.employee_id)}?edit=1&return_to=${encodeURIComponent(`/app/hr/inbox?tab=${tab}`)}`}>
                       Edit employee
                     </Link>
                   </Button>

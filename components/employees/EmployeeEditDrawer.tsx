@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Sheet,
   SheetContent,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { withDevBearer } from "@/lib/devBearer";
+import { isSafeAppReturnTo } from "@/lib/utils";
 
 const EMPLOYMENT_TYPE_OPTIONS = [
   { value: "permanent" as const, label: "Permanent" },
@@ -42,6 +44,8 @@ export type EmployeeEditDrawerProps = {
     employmentType?: "permanent" | "temporary" | "consultant";
     contractEndDate?: string;
   } | null;
+  /** When set, after successful save close drawer and redirect here (only /app/ paths). */
+  returnTo?: string;
   onSaved?: () => void;
 };
 
@@ -52,9 +56,19 @@ export function EmployeeEditDrawer({
   onOpenChange,
   employeeId,
   initial,
+  returnTo,
   onSaved,
 }: EmployeeEditDrawerProps) {
   const { toast } = useToast();
+  const router = useRouter();
+
+  const closeAndMaybeRedirect = useCallback(() => {
+    onSaved?.();
+    onOpenChange(false);
+    if (returnTo && isSafeAppReturnTo(returnTo)) {
+      router.push(returnTo);
+    }
+  }, [onSaved, onOpenChange, returnTo, router]);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [employeeNumber, setEmployeeNumber] = useState("");
@@ -178,8 +192,7 @@ export function EmployeeEditDrawer({
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         toast({ title: "Employee updated" });
-        onSaved?.();
-        onOpenChange(false);
+        closeAndMaybeRedirect();
         return;
       }
       const err = data?.error as PatchError | undefined;
@@ -364,7 +377,7 @@ export function EmployeeEditDrawer({
                   const data = await res.json().catch(() => ({}));
                   if (res.ok && data.ok) {
                     toast({ title: "Medical updated" });
-                    onSaved?.();
+                    closeAndMaybeRedirect();
                   } else {
                     const msg = data?.error?.message ?? data?.error ?? "Failed to save medical";
                     setMedicalError(typeof msg === "string" ? msg : "Failed to save medical");
@@ -431,7 +444,7 @@ export function EmployeeEditDrawer({
                   const data = await res.json().catch(() => ({}));
                   if (res.ok && data.ok) {
                     toast({ title: "Training updated" });
-                    onSaved?.();
+                    closeAndMaybeRedirect();
                   } else {
                     const msg = data?.error?.message ?? data?.error ?? "Failed to save training";
                     setTrainingError(typeof msg === "string" ? msg : "Failed to save training");
@@ -498,7 +511,7 @@ export function EmployeeEditDrawer({
                   const data = await res.json().catch(() => ({}));
                   if (res.ok && data.ok) {
                     toast({ title: "Certificate updated" });
-                    onSaved?.();
+                    closeAndMaybeRedirect();
                   } else {
                     const msg = data?.error?.message ?? data?.error ?? "Failed to save certificate";
                     setCertificateError(typeof msg === "string" ? msg : "Failed to save certificate");
