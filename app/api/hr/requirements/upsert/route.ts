@@ -13,6 +13,7 @@ type UpsertBody = {
   employee_id?: string;
   requirement_code?: string;
   requirement_name?: string;
+  requirement_id?: string | null;
   valid_from?: string | null;
   valid_to?: string | null;
   status_override?: string | null;
@@ -52,11 +53,17 @@ export async function POST(request: NextRequest) {
   }
 
   const employee_id = typeof body.employee_id === "string" ? body.employee_id.trim() : "";
+  const requirement_id =
+    body.requirement_id == null || body.requirement_id === ""
+      ? null
+      : typeof body.requirement_id === "string"
+        ? body.requirement_id.trim() || null
+        : null;
   const requirement_code = typeof body.requirement_code === "string" ? body.requirement_code.trim() : "";
   const requirement_name = typeof body.requirement_name === "string" ? body.requirement_name.trim() : "";
-  if (!requirement_code || !requirement_name) {
+  if (!requirement_id && (!requirement_code || !requirement_name)) {
     const res = NextResponse.json(
-      { ok: false, error: "requirement_code and requirement_name are required and non-empty" },
+      { ok: false, error: "requirement_code and requirement_name are required when not linking from catalog (requirement_id)" },
       { status: 400 }
     );
     applySupabaseCookies(res, pendingCookies);
@@ -125,6 +132,7 @@ export async function POST(request: NextRequest) {
       p_evidence_url: evidence_url,
       p_note: note,
       p_idempotency_key: idempotency_key,
+      p_requirement_id: requirement_id,
     });
 
     if (error) {
@@ -132,6 +140,14 @@ export async function POST(request: NextRequest) {
       const msg = error.message ?? "RPC failed";
       if (code === "P0001" && msg.includes("Org mismatch")) {
         const res = NextResponse.json({ ok: false, error: "Organization mismatch" }, { status: 403 });
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      if (code === "P0003") {
+        const res = NextResponse.json(
+          { ok: false, error: "Catalog requirement not found or inactive" },
+          { status: 404 }
+        );
         applySupabaseCookies(res, pendingCookies);
         return res;
       }

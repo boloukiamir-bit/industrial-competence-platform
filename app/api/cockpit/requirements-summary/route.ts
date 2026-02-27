@@ -45,7 +45,14 @@ export async function GET(request: NextRequest) {
     }
 
     const payload = data as {
-      counts?: { total: number; illegal: number; warning: number; go: number };
+      counts?: {
+        total: number;
+        illegal: number;
+        warning: number;
+        go: number;
+        blocking_critical: number;
+        blocking_high: number;
+      };
       top_requirements?: Array<{
         requirement_code: string;
         requirement_name: string;
@@ -57,7 +64,14 @@ export async function GET(request: NextRequest) {
 
     const res = NextResponse.json({
       ok: true,
-      counts: payload?.counts ?? { total: 0, illegal: 0, warning: 0, go: 0 },
+      counts: payload?.counts ?? {
+        total: 0,
+        illegal: 0,
+        warning: 0,
+        go: 0,
+        blocking_critical: 0,
+        blocking_high: 0,
+      },
       top_requirements: payload?.top_requirements ?? [],
     });
     applySupabaseCookies(res, pendingCookies);

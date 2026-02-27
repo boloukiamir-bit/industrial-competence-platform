@@ -1,17 +1,11 @@
 /**
- * PATCH /api/hr/requirements-rules/[id] — update is_mandatory. Audit: governance_events REQUIREMENT_RULE_UPDATE.
- * DELETE /api/hr/requirements-rules/[id] — delete rule. Audit: governance_events REQUIREMENT_RULE_DELETE.
+ * PATCH /api/hr/requirements-rules/[id] — update is_mandatory via update_requirement_rule_v1 (atomic + governance).
+ * DELETE /api/hr/requirements-rules/[id] — delete rule via delete_requirement_rule_v1 (atomic + governance).
  * Auth: requireAdminOrHr. Tenant: activeOrgId (row must belong to org).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function PATCH(
   request: NextRequest,
@@ -55,32 +49,31 @@ export async function PATCH(
   }
 
   try {
-    const { data: existing, error: fetchError } = await supabase
-      .from("requirement_role_rules")
-      .select("role, requirement_code, requirement_name, is_mandatory")
-      .eq("id", id)
-      .eq("org_id", auth.activeOrgId)
-      .maybeSingle();
-
-    if (fetchError || !existing) {
-      const res = NextResponse.json(
-        { ok: false, error: "Rule not found" },
-        { status: 404 }
-      );
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const { data, error } = await supabase
-      .from("requirement_role_rules")
-      .update({ is_mandatory })
-      .eq("id", id)
-      .eq("org_id", auth.activeOrgId)
-      .select("id")
-      .maybeSingle();
+    const { data: rpcData, error } = await supabase.rpc("update_requirement_rule_v1", {
+      p_org_id: auth.activeOrgId,
+      p_rule_id: id,
+      p_is_mandatory: is_mandatory,
+      p_idempotency_key: null,
+    });
 
     if (error) {
-      console.error("[hr/requirements-rules] update error", error);
+      if (error.code === "P0001") {
+        const res = NextResponse.json(
+          { ok: false, error: "Org mismatch" },
+          { status: 403 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      if (error.code === "P0002") {
+        const res = NextResponse.json(
+          { ok: false, error: "Rule not found" },
+          { status: 404 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      console.error("[hr/requirements-rules] update_requirement_rule_v1 error", error);
       const res = NextResponse.json(
         { ok: false, error: "Failed to update rule" },
         { status: 500 }
@@ -89,48 +82,13 @@ export async function PATCH(
       return res;
     }
 
-    if (!data) {
-      const res = NextResponse.json({ ok: false, error: "Rule not found" }, { status: 404 });
+    if (!rpcData?.ok) {
+      const res = NextResponse.json(
+        { ok: false, error: "Update did not return ok" },
+        { status: 500 }
+      );
       applySupabaseCookies(res, pendingCookies);
       return res;
-    }
-
-    const idempotencyKey = `REQ_RULE_UPDATE:${auth.activeOrgId}:${id}:${is_mandatory}`;
-    const before = {
-      role: existing.role,
-      requirement_code: existing.requirement_code,
-      requirement_name: existing.requirement_name,
-      is_mandatory: existing.is_mandatory,
-    };
-    const after = { ...before, is_mandatory };
-
-    const { error: govError } = await supabaseAdmin.from("governance_events").insert({
-      org_id: auth.activeOrgId,
-      site_id: auth.activeSiteId ?? null,
-      actor_user_id: auth.userId,
-      action: "REQUIREMENT_RULE_UPDATE",
-      target_type: "REQUIREMENT_RULE",
-      target_id: id,
-      outcome: "RECORDED",
-      legitimacy_status: "OK",
-      readiness_status: "NON_BLOCKING",
-      reason_codes: ["COMPLIANCE_REQUIREMENT_RULES_V1"],
-      meta: { before, after },
-      idempotency_key: idempotencyKey,
-    });
-
-    if (govError) {
-      if (govError.code === "23505") {
-        // Duplicate idempotency_key = retry; treat as success
-      } else {
-        console.error("[hr/requirements-rules] governance_events insert failed", govError);
-        const res = NextResponse.json(
-          { ok: false, error: "Audit log failed; request not applied" },
-          { status: 500 }
-        );
-        applySupabaseCookies(res, pendingCookies);
-        return res;
-      }
     }
 
     const res = NextResponse.json({ ok: true });
@@ -167,29 +125,30 @@ export async function DELETE(
   }
 
   try {
-    const { data: existing, error: fetchError } = await supabase
-      .from("requirement_role_rules")
-      .select("id, role, requirement_code, requirement_name, is_mandatory")
-      .eq("id", id)
-      .eq("org_id", auth.activeOrgId)
-      .maybeSingle();
-
-    if (fetchError || !existing) {
-      const res = NextResponse.json({ ok: false, error: "Rule not found" }, { status: 404 });
-      applySupabaseCookies(res, pendingCookies);
-      return res;
-    }
-
-    const { data, error } = await supabase
-      .from("requirement_role_rules")
-      .delete()
-      .eq("id", id)
-      .eq("org_id", auth.activeOrgId)
-      .select("id")
-      .maybeSingle();
+    const { data: rpcData, error } = await supabase.rpc("delete_requirement_rule_v1", {
+      p_org_id: auth.activeOrgId,
+      p_rule_id: id,
+      p_idempotency_key: null,
+    });
 
     if (error) {
-      console.error("[hr/requirements-rules] delete error", error);
+      if (error.code === "P0001") {
+        const res = NextResponse.json(
+          { ok: false, error: "Org mismatch" },
+          { status: 403 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      if (error.code === "P0002") {
+        const res = NextResponse.json(
+          { ok: false, error: "Rule not found" },
+          { status: 404 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
+      console.error("[hr/requirements-rules] delete_requirement_rule_v1 error", error);
       const res = NextResponse.json(
         { ok: false, error: "Failed to delete rule" },
         { status: 500 }
@@ -198,47 +157,13 @@ export async function DELETE(
       return res;
     }
 
-    if (!data) {
-      const res = NextResponse.json({ ok: false, error: "Rule not found" }, { status: 404 });
+    if (!rpcData?.ok) {
+      const res = NextResponse.json(
+        { ok: false, error: "Delete did not return ok" },
+        { status: 500 }
+      );
       applySupabaseCookies(res, pendingCookies);
       return res;
-    }
-
-    const idempotencyKey = `REQ_RULE_DELETE:${auth.activeOrgId}:${id}`;
-    const deleted = {
-      role: existing.role,
-      requirement_code: existing.requirement_code,
-      requirement_name: existing.requirement_name,
-      is_mandatory: existing.is_mandatory,
-    };
-
-    const { error: govError } = await supabaseAdmin.from("governance_events").insert({
-      org_id: auth.activeOrgId,
-      site_id: auth.activeSiteId ?? null,
-      actor_user_id: auth.userId,
-      action: "REQUIREMENT_RULE_DELETE",
-      target_type: "REQUIREMENT_RULE",
-      target_id: id,
-      outcome: "RECORDED",
-      legitimacy_status: "OK",
-      readiness_status: "NON_BLOCKING",
-      reason_codes: ["COMPLIANCE_REQUIREMENT_RULES_V1"],
-      meta: { deleted },
-      idempotency_key: idempotencyKey,
-    });
-
-    if (govError) {
-      if (govError.code === "23505") {
-        // Duplicate idempotency_key = retry; treat as success
-      } else {
-        console.error("[hr/requirements-rules] governance_events insert failed", govError);
-        const res = NextResponse.json(
-          { ok: false, error: "Audit log failed; request not applied" },
-          { status: 500 }
-        );
-        applySupabaseCookies(res, pendingCookies);
-        return res;
-      }
     }
 
     const res = NextResponse.json({ ok: true });

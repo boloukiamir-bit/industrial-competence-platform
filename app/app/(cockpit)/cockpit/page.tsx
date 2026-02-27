@@ -300,6 +300,18 @@ export default function CockpitPage() {
   } | null>(null);
   const [complianceActionsSummaryLoading, setComplianceActionsSummaryLoading] = useState(false);
 
+  const [requirementsSummary, setRequirementsSummary] = useState<{
+    counts: {
+      total: number;
+      illegal: number;
+      warning: number;
+      go: number;
+      blocking_critical: number;
+      blocking_high: number;
+    };
+  } | null>(null);
+  const [requirementsSummaryLoading, setRequirementsSummaryLoading] = useState(false);
+
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
   const shiftReady = isGlobal || (date && hasShiftCode);
@@ -823,6 +835,35 @@ export default function CockpitPage() {
       })
       .finally(() => {
         if (!cancelled) setGovernanceKpisLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk]);
+
+  // Requirements summary (org-level) — total/illegal/warning/go + blocking_critical, blocking_high
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    let cancelled = false;
+    setRequirementsSummaryLoading(true);
+    fetchJson<{
+      ok: boolean;
+      counts?: {
+        total: number;
+        illegal: number;
+        warning: number;
+        go: number;
+        blocking_critical: number;
+        blocking_high: number;
+      };
+    }>("/api/cockpit/requirements-summary")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data?.counts) setRequirementsSummary({ counts: res.data.counts });
+        else if (!cancelled) setRequirementsSummary(null);
+      })
+      .catch(() => {
+        if (!cancelled) setRequirementsSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRequirementsSummaryLoading(false);
       });
     return () => { cancelled = true; };
   }, [sessionOk]);
@@ -1551,6 +1592,39 @@ export default function CockpitPage() {
               </li>
             </ul>
             <p className="text-xs mt-4" style={{ color: "var(--text-2)" }}>Connect data later. This is a pilot placeholder.</p>
+          </div>
+
+          {/* Requirements summary (org-level) — total/illegal/warning/go + critical/high blockers */}
+          <div
+            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-6 shadow-sm"
+            data-testid="cockpit-requirements-summary-block"
+          >
+            <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>Requirements</h2>
+            <p className="text-sm mt-0.5 mb-4" style={{ color: "var(--text-2)" }}>Org-wide requirement status.</p>
+            {requirementsSummaryLoading ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="h-5 w-12 rounded animate-pulse bg-[var(--surface-3)]" />
+                <div className="h-4 w-24 rounded animate-pulse bg-[var(--surface-3)]" />
+              </div>
+            ) : requirementsSummary?.counts ? (
+              <div className="space-y-1">
+                <p className="text-sm tabular-nums" style={{ color: "var(--text)" }}>
+                  ILLEGAL {requirementsSummary.counts.illegal} · WARNING {requirementsSummary.counts.warning} · GO {requirementsSummary.counts.go}
+                </p>
+                {requirementsSummary.counts.illegal > 0 && (
+                  <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[var(--hairline-soft)] mt-2">
+                    <span className="text-xs font-medium" style={{ color: "var(--text-2)" }}>
+                      Critical blockers: <span className="tabular-nums" data-testid="requirements-blocking-critical">{requirementsSummary.counts.blocking_critical}</span>
+                    </span>
+                    <span className="text-xs font-medium" style={{ color: "var(--text-2)" }}>
+                      High blockers: <span className="tabular-nums" data-testid="requirements-blocking-high">{requirementsSummary.counts.blocking_high}</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">—</p>
+            )}
           </div>
 
           {/* HR Compliance drilldown — links to HR Inbox tabs when summary loaded; disabled state in GLOBAL mode */}

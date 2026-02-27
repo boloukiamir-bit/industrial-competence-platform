@@ -11,6 +11,7 @@ const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
 
 const SEVERITY_ORDER: Record<string, number> = { ILLEGAL: 0, WARNING: 1, GO: 2 };
+const CRITICALITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 function escapeIlike(q: string): string {
   return q.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
@@ -22,6 +23,7 @@ export type RequirementStatusRow = {
   employee_id: string;
   requirement_code: string;
   requirement_name: string;
+  requirement_id: string | null;
   valid_from: string | null;
   valid_to: string | null;
   status_override: string | null;
@@ -29,6 +31,7 @@ export type RequirementStatusRow = {
   note: string | null;
   computed_status: string;
   status_reason: string;
+  criticality: string;
 };
 
 export async function GET(request: NextRequest) {
@@ -97,6 +100,9 @@ export async function GET(request: NextRequest) {
       const sa = SEVERITY_ORDER[a.computed_status] ?? 3;
       const sb = SEVERITY_ORDER[b.computed_status] ?? 3;
       if (sa !== sb) return sa - sb;
+      const ca = CRITICALITY_ORDER[a.criticality] ?? 4;
+      const cb = CRITICALITY_ORDER[b.criticality] ?? 4;
+      if (ca !== cb) return ca - cb;
       const va = a.valid_to ?? "";
       const vb = b.valid_to ?? "";
       if (va !== vb) return va.localeCompare(vb);

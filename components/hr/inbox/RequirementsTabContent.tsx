@@ -26,6 +26,7 @@ export type RequirementStatusRow = {
   employee_id: string;
   requirement_code: string;
   requirement_name: string;
+  requirement_id: string | null;
   valid_from: string | null;
   valid_to: string | null;
   status_override: string | null;
@@ -33,6 +34,7 @@ export type RequirementStatusRow = {
   note: string | null;
   computed_status: string;
   status_reason: string;
+  criticality: string;
 };
 
 type RequirementsResponse = {

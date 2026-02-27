@@ -1,17 +1,11 @@
 /**
  * GET /api/hr/requirements-rules — list role→requirement rules for the org.
- * POST /api/hr/requirements-rules — create a rule. Audit: governance_events REQUIREMENT_RULE_CREATE.
+ * POST /api/hr/requirements-rules — create a rule via create_requirement_rule_v1 (atomic rule + governance).
  * Auth: requireAdminOrHr. Tenant: activeOrgId.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { requireAdminOrHr } from "@/lib/server/requireAdminOrHr";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export type RequirementRuleRow = {
   id: string;
@@ -117,19 +111,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { data: inserted, error } = await supabase
-      .from("requirement_role_rules")
-      .insert({
-        org_id: auth.activeOrgId,
-        role,
-        requirement_code,
-        requirement_name,
-        is_mandatory,
-      })
-      .select("id, role, requirement_code, requirement_name, is_mandatory, created_at")
-      .single();
+    const { data: rpcData, error } = await supabase.rpc("create_requirement_rule_v1", {
+      p_org_id: auth.activeOrgId,
+      p_role: role,
+      p_requirement_code: requirement_code,
+      p_requirement_name: requirement_name,
+      p_is_mandatory: is_mandatory,
+      p_idempotency_key: null,
+    });
 
     if (error) {
+      if (error.code === "P0001") {
+        const res = NextResponse.json(
+          { ok: false, error: "Org mismatch" },
+          { status: 403 }
+        );
+        applySupabaseCookies(res, pendingCookies);
+        return res;
+      }
       if (error.code === "23505") {
         const res = NextResponse.json(
           { ok: false, error: "A rule for this role and requirement already exists" },
@@ -138,7 +137,7 @@ export async function POST(request: NextRequest) {
         applySupabaseCookies(res, pendingCookies);
         return res;
       }
-      console.error("[hr/requirements-rules] insert error", error);
+      console.error("[hr/requirements-rules] create_requirement_rule_v1 error", error);
       const res = NextResponse.json(
         { ok: false, error: error.message || "Failed to create rule" },
         { status: 500 }
@@ -147,44 +146,40 @@ export async function POST(request: NextRequest) {
       return res;
     }
 
-    const rule: RequirementRuleRow = {
-      id: inserted.id,
-      role: inserted.role,
-      requirement_code: inserted.requirement_code,
-      requirement_name: inserted.requirement_name,
-      is_mandatory: inserted.is_mandatory,
-      created_at: inserted.created_at,
-    };
-
-    const idempotencyKey = `REQ_RULE_CREATE:${auth.activeOrgId}:${role}:${requirement_code}`;
-    const { error: govError } = await supabaseAdmin.from("governance_events").insert({
-      org_id: auth.activeOrgId,
-      site_id: auth.activeSiteId ?? null,
-      actor_user_id: auth.userId,
-      action: "REQUIREMENT_RULE_CREATE",
-      target_type: "REQUIREMENT_RULE",
-      target_id: inserted.id,
-      outcome: "RECORDED",
-      legitimacy_status: "OK",
-      readiness_status: "NON_BLOCKING",
-      reason_codes: ["COMPLIANCE_REQUIREMENT_RULES_V1"],
-      meta: { role, requirement_code, requirement_name, is_mandatory },
-      idempotency_key: idempotencyKey,
-    });
-
-    if (govError) {
-      if (govError.code === "23505") {
-        // Duplicate idempotency_key = retry; treat as success
-      } else {
-        console.error("[hr/requirements-rules] governance_events insert failed", govError);
-        const res = NextResponse.json(
-          { ok: false, error: "Audit log failed; request not applied" },
-          { status: 500 }
-        );
-        applySupabaseCookies(res, pendingCookies);
-        return res;
-      }
+    const ruleId = rpcData?.rule_id;
+    if (!ruleId) {
+      const res = NextResponse.json(
+        { ok: false, error: "Create succeeded but no rule_id returned" },
+        { status: 500 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
     }
+
+    const { data: row, error: fetchError } = await supabase
+      .from("requirement_role_rules")
+      .select("id, role, requirement_code, requirement_name, is_mandatory, created_at")
+      .eq("id", ruleId)
+      .single();
+
+    if (fetchError || !row) {
+      console.error("[hr/requirements-rules] fetch after create", fetchError);
+      const res = NextResponse.json(
+        { ok: false, error: "Rule created but could not load" },
+        { status: 500 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
+    const rule: RequirementRuleRow = {
+      id: row.id,
+      role: row.role,
+      requirement_code: row.requirement_code,
+      requirement_name: row.requirement_name,
+      is_mandatory: row.is_mandatory,
+      created_at: row.created_at,
+    };
 
     const res = NextResponse.json({ ok: true, rule });
     applySupabaseCookies(res, pendingCookies);

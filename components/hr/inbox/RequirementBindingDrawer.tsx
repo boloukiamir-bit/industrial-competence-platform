@@ -195,11 +195,15 @@ export function RequirementBindingDrawer({
     [catalogRequirements, selectedCatalogId]
   );
 
+  const isLinkedToCatalog = isCreate
+    ? Boolean(fromCatalog && selectedCatalogId)
+    : Boolean(row?.requirement_id);
+
   const dirty = useMemo(() => {
     if (isCreate) {
       const code = requirement_code.trim().toUpperCase();
       const name = requirement_name.trim();
-      return Boolean(employee_id && code && name);
+      return Boolean(employee_id && (selectedCatalogId || (code && name)));
     }
     if (!initial || !row) return false;
     return (
@@ -238,6 +242,7 @@ export function RequirementBindingDrawer({
             employee_id: row.employee_id,
             requirement_code: row.requirement_code,
             requirement_name: row.requirement_name,
+            requirement_id: row.requirement_id ?? undefined,
             valid_from: valid_from || null,
             valid_to: valid_to || null,
             status_override: status_override || null,
@@ -261,12 +266,14 @@ export function RequirementBindingDrawer({
     }
 
     // Create
-    if (!employee_id || !requirement_code.trim() || !requirement_name.trim()) return;
-    setSaving(true);
-    setError(null);
     const codeNormalized = requirement_code.trim().toUpperCase();
     const nameNormalized = requirement_name.trim();
-    const idempotency_key = `req-${employee_id}-${codeNormalized}-${Date.now()}`;
+    const hasCatalog = Boolean(selectedCatalogId);
+    if (!employee_id || (hasCatalog ? !selectedCatalogId : (!codeNormalized || !nameNormalized)))
+      return;
+    setSaving(true);
+    setError(null);
+    const idempotency_key = `req-${employee_id}-${hasCatalog ? selectedCatalogId : codeNormalized}-${Date.now()}`;
     const res = await fetchJson<{ ok: true; binding_id?: string }>(
       "/api/hr/requirements/upsert",
       {
@@ -274,8 +281,9 @@ export function RequirementBindingDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employee_id,
-          requirement_code: codeNormalized,
-          requirement_name: nameNormalized,
+          requirement_code: hasCatalog ? codeNormalized || "" : codeNormalized,
+          requirement_name: hasCatalog ? nameNormalized || "" : nameNormalized,
+          requirement_id: hasCatalog ? selectedCatalogId : undefined,
           valid_from: valid_from || null,
           valid_to: valid_to || null,
           status_override: status_override || null,
@@ -302,6 +310,7 @@ export function RequirementBindingDrawer({
     employee_id,
     requirement_code,
     requirement_name,
+    selectedCatalogId,
     valid_from,
     valid_to,
     status_override,
@@ -485,9 +494,13 @@ export function RequirementBindingDrawer({
                     </div>
                   )}
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  You can override code/name below after selecting.
-                </p>
+                {selectedCatalogId ? (
+                  <p className="text-muted-foreground text-xs">Linked to catalog. Code and name are read-only.</p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Select an item to link this binding to the catalog, or enter code/name manually below.
+                  </p>
+                )}
               </div>
             )}
             <div className="grid gap-2">
@@ -495,9 +508,10 @@ export function RequirementBindingDrawer({
               <Input
                 id="req-code-create"
                 value={requirement_code}
-                onChange={(e) => setRequirement_code(e.target.value)}
+                onChange={(e) => !isLinkedToCatalog && setRequirement_code(e.target.value)}
                 placeholder="e.g. SAFETY-01"
                 className="bg-background"
+                readOnly={isLinkedToCatalog}
               />
             </div>
             <div className="grid gap-2">
@@ -505,9 +519,10 @@ export function RequirementBindingDrawer({
               <Input
                 id="req-name-create"
                 value={requirement_name}
-                onChange={(e) => setRequirement_name(e.target.value)}
+                onChange={(e) => !isLinkedToCatalog && setRequirement_name(e.target.value)}
                 placeholder="e.g. Safety induction"
                 className="bg-background"
+                readOnly={isLinkedToCatalog}
               />
             </div>
           </>
@@ -521,6 +536,9 @@ export function RequirementBindingDrawer({
                   <span className="text-muted-foreground ml-1.5">{row.requirement_name}</span>
                 ) : null}
               </div>
+              {row.requirement_id ? (
+                <p className="text-muted-foreground text-xs">Linked to catalog.</p>
+              ) : null}
             </div>
           )
         )}
