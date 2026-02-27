@@ -1524,6 +1524,33 @@ export default function CockpitPage() {
               </ul>
             )}
           </div>
+
+          {/* KPI Pulse (Pilot) — placeholder block */}
+          <div
+            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-6 shadow-sm"
+            data-testid="cockpit-kpi-pulse-pilot"
+          >
+            <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>KPI Pulse (Pilot)</h2>
+            <p className="text-sm mt-0.5 mb-4" style={{ color: "var(--text-2)" }}>Quick operational snapshot (test).</p>
+            <ul className="space-y-3">
+              <li className="flex items-center justify-between gap-4 py-1 border-b border-[var(--hairline-soft)] last:border-b-0">
+                <span className="text-sm font-medium" style={{ color: "var(--text)" }}>Absence rate</span>
+                <span className="text-sm tabular-nums" style={{ color: "var(--text-2)" }}>—</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider rounded px-1.5 py-0.5 border border-[var(--hairline)] bg-[var(--surface-2)]" style={{ color: "var(--text-2)" }}>Not connected</span>
+              </li>
+              <li className="flex items-center justify-between gap-4 py-1 border-b border-[var(--hairline-soft)] last:border-b-0">
+                <span className="text-sm font-medium" style={{ color: "var(--text)" }}>Overtime hours (7d)</span>
+                <span className="text-sm tabular-nums" style={{ color: "var(--text-2)" }}>—</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider rounded px-1.5 py-0.5 border border-[var(--hairline)] bg-[var(--surface-2)]" style={{ color: "var(--text-2)" }}>Not connected</span>
+              </li>
+              <li className="flex items-center justify-between gap-4 py-1 border-b border-[var(--hairline-soft)] last:border-b-0">
+                <span className="text-sm font-medium" style={{ color: "var(--text)" }}>Output vs plan</span>
+                <span className="text-sm tabular-nums" style={{ color: "var(--text-2)" }}>—</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider rounded px-1.5 py-0.5 border border-[var(--hairline)] bg-[var(--surface-2)]" style={{ color: "var(--text-2)" }}>Not connected</span>
+              </li>
+            </ul>
+            <p className="text-xs mt-4" style={{ color: "var(--text-2)" }}>Connect data later. This is a pilot placeholder.</p>
+          </div>
         </div>
       )}
 
