@@ -12,6 +12,7 @@ import {
   Clock,
   ListChecks,
   FileSignature,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
@@ -1550,6 +1551,40 @@ export default function CockpitPage() {
               </li>
             </ul>
             <p className="text-xs mt-4" style={{ color: "var(--text-2)" }}>Connect data later. This is a pilot placeholder.</p>
+          </div>
+
+          {/* HR Compliance drilldown — links to HR Inbox tabs; counts from summary (0 when summary not loaded) */}
+          <div
+            className="rounded-xl border border-[var(--hairline, rgba(15,23,42,0.08))] bg-white p-6 shadow-sm"
+            data-testid="cockpit-hr-compliance-block"
+          >
+            <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>HR Compliance</h2>
+            <p className="text-sm mt-0.5 mb-4" style={{ color: "var(--text-2)" }}>Actionable legal & HR readiness items.</p>
+            <ul className="space-y-0">
+              {[
+                { label: "Contracts", tab: "contract", illegal: summary?.contract_illegal_count ?? 0, warning: summary?.contract_warning_count ?? 0 },
+                { label: "Medical", tab: "medical", illegal: summary?.medical_illegal_count ?? 0, warning: summary?.medical_warning_count ?? 0 },
+                { label: "Training", tab: "training", illegal: summary?.training_illegal_count ?? 0, warning: summary?.training_warning_count ?? 0 },
+                { label: "Certificates", tab: "certificates", illegal: summary?.certificate_illegal_count ?? 0, warning: summary?.certificate_warning_count ?? 0 },
+              ].map(({ label, tab, illegal, warning }) => (
+                <li key={tab}>
+                  <Link
+                    href={`/app/hr/inbox?tab=${tab}`}
+                    className={`flex items-center justify-between gap-4 py-3 px-0 border-b border-[var(--hairline-soft)] last:border-b-0 transition-colors hover:bg-[var(--surface-2)] ${illegal > 0 ? "font-medium" : ""}`}
+                    style={{ color: "var(--text)" }}
+                    data-testid={`hr-compliance-row-${tab}`}
+                  >
+                    <span className="text-sm">{label}</span>
+                    <span className="text-sm tabular-nums" style={{ color: "var(--text-2)" }}>
+                      ILLEGAL {illegal} · WARNING {warning}
+                    </span>
+                    <span className="text-[var(--text-2)] shrink-0" aria-hidden>
+                      <ChevronRight className="h-4 w-4" />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
