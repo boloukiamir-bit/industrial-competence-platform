@@ -20,6 +20,10 @@ export type EditDrawerShellProps = {
   onSave: () => void | Promise<void>;
   /** True while save request is in flight; disables Save and Cancel */
   saving?: boolean;
+  /** Disable Save button (e.g. when form is not dirty) */
+  saveDisabled?: boolean;
+  /** Label for the primary Save button (default: "Save") */
+  saveLabel?: string;
   /** Inline error message to show above actions (e.g. validation or API error) */
   error?: string | null;
   /** Optional test id for the Save button */
@@ -38,6 +42,8 @@ export function EditDrawerShell({
   children,
   onSave,
   saving = false,
+  saveDisabled = false,
+  saveLabel = "Save",
   error = null,
   saveTestId = "edit-drawer-save",
 }: EditDrawerShellProps) {
@@ -69,10 +75,10 @@ export function EditDrawerShell({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || saveDisabled}
               data-testid={saveTestId}
             >
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Saving…" : saveLabel}
             </Button>
           </div>
         </div>

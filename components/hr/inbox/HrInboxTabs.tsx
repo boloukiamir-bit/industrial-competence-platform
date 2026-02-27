@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export type InboxTab = "actions" | "lifecycle" | "governance" | "contract" | "medical" | "training" | "certificates";
+export type InboxTab = "actions" | "lifecycle" | "governance" | "contract" | "medical" | "training" | "certificates" | "requirements";
 export type ActionsFilter = "open" | "overdue" | "due7" | "all";
 
 const TABS: { value: InboxTab; label: string }[] = [
@@ -14,6 +14,7 @@ const TABS: { value: InboxTab; label: string }[] = [
   { value: "medical", label: "Medical" },
   { value: "training", label: "Training" },
   { value: "certificates", label: "Certificates" },
+  { value: "requirements", label: "Requirements" },
 ];
 
 const ACTION_FILTERS: { value: ActionsFilter; label: string }[] = [
@@ -38,6 +39,11 @@ export function HrInboxTabs({ tab, filter }: HrInboxTabsProps) {
     const next = new URLSearchParams(searchParams);
     next.set("tab", newTab);
     if (newTab !== "actions") next.delete("filter");
+    if (newTab !== "requirements") {
+      next.delete("status");
+      next.delete("q");
+      next.delete("offset");
+    }
     router.push(`/app/hr/inbox?${next.toString()}`);
   }
 

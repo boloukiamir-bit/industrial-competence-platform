@@ -6,6 +6,7 @@ import { PageFrame } from "@/components/layout/PageFrame";
 import { HrInboxTabs, type InboxTab, type ActionsFilter } from "@/components/hr/inbox/HrInboxTabs";
 import { InboxTable } from "@/components/hr/inbox/InboxTable";
 import { PriorityStrip } from "@/components/hr/inbox/PriorityStrip";
+import { RequirementsTabContent } from "@/components/hr/inbox/RequirementsTabContent";
 import { fetchJson } from "@/lib/coreFetch";
 import type { InboxActionItem, InboxLifecycleItem, InboxGovernanceItem, InboxContractItem, InboxMedicalItem, InboxTrainingItem, InboxCertificateItem, PrioritySummary } from "@/types/domain";
 
@@ -45,7 +46,7 @@ export default function HrInboxPage() {
   const [priorityError, setPriorityError] = useState(false);
 
   const effectiveTab = useMemo((): InboxTab => {
-    if (tab === "lifecycle" || tab === "governance" || tab === "contract" || tab === "medical" || tab === "training" || tab === "certificates") return tab;
+    if (tab === "lifecycle" || tab === "governance" || tab === "contract" || tab === "medical" || tab === "training" || tab === "certificates" || tab === "requirements") return tab;
     return "actions";
   }, [tab]);
 
@@ -75,8 +76,9 @@ export default function HrInboxPage() {
   }, [effectiveTab, effectiveFilter]);
 
   useEffect(() => {
+    if (effectiveTab === "requirements") return;
     fetchInbox();
-  }, [fetchInbox]);
+  }, [effectiveTab, fetchInbox]);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +127,11 @@ export default function HrInboxPage() {
       </div>
       <HrInboxTabs tab={effectiveTab} filter={effectiveFilter} />
       <div className="mt-4">
-        <InboxTable tab={effectiveTab} items={items} loading={loading} error={error} />
+        {effectiveTab === "requirements" ? (
+          <RequirementsTabContent />
+        ) : (
+          <InboxTable tab={effectiveTab} items={items} loading={loading} error={error} />
+        )}
       </div>
     </PageFrame>
   );
