@@ -23,6 +23,7 @@ import { createOrgUnit } from "@/services/org";
 import { COPY } from "@/lib/copy";
 import { useOrg } from "@/hooks/useOrg";
 import type { OrgUnit } from "@/types/domain";
+import { UnassignedEmployeesModal, type UnassignedEmployee } from "@/components/org/UnassignedEmployeesModal";
 
 function OrgUnitCard({
   unit,
@@ -133,6 +134,8 @@ export default function OrgOverviewPage() {
   const { currentOrg } = useOrg();
   const [orgTree, setOrgTree] = useState<OrgUnit[]>([]);
   const [unassignedCount, setUnassignedCount] = useState(0);
+  const [unassignedEmployees, setUnassignedEmployees] = useState<UnassignedEmployee[]>([]);
+  const [showUnassignedModal, setShowUnassignedModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showEmployees, setShowEmployees] = useState(false);
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
@@ -150,14 +153,18 @@ export default function OrgOverviewPage() {
     setLoading(true);
     setUnitsWarning(null);
     try {
-      const res = await fetch("/api/org/units", { credentials: "include" });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      const [unitsRes, unassignedRes] = await Promise.all([
+        fetch("/api/org/units", { credentials: "include" }),
+        fetch("/api/hr/unassigned-employees", { credentials: "include" }),
+      ]);
+      const json = await unitsRes.json().catch(() => ({}));
+      if (!unitsRes.ok) {
         setEffectiveOrgId(null);
         setOrgTree([]);
         setUnassignedCount(0);
+        setUnassignedEmployees([]);
         setTotalEmployees(0);
-        if (res.status !== 403) console.error("Error loading org units:", json.error ?? res.statusText, json.details ?? "");
+        if (unitsRes.status !== 403) console.error("Error loading org units:", json.error ?? unitsRes.statusText, json.details ?? "");
         return;
       }
       const tree = Array.isArray(json.tree) ? json.tree : [];
@@ -174,7 +181,6 @@ export default function OrgOverviewPage() {
             : 0;
 
       setOrgTree(tree);
-      setUnassignedCount(typeof json.unassignedCount === "number" ? json.unassignedCount : 0);
       setTotalEmployees(employeesCount);
       setTotalUnitsRaw(unitsRaw);
       setRootUnitsCount(rootsCount);
@@ -185,6 +191,11 @@ export default function OrgOverviewPage() {
           ? "Org structure has no root unit (parent_id NULL). Set a top-level unit."
           : null;
       setUnitsWarning(metaWarning ?? rootWarning);
+
+      const unassignedJson = await unassignedRes.json().catch(() => ({}));
+      const list = unassignedRes.ok && Array.isArray(unassignedJson.employees) ? unassignedJson.employees : [];
+      setUnassignedEmployees(list);
+      setUnassignedCount(list.length);
     } finally {
       setLoading(false);
     }
@@ -277,7 +288,11 @@ export default function OrgOverviewPage() {
         </Card>
 
         {unassignedCount > 0 && (
-          <Card className="border-orange-200 dark:border-orange-800">
+          <Card
+            className="border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setShowUnassignedModal(true)}
+            data-testid="card-unassigned"
+          >
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
                 <Building2 className="h-5 w-5 text-muted-foreground" />
@@ -289,12 +304,18 @@ export default function OrgOverviewPage() {
                   </Badge>
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  Employees without an assigned organization unit
+                  Employees missing site or org unit — click to fix
                 </span>
               </div>
             </CardContent>
           </Card>
         )}
+
+        <UnassignedEmployeesModal
+          open={showUnassignedModal}
+          onOpenChange={setShowUnassignedModal}
+          employees={unassignedEmployees}
+        />
 
         {showCreateUnitModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUnitModal(false)}>
@@ -410,7 +431,11 @@ export default function OrgOverviewPage() {
           <OrgUnitCard key={unit.id} unit={unit} showEmployees={showEmployees} />
         ))}
         {unassignedCount > 0 && (
-          <Card className="mb-3 border-orange-200 dark:border-orange-800">
+          <Card
+            className="mb-3 border-orange-200 dark:border-orange-800 cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setShowUnassignedModal(true)}
+            data-testid="card-unassigned"
+          >
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
                 <div className="w-6" />
@@ -424,7 +449,7 @@ export default function OrgOverviewPage() {
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Employees without an assigned organization unit
+                    Employees missing site or org unit — click to fix
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -438,6 +463,12 @@ export default function OrgOverviewPage() {
           </Card>
         )}
       </div>
+
+      <UnassignedEmployeesModal
+        open={showUnassignedModal}
+        onOpenChange={setShowUnassignedModal}
+        employees={unassignedEmployees}
+      />
 
       {showCreateUnitModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUnitModal(false)}>
