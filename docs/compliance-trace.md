@@ -51,7 +51,9 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 
 | Endpoint | Source | Used by cockpit |
 |----------|--------|-----------------|
-| `/api/compliance/matrix-v2` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability (roster-filtered) | **Yes** (canonical; Requirements + Expiring) |
+| `/api/cockpit/readiness-v3` | Composes compliance matrix-v2 + competence matrix-v2 (parallel fetch) | **Yes** (canonical; overall status on Readiness tile + Industrial Readiness card) |
+| `/api/compliance/matrix-v2` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability (roster-filtered) | **Yes** (Requirements + Expiring; also fed into readiness-v3) |
+| `/api/competence/matrix-v2` | stations, station_skill_requirements, employee_skills (roster-filtered) | **Yes** (fed into readiness-v3; cockpit overall status from v3) |
 | `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster) | No (kept; bake time) |
 | `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 | No (legacy) |
 | `/api/compliance/overview-v2` | same tables as matrix-v2, roster-filtered | No (kept; bake time) |
@@ -62,11 +64,26 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 
 ## Readiness Unification
 
-Cockpit **legal readiness** is derived **exclusively** from `/api/compliance/matrix-v2` **`readiness_flag`**.
+Cockpit **overall readiness** (the status shown on the Readiness tile and Industrial Readiness card) is derived **exclusively** from `/api/cockpit/readiness-v3` **`overall.status`**.
 
-- **Source of truth:** `readiness_flag` (`LEGAL_GO` | `LEGAL_WARNING` | `LEGAL_NO_GO`) from the matrix-v2 response. No local conditional logic (e.g. `if (blocking_count > 0) …`) decides the global legal state.
-- **UI mapping:** `LEGAL_NO_GO` → Readiness tile/panel status **NO-GO**; `LEGAL_WARNING` → **WARNING**; `LEGAL_GO` → **GO**. When matrix-v2 is not loaded (no date/shift or error), the tile shows **—** and the panel uses a safe fallback (NO-GO) so legal state is never shown as GO without data.
-- **Header badge, Executive summary block, and any LEGAL status indicators** use this single value. Counts (blocking/warning) are displayed from the same matrix-v2 response for context only; they do not drive the status.
+- **Source of truth:** `readiness-v3` composes Legal (compliance matrix-v2) + Ops (competence matrix-v2) deterministically. `overall.status` = **NO_GO** if legal NO_GO or ops NO_GO; **WARNING** if either WARNING; else **GO**. Reason codes: LEGAL_BLOCKING, LEGAL_EXPIRING, OPS_NO_COVERAGE, OPS_RISK.
+- **UI:** Readiness KpiTile and Industrial Readiness card (when date+shift selected) use `readiness-v3.overall.status` only. When date/shift not selected, the tile falls back to legal-only from matrix-v2 or "—".
+- **Legal-only** (Requirements block, Expiring panel) still uses `/api/compliance/matrix-v2` **`readiness_flag`**; that fetch is unchanged. No local logic derives the overall state — it comes from readiness-v3.
+
+---
+
+## Cockpit readiness v3 (overall Legal + Ops)
+
+Single canonical endpoint for **overall** shift readiness. Composes the two engines; no duplicate logic.
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | When `date` and `shiftCode` are set, fetches `/api/cockpit/readiness-v3?date=...&shift_code=...`. Response drives **overall status** on the Readiness tile and Industrial Readiness card (shift readiness label). |
+| **API route** | `app/api/cockpit/readiness-v3/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Fetches in parallel: `/api/compliance/matrix-v2`, `/api/competence/matrix-v2` (same cookies). Returns `legal`, `ops`, `overall` (status, reason_codes), `samples` (legal_blockers, ops_no_go_stations), optional `_debug`. |
+| **Composition** | `lib/server/readiness/composeReadinessV3.ts` | Deterministic: `composeOverallStatus(legal, ops)`, `composeReasonCodes(legal, ops)`. NO_GO if either NO_GO; WARNING if either WARNING; else GO. |
+| **Scoping** | **Roster-scoped** | Same org_id/site_id and roster as the two matrix-v2 engines (via forwarded cookies). |
+
+**Debug:** `GET /api/cockpit/readiness-v3?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `roster_employee_ids_count`, `sources`, and the two underlying `_debug` blocks (compliance, competence).
 
 ---
 

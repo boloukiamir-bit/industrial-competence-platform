@@ -323,6 +323,15 @@ export default function CockpitPage() {
     "LEGAL_GO" | "LEGAL_WARNING" | "LEGAL_NO_GO" | null
   >(null);
 
+  /** Canonical overall readiness from /api/cockpit/readiness-v3 (Legal + Ops composed). Used for overall status display. */
+  const [readinessV3, setReadinessV3] = useState<{
+    overall: { status: "GO" | "WARNING" | "NO_GO"; reason_codes: string[] };
+    legal: { flag: string; kpis: Record<string, number> };
+    ops: { flag: string; kpis: Record<string, number> };
+    samples?: { legal_blockers: unknown[]; ops_no_go_stations: unknown[] };
+  } | null>(null);
+  const [readinessV3Loading, setReadinessV3Loading] = useState(false);
+
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
   const shiftReady = isGlobal || (date && hasShiftCode);
@@ -840,6 +849,46 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [sessionOk, date, shiftCode]);
 
+  // Canonical overall readiness (Legal + Ops composed) — drives overall status display
+  useEffect(() => {
+    if (isDemoMode() || !sessionOk) return;
+    if (!date || !shiftCode) {
+      setReadinessV3(null);
+      setReadinessV3Loading(false);
+      return;
+    }
+    let cancelled = false;
+    setReadinessV3Loading(true);
+    const params = new URLSearchParams({ date, shift_code: shiftCode });
+    fetchJson<{
+      ok: boolean;
+      overall: { status: "GO" | "WARNING" | "NO_GO"; reason_codes: string[] };
+      legal: { flag: string; kpis: Record<string, number> };
+      ops: { flag: string; kpis: Record<string, number> };
+      samples?: { legal_blockers: unknown[]; ops_no_go_stations: unknown[] };
+    }>(`/api/cockpit/readiness-v3?${params.toString()}`)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data?.ok && res.data.overall) {
+          setReadinessV3({
+            overall: res.data.overall,
+            legal: res.data.legal,
+            ops: res.data.ops,
+            samples: res.data.samples,
+          });
+        } else {
+          setReadinessV3(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setReadinessV3(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReadinessV3Loading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessionOk, date, shiftCode]);
+
   // Active HR jobs for Intervention Queue (CREATED, SENT, SIGNED)
   useEffect(() => {
     if (isDemoMode() || !sessionOk) return;
@@ -1309,6 +1358,19 @@ export default function CockpitPage() {
         : complianceReadinessFlag === "LEGAL_GO"
           ? "GO"
           : "--";
+
+  // Overall readiness: from readiness-v3 only when date+shift selected; else fall back to legal (or "--")
+  const overallDisplayStatus: ReadinessStatus | "--" =
+    date && shiftCode && readinessV3?.overall
+      ? readinessV3.overall.status === "NO_GO"
+        ? "NO-GO"
+        : readinessV3.overall.status === "WARNING"
+          ? "WARNING"
+          : readinessV3.overall.status === "GO"
+            ? "GO"
+            : "--"
+      : legalDisplayStatus;
+
   const legalBlockingCount = requirementsSummary?.counts?.illegal ?? 0;
   const legalWarningCount = requirementsSummary?.counts?.warning ?? 0;
   const legalReadinessSubtitle =
@@ -1425,7 +1487,9 @@ export default function CockpitPage() {
                   Industrial Readiness
                 </h2>
                 <p className="text-sm mt-0.5 text-muted-foreground" style={{ color: "var(--text-2)" }}>
-                  Executive readiness status (global)
+                  {date && shiftCode && readinessV3?.overall
+                    ? `Shift readiness: ${readinessV3.overall.status === "NO_GO" ? "NO-GO" : readinessV3.overall.status} (from Legal + Ops)`
+                    : "Executive readiness status (global)"}
                 </p>
               </div>
               {executiveKpis && !executiveKpis.supported && (
@@ -1816,18 +1880,18 @@ export default function CockpitPage() {
               tileId="kpi-readiness"
               title="Readiness"
               icon={<ClipboardCheck />}
-              primaryValue={legalDisplayStatus}
+              primaryValue={overallDisplayStatus}
               secondaryLabel={
-                legalDisplayStatus === "NO-GO" ? "Blocking" : legalDisplayStatus === "WARNING" ? "Warnings" : legalDisplayStatus === "GO" ? "Active" : "—"
+                overallDisplayStatus === "NO-GO" ? "Blocking" : overallDisplayStatus === "WARNING" ? "Warnings" : overallDisplayStatus === "GO" ? "Active" : "—"
               }
               secondaryValue={
-                legalDisplayStatus === "NO-GO" ? legalBlockingCount : legalDisplayStatus === "WARNING" ? legalWarningCount : legalDisplayStatus === "GO" ? 0 : undefined
+                overallDisplayStatus === "NO-GO" ? legalBlockingCount : overallDisplayStatus === "WARNING" ? legalWarningCount : overallDisplayStatus === "GO" ? 0 : undefined
               }
               statusChip={
-                legalDisplayStatus === "NO-GO" ? "NO-GO" : legalDisplayStatus === "WARNING" ? "AT RISK" : legalDisplayStatus === "GO" ? "GO" : undefined
+                overallDisplayStatus === "NO-GO" ? "NO-GO" : overallDisplayStatus === "WARNING" ? "AT RISK" : overallDisplayStatus === "GO" ? "GO" : undefined
               }
               statusChipVariant={
-                legalDisplayStatus === "NO-GO" ? "blocking" : legalDisplayStatus === "WARNING" ? "warning" : legalDisplayStatus === "GO" ? "ok" : undefined
+                overallDisplayStatus === "NO-GO" ? "blocking" : overallDisplayStatus === "WARNING" ? "warning" : overallDisplayStatus === "GO" ? "ok" : undefined
               }
               onClick={() => handleTileClick("readiness")}
             />
