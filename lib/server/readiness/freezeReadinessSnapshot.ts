@@ -56,7 +56,15 @@ export async function createOrReuseReadinessSnapshot(
     ok?: boolean;
     legal?: { flag?: string; kpis?: Record<string, number> };
     ops?: { flag?: string; kpis?: Record<string, number> };
-    overall?: { status?: string };
+    overall?: { status?: string; reason_codes?: string[] };
+    samples?: {
+      legal_blockers?: Array<{
+        requirement_code?: string;
+        requirement_name?: string;
+        blocking_affected_employee_count?: number;
+      }>;
+      ops_no_go_stations?: Array<{ station_code?: string; station_name?: string }>;
+    };
   };
   const iri = (await iriRes.json()) as {
     ok?: boolean;
@@ -83,6 +91,22 @@ export async function createOrReuseReadinessSnapshot(
     0,
     v3.legal.kpis?.roster_employee_count ?? v3.ops.kpis?.roster_employee_count ?? 0
   );
+
+  const overallReasonCodes = Array.isArray(v3.overall?.reason_codes)
+    ? v3.overall.reason_codes.filter((c): c is string => typeof c === "string")
+    : [];
+  const legalBlockersSample = Array.isArray(v3.samples?.legal_blockers)
+    ? v3.samples.legal_blockers
+    : [];
+  const opsNoGoStationsSample = Array.isArray(v3.samples?.ops_no_go_stations)
+    ? v3.samples.ops_no_go_stations
+    : [];
+  const engines = {
+    readiness: "V3",
+    iri: "IRI_V1",
+    compliance: "MATRIX_V2",
+    competence: "MATRIX_V2",
+  };
 
   const windowStart = new Date(Date.now() - DUPLICATE_WINDOW_MINUTES * 60 * 1000).toISOString();
   const { data: recent } = await admin
@@ -120,6 +144,10 @@ export async function createOrReuseReadinessSnapshot(
       roster_employee_count: rosterCount,
       version: "IRI_V1",
       created_by: userId,
+      overall_reason_codes: overallReasonCodes,
+      legal_blockers_sample: legalBlockersSample,
+      ops_no_go_stations_sample: opsNoGoStationsSample,
+      engines,
     })
     .select("id, created_at")
     .single();

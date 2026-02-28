@@ -210,9 +210,31 @@ function ReadinessSnapshotBlock({ snapshotId }: { snapshotId: string }) {
       </div>
       {err && <p className="text-sm text-destructive">{err}</p>}
       {snapshot != null && (
-        <pre className="p-3 rounded-md bg-muted text-muted-foreground text-xs overflow-x-auto">
-          <code>{JSON.stringify(snapshot, null, 2)}</code>
-        </pre>
+        <>
+          {snapshot.engines != null && typeof snapshot.engines === 'object' && Object.keys(snapshot.engines as object).length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Engines: {JSON.stringify(snapshot.engines)}
+            </p>
+          )}
+          {Array.isArray(snapshot.overall_reason_codes) && snapshot.overall_reason_codes.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Reason codes: {(snapshot.overall_reason_codes as string[]).join(', ')}
+            </p>
+          )}
+          {Array.isArray(snapshot.legal_blockers_sample) && snapshot.legal_blockers_sample.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Legal blockers sample: {(snapshot.legal_blockers_sample as unknown[]).length} item(s)
+            </p>
+          )}
+          {Array.isArray(snapshot.ops_no_go_stations_sample) && snapshot.ops_no_go_stations_sample.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Ops NO_GO stations sample: {(snapshot.ops_no_go_stations_sample as unknown[]).length} item(s)
+            </p>
+          )}
+          <pre className="p-3 rounded-md bg-muted text-muted-foreground text-xs overflow-x-auto">
+            <code>{JSON.stringify(snapshot, null, 2)}</code>
+          </pre>
+        </>
       )}
     </div>
   );
