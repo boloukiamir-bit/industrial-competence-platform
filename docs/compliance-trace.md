@@ -67,3 +67,20 @@ Cockpit **legal readiness** is derived **exclusively** from `/api/compliance/mat
 - **Source of truth:** `readiness_flag` (`LEGAL_GO` | `LEGAL_WARNING` | `LEGAL_NO_GO`) from the matrix-v2 response. No local conditional logic (e.g. `if (blocking_count > 0) …`) decides the global legal state.
 - **UI mapping:** `LEGAL_NO_GO` → Readiness tile/panel status **NO-GO**; `LEGAL_WARNING` → **WARNING**; `LEGAL_GO` → **GO**. When matrix-v2 is not loaded (no date/shift or error), the tile shows **—** and the panel uses a safe fallback (NO-GO) so legal state is never shown as GO without data.
 - **Header badge, Executive summary block, and any LEGAL status indicators** use this single value. Counts (blocking/warning) are displayed from the same matrix-v2 response for context only; they do not drive the status.
+
+---
+
+## Competence trace (Matrix v2 — operational readiness)
+
+Roster-scoped competence engine for **operational** readiness (stations × mandatory skills × roster employees). Deterministic; audit-friendly breakdowns.
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **API route** | `app/api/competence/matrix-v2/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Roster via `getRosterEmployeeIdsForShift`. Data: `stations`, `station_skill_requirements` (MANDATORY only), `skills`, `employee_skills`. Returns `ops_readiness_flag` (OPS_GO \| OPS_WARNING \| OPS_NO_GO), `kpis`, `by_station`, `by_employee`. |
+| **Shared logic** | `lib/server/competence/stationReadiness.ts` | Pure functions: `buildStationRequirements`, `buildEmployeeLevels`, `computeStationReadiness`, `shiftOpsReadinessFromStations`. Eligibility: employee level ≥ required_level for every mandatory skill; station OPS_NO_GO if 0 eligible, else OPS_GO. |
+| **SQL / tables** | stations, station_skill_requirements, skills, employee_skills | Org-scoped stations and requirements; roster-scoped employee skills. MANDATORY = `is_mandatory !== false`. |
+| **Scoping** | **Roster-scoped** | Scope = org_id + site_id + roster_employee_ids for the shift. Single canonical engine; cockpit not updated in this phase (engine first). |
+
+**Debug:** `GET /api/competence/matrix-v2?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `org_id`, `site_id`, `date`, `shift_code`, `roster_employee_ids_count`, `stations_queried`, `requirements_rows`, `ratings_rows`.
+
+**Empty roster:** Returns `ok: true`, `ops_readiness_flag: "OPS_NO_GO"`, kpis zeros, empty arrays (operationally cannot run a shift with no staff).
