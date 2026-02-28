@@ -22,16 +22,23 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 
 ---
 
-## 2. Compliance expiring / Legal Stoppers (overview table)
+## 2. Compliance expiring / Legal Stoppers (overview) — roster-scoped (v2)
 
 | Layer | File | Detail |
 |-------|------|--------|
-| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | `useEffect` (around line 724) fetches `/api/compliance/overview` when `sessionOk`; optional client-side filter by `line` on rows. |
-| **API route** | `app/api/compliance/overview/route.ts` | `GET` → `getActiveOrgFromSession`; queries `employees`, `compliance_catalog`, `employee_compliance`, `compliance_requirement_applicability`. Optional query params: `siteId`, `category`, `status`, `search`. |
-| **SQL objects** | Tables (no RPC) | `employees`, `compliance_catalog`, `employee_compliance`, `compliance_requirement_applicability`. Org-scoped; optional site filter on employees. |
-| **Scoping** | **Org-wide (site-optional)** | No roster scoping. No date, shift, or roster employee list. |
+| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | `useEffect` fetches `/api/compliance/overview-v2?date=...&shift_code=...` when `sessionOk` **and** `date` and `shiftCode` are set. Optional client-side filter by `line` on rows. No call until date+shift selected. |
+| **API route** | `app/api/compliance/overview-v2/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Roster via `getRosterEmployeeIdsForShift`; filters `employees` and `employee_compliance` by `employee_id IN roster_employee_ids`. Same status buckets (VALID/EXPIRING_SOON/EXPIRED/MISSING) and KPIs (legal_stoppers, expiring_soon, healthy). |
+| **SQL objects** | Tables (no RPC) | `employees`, `compliance_catalog`, `employee_compliance`, `compliance_requirement_applicability`. Employees and assignments filtered by roster; catalog/applicability org-scoped. |
+| **Scoping** | **Roster-scoped** | Scope = org_id + site_id + roster_employee_ids for that shift. Legal Stoppers / Expiring change when switching date/shift. |
 
-**Debug:** `GET /api/compliance/overview?debug=1` returns `_debug` with `source`, `scope_inputs`, `requirement_count`, `employees_count`.
+**Debug:** `GET /api/compliance/overview-v2?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `roster_scoping: true`, `roster_employee_ids_count`, `catalog_count`, `employees_count`, `employee_compliance_rows_count`.
+
+### Legacy endpoint (unchanged)
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **API route** | `app/api/compliance/overview/route.ts` | Same as before: org-wide employees and assignments. **Not used by cockpit UI** after v2 rollout. Optional `siteId`, `category`, `status`, `search`. |
+| **Scoping** | **Org-wide (site-optional)** | No roster. When `?debug=1`, response includes `_debug.mode: "legacy"`. |
 
 ---
 
@@ -62,7 +69,8 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 
 | Endpoint | Source | Roster-scoped |
 |----------|--------|----------------|
-| `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster employee_ids); roster via getRosterEmployeeIdsForShift | **Yes** (cockpit uses this) |
-| `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 (view: v_employee_requirement_status) | No (legacy; _debug.mode: "legacy") |
-| `/api/compliance/overview` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability | No |
+| `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster); getRosterEmployeeIdsForShift | **Yes** (cockpit) |
+| `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 | No (legacy; _debug.mode: "legacy") |
+| `/api/compliance/overview-v2` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability (employees/assignments roster-filtered) | **Yes** (cockpit) |
+| `/api/compliance/overview` | same tables, org-wide | No (legacy; _debug.mode: "legacy") |
 | `/api/cockpit/summary` | view: v_cockpit_station_summary + lib evaluateEmployeeComplianceV2 | Yes |

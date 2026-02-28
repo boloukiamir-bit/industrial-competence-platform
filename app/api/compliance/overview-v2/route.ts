@@ -1,13 +1,16 @@
 /**
- * GET /api/compliance/overview — KPIs (operational risk: legal_stoppers, expiring_soon, healthy) + table rows for employees with filters.
- * Query: siteId?, category?, status?, search? (employee name/code). Fail loud with { ok: false, step, error, details }.
+ * GET /api/compliance/overview-v2
+ * Roster-scoped compliance overview (Legal Stoppers / Expiring / Healthy). Requires date + shift_code.
+ * Same response shape as legacy /api/compliance/overview; employees and employee_compliance filtered by roster.
+ * ?debug=1 adds _debug with roster_scoping, roster_employee_ids_count, catalog_count, employees_count, employee_compliance_rows_count.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
+import { getRosterEmployeeIdsForShift } from "@/lib/server/getRosterEmployeeIdsForShift";
 import { getActiveSiteName } from "@/lib/server/siteName";
-import { normalizeProfileActiveSiteIfStale } from "@/lib/server/validateActiveSite";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,6 +46,29 @@ function daysLeft(validTo: string | null): number | null {
 }
 
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const date = (url.searchParams.get("date") ?? "").trim();
+  const shiftCodeParam = (url.searchParams.get("shift_code") ?? url.searchParams.get("shift") ?? "").trim();
+  const wantDebug = url.searchParams.get("debug") === "1";
+  const category = url.searchParams.get("category")?.trim() || null;
+  const statusFilter = url.searchParams.get("status")?.trim() || null;
+  const search = url.searchParams.get("search")?.trim() || null;
+
+  if (!date || !shiftCodeParam) {
+    return NextResponse.json(
+      { ok: false, error: "SHIFT_CONTEXT_REQUIRED", message: "date and shift_code are required" },
+      { status: 400 }
+    );
+  }
+
+  const normalized = normalizeShiftParam(shiftCodeParam);
+  if (!normalized) {
+    return NextResponse.json(
+      { ok: false, error: "Invalid shift parameter", message: "shift_code must be one of Day, Evening, Night, S1, S2, S3" },
+      { status: 400 }
+    );
+  }
+
   const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
@@ -51,35 +77,92 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const { searchParams } = new URL(request.url);
-  const wantDebug = searchParams.get("debug") === "1";
-  const siteId = searchParams.get("siteId")?.trim() || null;
-  const category = searchParams.get("category")?.trim() || null;
-  const statusFilter = searchParams.get("status")?.trim() || null;
-  const search = searchParams.get("search")?.trim() || null;
+  const orgId = org.activeOrgId;
+  const siteId = org.activeSiteId ?? null;
 
   try {
-    const orgId = org.activeOrgId;
-    const activeSiteIdRaw = org.activeSiteId ?? null;
-    const activeSiteNameRaw =
-      activeSiteIdRaw != null ? await getActiveSiteName(supabaseAdmin, activeSiteIdRaw, orgId) : null;
-    const { activeSiteId, activeSiteName } = await normalizeProfileActiveSiteIfStale(
-      supabaseAdmin,
-      org.userId,
-      activeSiteIdRaw,
-      activeSiteNameRaw
-    );
+    const rosterEmployeeIds = await getRosterEmployeeIdsForShift(supabaseAdmin, {
+      orgId,
+      siteId,
+      date,
+      shift_code: normalized,
+    });
+
+    const emptyKpis = {
+      legal_stoppers: { employees: 0, total_items: 0 },
+      expiring_soon: { employees: 0, total_items: 0 },
+      healthy: { employees: 0, total_items: 0 },
+    };
+    const emptyRows: Array<{
+      employee_id: string;
+      employee_name: string;
+      employee_number: string;
+      line: string | null;
+      department: string | null;
+      site_id: string | null;
+      site_name: string;
+      compliance_id: string;
+      compliance_code: string;
+      compliance_name: string;
+      category: string;
+      status: string;
+      valid_to: string | null;
+      days_left: number | null;
+    }> = [];
+
+    if (rosterEmployeeIds.length === 0) {
+      const body: {
+        ok: boolean;
+        kpis: typeof emptyKpis;
+        rows: typeof emptyRows;
+        catalog: Array<{ id: string; category: string; code: string; name: string }>;
+        activeSiteId: string | null;
+        activeSiteName: string | null;
+        _debug?: {
+          source: string;
+          scope_inputs: { org_id: string; site_id: string | null; date: string; shift_code: string; roster_scoping: boolean; roster_employee_ids_count: number };
+          catalog_count: number;
+          employees_count: number;
+          employee_compliance_rows_count: number;
+        };
+      } = {
+        ok: true,
+        kpis: emptyKpis,
+        rows: emptyRows,
+        catalog: [],
+        activeSiteId: siteId,
+        activeSiteName: siteId ? (await getActiveSiteName(supabaseAdmin, siteId, orgId)) ?? null : null,
+      };
+      if (wantDebug) {
+        body._debug = {
+          source: "tables:employees,compliance_catalog,employee_compliance,compliance_requirement_applicability",
+          scope_inputs: {
+            org_id: orgId,
+            site_id: siteId,
+            date,
+            shift_code: normalized,
+            roster_scoping: true,
+            roster_employee_ids_count: 0,
+          },
+          catalog_count: 0,
+          employees_count: 0,
+          employee_compliance_rows_count: 0,
+        };
+      }
+      const res = NextResponse.json(body);
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
 
     const employeesQuery = supabaseAdmin
       .from("employees")
       .select("id, name, first_name, last_name, employee_number, line, team, site_id")
       .eq("org_id", orgId)
-      .eq("is_active", true);
-    if (siteId) employeesQuery.eq("site_id", siteId);
+      .eq("is_active", true)
+      .in("id", rosterEmployeeIds);
     const { data: employees, error: empErr } = await employeesQuery.order("name");
 
     if (empErr) {
-      console.error("compliance/overview employees", empErr);
       const res = NextResponse.json(errorPayload("employees", empErr.message), { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -94,7 +177,6 @@ export async function GET(request: NextRequest) {
     const { data: catalog, error: catErr } = await catalogQuery.order("category").order("code");
 
     if (catErr) {
-      console.error("compliance/overview catalog", catErr);
       const res = NextResponse.json(errorPayload("catalog", catErr.message), { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -106,10 +188,10 @@ export async function GET(request: NextRequest) {
     const { data: assigned, error: assErr } = await supabaseAdmin
       .from("employee_compliance")
       .select("employee_id, compliance_id, valid_to, waived")
-      .eq("org_id", orgId);
+      .eq("org_id", orgId)
+      .in("employee_id", rosterEmployeeIds);
 
     if (assErr) {
-      console.error("compliance/overview assigned", assErr);
       const res = NextResponse.json(errorPayload("assigned", assErr.message), { status: 500 });
       applySupabaseCookies(res, pendingCookies);
       return res;
@@ -122,6 +204,7 @@ export async function GET(request: NextRequest) {
         waived: a.waived ?? false,
       });
     }
+    const employeeComplianceRowsCount = (assigned ?? []).length;
 
     const { data: applicabilityRows } = await supabaseAdmin
       .from("compliance_requirement_applicability")
@@ -158,10 +241,7 @@ export async function GET(request: NextRequest) {
         .in("employee_id", employeeIds);
       const roleIds = [...new Set((erRows ?? []).map((r: { role_id: string }) => r.role_id))];
       if (roleIds.length > 0) {
-        const { data: roleRows } = await supabaseAdmin
-          .from("roles")
-          .select("id, code")
-          .in("id", roleIds);
+        const { data: roleRows } = await supabaseAdmin.from("roles").select("id, code").in("id", roleIds);
         const codeByRoleId = new Map<string, string>();
         for (const row of roleRows ?? []) {
           const r = row as { id: string; code: string };
@@ -252,15 +332,15 @@ export async function GET(request: NextRequest) {
 
         if (statusFilter && status !== statusFilter) continue;
 
-        const siteId = emp.site_id ?? null;
+        const empSiteId = emp.site_id ?? null;
         rows.push({
           employee_id: emp.id,
           employee_name: empName || empCode || emp.id,
           employee_number: empCode,
           line: emp.line ?? null,
           department: emp.team ?? null,
-          site_id: siteId,
-          site_name: siteId ? siteNameMap.get(siteId) ?? "Unknown site" : "",
+          site_id: empSiteId,
+          site_name: empSiteId ? siteNameMap.get(empSiteId) ?? "Unknown site" : "",
           compliance_id: c.id,
           compliance_code: c.code,
           compliance_name: c.name,
@@ -278,6 +358,8 @@ export async function GET(request: NextRequest) {
       healthy: { employees: healthyEmployees.size, total_items: healthyItems },
     };
 
+    const activeSiteName = siteId ? (await getActiveSiteName(supabaseAdmin, siteId, orgId)) ?? null : null;
+
     const body: {
       ok: boolean;
       kpis: typeof kpis;
@@ -287,31 +369,33 @@ export async function GET(request: NextRequest) {
       activeSiteName: string | null;
       _debug?: {
         source: string;
-        mode?: string;
-        scope_inputs: { org_id: string; site_id: string | null; roster_scoping: boolean; roster_employee_ids_count: number };
-        requirement_count: number;
+        scope_inputs: { org_id: string; site_id: string | null; date: string; shift_code: string; roster_scoping: boolean; roster_employee_ids_count: number };
+        catalog_count: number;
         employees_count: number;
+        employee_compliance_rows_count: number;
       };
     } = {
       ok: true,
       kpis,
       rows,
       catalog: catalogList,
-      activeSiteId: org.activeSiteId ?? null,
+      activeSiteId: siteId,
       activeSiteName,
     };
     if (wantDebug) {
       body._debug = {
         source: "tables:employees,compliance_catalog,employee_compliance,compliance_requirement_applicability",
-        mode: "legacy",
         scope_inputs: {
           org_id: orgId,
-          site_id: siteId ?? org.activeSiteId ?? null,
-          roster_scoping: false,
-          roster_employee_ids_count: 0,
+          site_id: siteId,
+          date,
+          shift_code: normalized,
+          roster_scoping: true,
+          roster_employee_ids_count: rosterEmployeeIds.length,
         },
-        requirement_count: catalogList.length,
+        catalog_count: catalogList.length,
         employees_count: empList.length,
+        employee_compliance_rows_count: employeeComplianceRowsCount,
       };
     }
 
@@ -319,7 +403,6 @@ export async function GET(request: NextRequest) {
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
-    console.error("GET /api/compliance/overview failed:", err);
     const res = NextResponse.json(errorPayload("unexpected", err), { status: 500 });
     applySupabaseCookies(res, pendingCookies);
     return res;

@@ -720,14 +720,20 @@ export default function CockpitPage() {
       .catch((err) => console.error("[cockpit lines]", err));
   }, [date, shiftCode, sessionOk, hasShiftCode, isGlobal]);
 
-  // Compliance overview for Expiring soon tile + panel (single shared fetch)
+  // Compliance overview for Expiring soon tile + panel (roster-scoped when date+shift set)
   useEffect(() => {
     if (isDemoMode() || !sessionOk) return;
+    if (!date || !shiftCode) {
+      setComplianceExpiring(null);
+      setComplianceExpiringLoading(false);
+      return;
+    }
     let cancelled = false;
     setComplianceExpiringLoading(true);
+    const params = new URLSearchParams({ date, shift_code: shiftCode });
     fetchJson<{
       ok?: boolean;
-      kpis?: Record<string, { valid: number; expiring: number; expired: number; missing: number; waived: number }>;
+      kpis?: Record<string, { employees: number; total_items: number }>;
       rows?: Array<{
         employee_id: string;
         employee_name: string;
@@ -736,18 +742,17 @@ export default function CockpitPage() {
         valid_to: string | null;
         line: string | null;
       }>;
-    }>("/api/compliance/overview")
+    }>(`/api/compliance/overview-v2?${params.toString()}`)
       .then((res) => {
         if (!res.ok || !res.data?.ok || cancelled) return;
-        const kpis = res.data.kpis ?? {};
-        const expiredCount = Object.values(kpis).reduce((s, k) => s + (k.expired ?? 0), 0);
-        const expiringCount = Object.values(kpis).reduce((s, k) => s + (k.expiring ?? 0), 0);
         let rows = (res.data.rows ?? []).filter(
           (r) => r.status === "expired" || r.status === "expiring"
         ) as Array<{ employee_id: string; employee_name: string; compliance_name: string; status: string; valid_to: string | null; line: string | null }>;
         if (line && line !== "all") {
           rows = rows.filter((r) => (r.line ?? "").trim() === line.trim());
         }
+        const expiredCount = rows.filter((r) => r.status === "expired").length;
+        const expiringCount = rows.filter((r) => r.status === "expiring").length;
         rows.sort((a, b) => {
           const aExpired = a.status === "expired" ? 0 : 1;
           const bExpired = b.status === "expired" ? 0 : 1;
@@ -774,7 +779,7 @@ export default function CockpitPage() {
         if (!cancelled) setComplianceExpiringLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionOk, line]);
+  }, [sessionOk, date, shiftCode, line]);
 
   // Active HR jobs for Intervention Queue (CREATED, SENT, SIGNED)
   useEffect(() => {
