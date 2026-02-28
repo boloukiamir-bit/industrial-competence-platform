@@ -52,6 +52,7 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 | Endpoint | Source | Used by cockpit |
 |----------|--------|-----------------|
 | `/api/cockpit/readiness-v3` | Composes compliance matrix-v2 + competence matrix-v2 (parallel fetch) | **Yes** (canonical; overall status on Readiness tile + Industrial Readiness card) |
+| `/api/cockpit/iri-v1` | readiness-v3 → IRI_V1 score/grade (deterministic) | Backend; Industrial Readiness Index™ v1 |
 | `/api/compliance/matrix-v2` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability (roster-filtered) | **Yes** (Requirements + Expiring; also fed into readiness-v3) |
 | `/api/competence/matrix-v2` | stations, station_skill_requirements, employee_skills (roster-filtered) | **Yes** (fed into readiness-v3; cockpit overall status from v3) |
 | `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster) | No (kept; bake time) |
@@ -84,6 +85,20 @@ Single canonical endpoint for **overall** shift readiness. Composes the two engi
 | **Scoping** | **Roster-scoped** | Same org_id/site_id and roster as the two matrix-v2 engines (via forwarded cookies). |
 
 **Debug:** `GET /api/cockpit/readiness-v3?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `roster_employee_ids_count`, `sources`, and the two underlying `_debug` blocks (compliance, competence).
+
+---
+
+## IRI_V1 (Industrial Readiness Index™ v1)
+
+Deterministic backend score and grade derived from readiness-v3 (Legal + Ops). Same org/site/date/shift scope.
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **API route** | `app/api/cockpit/iri-v1/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Fetches readiness-v3 internally (same cookies). Returns `iri_score`, `iri_grade` (A–F), `breakdown` (base_score, deductions), `legal_flag`, `ops_flag`, `overall_status_from_v3`. |
+| **Logic** | `lib/server/readiness/iriV1.ts` | **Hard stop:** if `legal.flag === LEGAL_NO_GO` or `ops.flag === OPS_NO_GO` → score = 0. **Else:** score = 100 − (20×blocking_count + 5×non_blocking_count + 15×stations_no_go + 5×stations_warning), min 0. **Grade:** ≥90 A, ≥75 B, ≥60 C, ≥40 D, >0 E, 0 F. |
+| **Input** | readiness-v3 | Legal/ops flags and kpis only; no direct DB. |
+
+**Debug:** `GET /api/cockpit/iri-v1?date=...&shift_code=...&debug=1` returns `_debug.readiness_v3_debug` (full readiness-v3 _debug).
 
 ---
 
