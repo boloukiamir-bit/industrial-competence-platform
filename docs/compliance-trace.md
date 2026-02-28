@@ -2,16 +2,23 @@
 
 End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping and data source determinism.
 
-## 1. HR compliance block (GO / WARNING / ILLEGAL counts)
+## 1. Cockpit requirements block (GO / WARNING / ILLEGAL counts) — roster-scoped (v2)
 
 | Layer | File | Detail |
 |-------|------|--------|
-| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | `useEffect` (around line 849) fetches `/api/cockpit/requirements-summary` when `sessionOk`. No date/shift in request. |
-| **API route** | `app/api/cockpit/requirements-summary/route.ts` | `GET` → `getActiveOrgFromSession`, then `supabase.rpc("get_requirements_summary_v1", { p_org_id, p_site_id })`. |
-| **SQL object** | RPC `get_requirements_summary_v1` | Defined in `supabase/migrations/20260228000000_requirement_criticality_v1.sql`. Reads from view `v_employee_requirement_status` filtered by `org_id` and optional `site_id`. |
-| **Scoping** | **Org-wide (site-optional)** | No roster scoping. No date, shift, or roster employee list. Aggregation is over all rows in `v_employee_requirement_status` for org (and site if provided). |
+| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | `useEffect` fetches `/api/cockpit/requirements-summary-v2?date=...&shift_code=...` when `sessionOk` **and** `date` and `shiftCode` are set. No call until date+shift selected (avoids 400). |
+| **API route** | `app/api/cockpit/requirements-summary-v2/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Resolves roster via `getRosterEmployeeIdsForShift` (shifts + shift_assignments), then queries `v_employee_requirement_status` filtered by `employee_id IN (roster_employee_ids)`. |
+| **SQL / lib** | View `v_employee_requirement_status`; helper `lib/server/getRosterEmployeeIdsForShift.ts` | Roster = first shift matching org/site/date/shift_code → shift_assignments.employee_id. Requirement rows filtered by roster; counts and top_requirements aggregated in route (incl. affected_employee_count per requirement). |
+| **Scoping** | **Roster-scoped** | Scope = org_id + site_id + roster_employee_ids for that shift. Counts change when switching date/shift. |
 
-**Debug:** `GET /api/cockpit/requirements-summary?debug=1` returns `_debug` with `source`, `scope_inputs`, `requirement_count`, `aggregation_row_count`.
+**Debug:** `GET /api/cockpit/requirements-summary-v2?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `roster_scoping: true`, `roster_employee_ids_count`, `source`, `scope_inputs`.
+
+### Legacy endpoint (unchanged)
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **API route** | `app/api/cockpit/requirements-summary/route.ts` | Same as before: `get_requirements_summary_v1(p_org_id, p_site_id)`. **Not used by cockpit UI** after v2 rollout. |
+| **Scoping** | **Org-wide (site-optional)** | No roster. When `?debug=1`, response includes `_debug.mode: "legacy"`. |
 
 ---
 
@@ -55,6 +62,7 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 
 | Endpoint | Source | Roster-scoped |
 |----------|--------|----------------|
-| `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 (view: v_employee_requirement_status) | No |
+| `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster employee_ids); roster via getRosterEmployeeIdsForShift | **Yes** (cockpit uses this) |
+| `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 (view: v_employee_requirement_status) | No (legacy; _debug.mode: "legacy") |
 | `/api/compliance/overview` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability | No |
 | `/api/cockpit/summary` | view: v_cockpit_station_summary + lib evaluateEmployeeComplianceV2 | Yes |

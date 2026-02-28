@@ -846,11 +846,17 @@ export default function CockpitPage() {
     return () => { cancelled = true; };
   }, [sessionOk]);
 
-  // Requirements summary (org-level) — total/illegal/warning/go + blocking_critical, blocking_high
+  // Requirements summary (roster-scoped) — requires date + shift; total/illegal/warning/go + blocking_critical, blocking_high
   useEffect(() => {
     if (isDemoMode() || !sessionOk) return;
+    if (!date || !shiftCode) {
+      setRequirementsSummary(null);
+      setRequirementsSummaryLoading(false);
+      return;
+    }
     let cancelled = false;
     setRequirementsSummaryLoading(true);
+    const params = new URLSearchParams({ date, shift_code: shiftCode });
     fetchJson<{
       ok: boolean;
       counts?: {
@@ -867,8 +873,9 @@ export default function CockpitPage() {
         illegal: number;
         warning: number;
         total: number;
+        affected_employee_count?: number;
       }>;
-    }>("/api/cockpit/requirements-summary")
+    }>(`/api/cockpit/requirements-summary-v2?${params.toString()}`)
       .then((res) => {
         if (!cancelled && res.ok && res.data?.counts)
           setRequirementsSummary({
@@ -884,7 +891,7 @@ export default function CockpitPage() {
         if (!cancelled) setRequirementsSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionOk]);
+  }, [sessionOk, date, shiftCode]);
 
   // Compliance actions summary (org-level) for overview block
   useEffect(() => {
@@ -1618,7 +1625,7 @@ export default function CockpitPage() {
             data-testid="cockpit-requirements-summary-block"
           >
             <h2 className="text-base font-semibold tracking-tight" style={{ color: "var(--text)" }}>Requirements</h2>
-            <p className="text-sm mt-0.5 mb-4" style={{ color: "var(--text-2)" }}>Org-wide requirement status.</p>
+            <p className="text-sm mt-0.5 mb-4" style={{ color: "var(--text-2)" }}>Roster-scoped requirement status for selected date and shift.</p>
             {requirementsSummaryLoading ? (
               <div className="flex flex-wrap items-center gap-2">
                 <div className="h-5 w-12 rounded animate-pulse bg-[var(--surface-3)]" />

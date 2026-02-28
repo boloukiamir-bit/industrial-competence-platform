@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
       top_requirements: typeof top_requirements;
       _debug?: {
         source: string;
+        mode?: string;
         scope_inputs: { org_id: string; site_id: string | null; roster_scoping: boolean; roster_employee_ids_count: number };
         requirement_count: number;
         aggregation_row_count: number;
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
     if (wantDebug) {
       body._debug = {
         source: "rpc:get_requirements_summary_v1",
+        mode: "legacy",
         scope_inputs: {
           org_id: org.activeOrgId,
           site_id: org.activeSiteId ?? null,
