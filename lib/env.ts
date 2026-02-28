@@ -63,6 +63,20 @@ export function validatePublicEnv(): { valid: boolean; missing: string[] } {
 }
 
 /**
+ * Application origin for absolute redirect URLs (e.g. password reset).
+ * Prod: NEXT_PUBLIC_SITE_URL or https://VERCEL_URL. Dev: http://127.0.0.1:5001.
+ * No trailing slash.
+ */
+export function getAppOrigin(): string {
+  const fromSite = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/$/, "");
+  if (fromSite && !fromSite.includes("placeholder")) return fromSite;
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) return `https://${vercel}`;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "http://127.0.0.1:5001";
+}
+
+/**
  * Get the service role key (server-side only)
  * Never expose this to client code
  */

@@ -1,22 +1,35 @@
 import { supabase } from "@/lib/supabaseClient";
+import { getAppOrigin } from "@/lib/env";
 
-/** Base URL of the app (e.g. https://pilot.bcledge.com or http://localhost:3000). Used for magic link redirect. */
-function getAppOrigin(): string {
-  const fromEnv = (process.env.NEXT_PUBLIC_APP_ORIGIN ?? process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
-  if (fromEnv) return fromEnv;
-  if (typeof window !== "undefined") return window.location.origin;
-  return "http://localhost:3000";
+/**
+ * Sign in with email and password. Returns session data on success.
+ * Caller should sync session via POST /api/auth/callback with access_token and refresh_token.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string
+): Promise<{ error?: { message: string }; session?: { access_token: string; refresh_token: string } }> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+  if (error) return { error: { message: error.message } };
+  const session = data.session;
+  if (!session?.access_token || !session?.refresh_token)
+    return { error: { message: "No session returned" } };
+  return { session: { access_token: session.access_token, refresh_token: session.refresh_token } };
 }
 
 /**
- * Send a magic link to the given email (passwordless). Redirect URL is APP_ORIGIN/api/auth/callback.
+ * Send password reset email. Redirect URL is APP_ORIGIN/api/auth/callback?next=/reset-password.
  * Does not reveal whether an account exists; caller should show a deterministic success message.
  */
-export async function signInWithOtp(email: string): Promise<{ error?: { message: string } }> {
-  const emailRedirectTo = `${getAppOrigin()}/api/auth/callback`;
-  const { error } = await supabase.auth.signInWithOtp({
-    email: email.trim(),
-    options: { emailRedirectTo },
+export async function resetPasswordForEmail(
+  email: string
+): Promise<{ error?: { message: string } }> {
+  const redirectTo = `${getAppOrigin()}/api/auth/callback?next=/reset-password`;
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo,
   });
   if (error) return { error: { message: error.message } };
   return {};

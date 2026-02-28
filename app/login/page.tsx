@@ -2,20 +2,17 @@
 
 import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithOtp, getSession } from '@/services/auth';
+import { signInWithPassword, getSession } from '@/services/auth';
 import { isSupabaseReady, supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 import { LoginShell2030 } from '@/components/auth/LoginShell2030';
+import Link from 'next/link';
 
 /** Default landing after login. */
 const DEFAULT_POST_LOGIN_PATH = '/app/cockpit';
 
-/** Throttle (seconds) before Send/Resend can be clicked again. */
-const THROTTLE_SECONDS = 10;
-
 /**
  * Resolve redirect path after login: honor next= if safe, else cockpit.
- * Prevents redirect to /login (infinite loop) and allows only app paths.
  */
 function getRedirectAfterLogin(next: string | null): string {
   const raw = next?.trim();
@@ -29,10 +26,9 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [linkSent, setLinkSent] = useState(false);
-  const [throttleRemaining, setThrottleRemaining] = useState(0);
   const [checkingSession, setCheckingSession] = useState(true);
   const [supabaseConfigured, setSupabaseConfigured] = useState(true);
   const [bootstrapStatus, setBootstrapStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -46,7 +42,6 @@ function LoginPageContent() {
     setSupabaseConfigured(configured);
 
     if (!configured) {
-      console.error('Supabase not configured - env vars missing');
       setCheckingSession(false);
       return;
     }
@@ -69,25 +64,12 @@ function LoginPageContent() {
         } else {
           setCheckingSession(false);
         }
-      } catch (err) {
-        console.error('Session check failed:', err);
+      } catch {
         setCheckingSession(false);
       }
     }
     checkExistingSession();
   }, [router, nextParam]);
-
-  useEffect(() => {
-    if (throttleRemaining <= 0) return;
-    const t = setInterval(() => {
-      setThrottleRemaining((prev) => {
-        const next = prev - 1;
-        if (next <= 0) clearInterval(t);
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [throttleRemaining]);
 
   async function checkBootstrapStatus(userId: string): Promise<{ needsBootstrap: boolean; role: string | null }> {
     try {
@@ -111,39 +93,58 @@ function LoginPageContent() {
     }
   }
 
-  const sendMagicLink = useCallback(async () => {
-    setErrorMsg(null);
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setErrorMsg('Please enter your email.');
-      return;
-    }
-    if (!supabaseConfigured) {
-      setErrorMsg('Authentication service is not configured. Environment variables are missing.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await signInWithOtp(trimmed);
-      setLoading(false);
-      if (result.error) {
-        setErrorMsg(result.error.message || 'Failed to send link.');
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setErrorMsg(null);
+      const trimmed = email.trim();
+      if (!trimmed) {
+        setErrorMsg('Please enter your email.');
         return;
       }
-      setLinkSent(true);
-      setThrottleRemaining(THROTTLE_SECONDS);
-    } catch (err) {
-      setLoading(false);
-      console.error('Magic link error:', err);
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to send link.');
-    }
-  }, [email, supabaseConfigured]);
+      if (!password) {
+        setErrorMsg('Please enter your password.');
+        return;
+      }
+      if (!supabaseConfigured) {
+        setErrorMsg('Authentication service is not configured. Environment variables are missing.');
+        return;
+      }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    await sendMagicLink();
-  }
+      setLoading(true);
+      try {
+        const result = await signInWithPassword(trimmed, password);
+        if (result.error) {
+          setErrorMsg(result.error.message || 'Sign in failed.');
+          setLoading(false);
+          return;
+        }
+        if (result.session) {
+          const res = await fetch('/api/auth/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: result.session.access_token,
+              refresh_token: result.session.refresh_token,
+            }),
+            credentials: 'include',
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            setErrorMsg((data.error as string) || 'Failed to set session.');
+            setLoading(false);
+            return;
+          }
+          const redirectPath = getRedirectAfterLogin(nextParam);
+          router.replace(redirectPath);
+        }
+      } catch (err) {
+        setLoading(false);
+        setErrorMsg(err instanceof Error ? err.message : 'Sign in failed.');
+      }
+    },
+    [email, password, supabaseConfigured, nextParam, router]
+  );
 
   async function handleBootstrap() {
     setBootstrapStatus('loading');
@@ -198,9 +199,6 @@ function LoginPageContent() {
     );
   }
 
-  const throttleActive = throttleRemaining > 0;
-  const primaryCtaLabel = linkSent ? 'Resend link' : 'Send magic link';
-
   return (
     <LoginShell2030>
       <div>
@@ -225,11 +223,30 @@ function LoginPageContent() {
             data-testid="input-email"
           />
         </div>
-        {linkSent && (
-          <p className="text-sm" style={{ color: 'var(--text-2, #475569)' }} data-testid="success-message">
-            If an account exists, we sent a sign-in link.
-          </p>
-        )}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-2, #475569)' }}>Password</label>
+          <input
+            type="password"
+            className="login-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            placeholder="••••••••"
+            required
+            disabled={loading}
+            data-testid="input-password"
+          />
+        </div>
+        <div className="flex justify-end">
+          <Link
+            href="/forgot-password"
+            className="text-sm underline"
+            style={{ color: 'var(--color-accent, #1E40AF)' }}
+            data-testid="link-forgot-password"
+          >
+            Forgot password?
+          </Link>
+        </div>
         {errorMsg && (
           <p className="text-sm" style={{ color: '#B91C1C' }} data-testid="error-message">{errorMsg}</p>
         )}
@@ -237,18 +254,16 @@ function LoginPageContent() {
           type="submit"
           className="w-full py-3 px-4 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
           style={{ backgroundColor: 'var(--color-accent, #1E40AF)', borderRadius: '3px' }}
-          disabled={loading || throttleActive}
+          disabled={loading}
           data-testid="button-signin"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Sending…
+              Signing in…
             </span>
-          ) : throttleActive ? (
-            `Wait ${throttleRemaining}s`
           ) : (
-            primaryCtaLabel
+            'Sign in'
           )}
         </button>
       </form>

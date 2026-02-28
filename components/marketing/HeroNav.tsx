@@ -20,10 +20,10 @@ export function HeroNav() {
   return (
     <>
       <header
-        className="fixed top-0 left-0 right-0 z-50 h-[72px] flex items-center bg-white/95 backdrop-blur-sm border-b border-slate-200/80"
+        className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center bg-white border-b border-slate-200/60"
         aria-label="Main navigation"
       >
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+        <div className="w-full max-w-6xl mx-auto px-5 sm:px-8 lg:px-12 h-full flex items-center justify-between">
           <Link
             href="/"
             className="flex items-center gap-2.5 flex-shrink-0 no-underline"
@@ -32,18 +32,18 @@ export function HeroNav() {
             <Image
               src="/bcledge-logo.png"
               alt=""
-              width={28}
-              height={28}
+              width={26}
+              height={26}
               className="object-contain"
               priority
             />
-            <span className="text-base font-bold tracking-tight text-slate-900">
+            <span className="text-[15px] font-semibold tracking-tight text-slate-900">
               BCLEDGE
             </span>
           </Link>
 
           <nav
-            className="hidden md:flex items-center gap-8"
+            className="hidden md:flex items-center gap-7"
             aria-label="Main"
           >
             {NAV_LINKS.map((item) =>
@@ -51,7 +51,7 @@ export function HeroNav() {
                 <a
                   key={item.label}
                   href={item.href}
-                  className="text-[13px] font-medium text-slate-600 hover:text-slate-900 pb-0.5 border-b border-transparent hover:border-slate-300 transition-colors"
+                  className="text-[13px] font-medium text-slate-600 hover:text-slate-900 transition-colors"
                 >
                   {item.label}
                 </a>
@@ -59,7 +59,7 @@ export function HeroNav() {
                 <Link
                   key={item.label}
                   href={item.href}
-                  className="text-[13px] font-medium text-slate-600 hover:text-slate-900 pb-0.5 border-b border-transparent hover:border-slate-300 transition-colors"
+                  className="text-[13px] font-medium text-slate-600 hover:text-slate-900 transition-colors"
                 >
                   {item.label}
                 </Link>
@@ -67,8 +67,8 @@ export function HeroNav() {
             )}
           </nav>
 
-          <div className="hidden md:flex items-center gap-6">
-            <Button asChild size="default" className="rounded-lg">
+          <div className="hidden md:flex items-center gap-5">
+            <Button asChild size="default" className="rounded-md font-medium">
               <Link href="#book-demo">Book Demo</Link>
             </Button>
             <Link
@@ -93,11 +93,11 @@ export function HeroNav() {
 
       {mobileOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 pt-[72px] bg-white border-t border-slate-200/80"
+          className="md:hidden fixed inset-0 z-40 pt-16 bg-white border-t border-slate-200/60"
           aria-hidden
         >
           <nav
-            className="max-w-7xl mx-auto px-4 py-8 flex flex-col gap-0"
+            className="max-w-6xl mx-auto px-5 py-8 flex flex-col gap-0"
             aria-label="Mobile main"
           >
             {NAV_LINKS.map((item, i) => (
