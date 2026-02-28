@@ -1,6 +1,7 @@
 "use client";
 
 import { useScrollProgress, useActiveChapter, ScrollChapters } from "@/components/marketing2030/ScrollChapters";
+import { HeroNav } from "@/components/marketing2030/HeroNav";
 import { HeroInstrument } from "@/components/marketing2030/HeroInstrument";
 import { GlobalGap } from "@/components/marketing2030/GlobalGap";
 import { GovernanceStack } from "@/components/marketing2030/GovernanceStack";
@@ -14,6 +15,7 @@ export default function Page2030() {
 
   return (
     <>
+      <HeroNav />
       <ScrollChapters progress={progress} activeChapter={activeChapter} />
       <main>
         <HeroInstrument />
