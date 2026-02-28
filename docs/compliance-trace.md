@@ -57,3 +57,13 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 | `/api/compliance/overview-v2` | same tables as matrix-v2, roster-filtered | No (kept; bake time) |
 | `/api/compliance/overview` | same tables, org-wide | No (legacy) |
 | `/api/cockpit/summary` | view: v_cockpit_station_summary + lib evaluateEmployeeComplianceV2 | Yes (shift legitimacy) |
+
+---
+
+## Readiness Unification
+
+Cockpit **legal readiness** is derived **exclusively** from `/api/compliance/matrix-v2` **`readiness_flag`**.
+
+- **Source of truth:** `readiness_flag` (`LEGAL_GO` | `LEGAL_WARNING` | `LEGAL_NO_GO`) from the matrix-v2 response. No local conditional logic (e.g. `if (blocking_count > 0) …`) decides the global legal state.
+- **UI mapping:** `LEGAL_NO_GO` → Readiness tile/panel status **NO-GO**; `LEGAL_WARNING` → **WARNING**; `LEGAL_GO` → **GO**. When matrix-v2 is not loaded (no date/shift or error), the tile shows **—** and the panel uses a safe fallback (NO-GO) so legal state is never shown as GO without data.
+- **Header badge, Executive summary block, and any LEGAL status indicators** use this single value. Counts (blocking/warning) are displayed from the same matrix-v2 response for context only; they do not drive the status.

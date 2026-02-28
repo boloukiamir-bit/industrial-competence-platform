@@ -318,6 +318,10 @@ export default function CockpitPage() {
     }>;
   } | null>(null);
   const [requirementsSummaryLoading, setRequirementsSummaryLoading] = useState(false);
+  /** Legal readiness from /api/compliance/matrix-v2 only. No local derivation. */
+  const [complianceReadinessFlag, setComplianceReadinessFlag] = useState<
+    "LEGAL_GO" | "LEGAL_WARNING" | "LEGAL_NO_GO" | null
+  >(null);
 
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
@@ -724,6 +728,7 @@ export default function CockpitPage() {
   useEffect(() => {
     if (isDemoMode() || !sessionOk) return;
     if (!date || !shiftCode) {
+      setComplianceReadinessFlag(null);
       setRequirementsSummary(null);
       setComplianceExpiring(null);
       setRequirementsSummaryLoading(false);
@@ -764,6 +769,7 @@ export default function CockpitPage() {
       .then((res) => {
         if (!res.ok || !res.data?.ok || cancelled) {
           if (!cancelled) {
+            setComplianceReadinessFlag(null);
             setRequirementsSummary(null);
             setComplianceExpiring(null);
           }
@@ -781,6 +787,13 @@ export default function CockpitPage() {
         const byReq = res.data.by_requirement ?? [];
         const total = kpis.blocking_count + kpis.non_blocking_count + kpis.healthy_count;
         if (!cancelled) {
+          setComplianceReadinessFlag(
+            (res.data.readiness_flag === "LEGAL_GO" ||
+              res.data.readiness_flag === "LEGAL_WARNING" ||
+              res.data.readiness_flag === "LEGAL_NO_GO"
+              ? res.data.readiness_flag
+              : null) ?? null
+          );
           setRequirementsSummary({
             counts: {
               total,
@@ -813,6 +826,7 @@ export default function CockpitPage() {
       })
       .catch(() => {
         if (!cancelled) {
+          setComplianceReadinessFlag(null);
           setRequirementsSummary(null);
           setComplianceExpiring(null);
         }
@@ -1286,7 +1300,34 @@ export default function CockpitPage() {
       </div>
     );
 
-  // Deterministic readiness from issues[] (no backend change)
+  // Legal readiness: from matrix-v2 readiness_flag only. No local computation of state.
+  const legalDisplayStatus: ReadinessStatus | "--" =
+    complianceReadinessFlag === "LEGAL_NO_GO"
+      ? "NO-GO"
+      : complianceReadinessFlag === "LEGAL_WARNING"
+        ? "WARNING"
+        : complianceReadinessFlag === "LEGAL_GO"
+          ? "GO"
+          : "--";
+  const legalBlockingCount = requirementsSummary?.counts?.illegal ?? 0;
+  const legalWarningCount = requirementsSummary?.counts?.warning ?? 0;
+  const legalReadinessSubtitle =
+    complianceReadinessFlag === null
+      ? "Select date and shift for legal readiness."
+      : complianceReadinessFlag === "LEGAL_NO_GO"
+        ? `${legalBlockingCount} blocking compliance item(s)`
+        : complianceReadinessFlag === "LEGAL_WARNING"
+          ? `${legalWarningCount} warning(s)`
+          : "No blocking items";
+  const legalReadinessCounts: ReadinessCounts = {
+    totalActive: (requirementsSummary?.counts?.total ?? 0),
+    blockingCount: legalBlockingCount,
+    warningCount: legalWarningCount,
+    illegalCount: legalBlockingCount,
+    unstaffedCount: 0,
+  };
+
+  // Issue list for readiness panel (station-level issues; does not drive legal status)
   const totalActive = issues.length;
   const blockingCount = issues.filter((i) => i.severity === "BLOCKING").length;
   const warningCount = issues.filter((i) => i.severity === "WARNING").length;
@@ -1294,16 +1335,6 @@ export default function CockpitPage() {
   const unstaffedCount = issues.filter((i) => (i.issue_type ?? (i as { type?: string }).type) === "UNSTAFFED").length;
   const blockingIssues = issues.filter((i) => i.severity === "BLOCKING");
   const warningIssues = issues.filter((i) => i.severity === "WARNING");
-  const uniqueStationsBlocking = new Set(blockingIssues.map((i) => i.station_id ?? i.station_name ?? "")).size;
-  const uniqueStationsWarning = new Set(warningIssues.map((i) => i.station_id ?? i.station_name ?? "")).size;
-  const readinessStatus: ReadinessStatus =
-    illegalCount > 0 ? "NO-GO" : blockingCount > 0 ? "NO-GO" : warningCount > 0 ? "WARNING" : "GO";
-  const readinessSubtitle =
-    readinessStatus === "NO-GO"
-      ? `${blockingCount} blocking issue(s) across ${uniqueStationsBlocking} station(s)`
-      : readinessStatus === "WARNING"
-        ? `${warningCount} warning(s) across ${uniqueStationsWarning} station(s)`
-        : "No active issues";
   const issueTypeOrder = (t: string) => (t === "ILLEGAL" ? 0 : t === "UNSTAFFED" ? 1 : t === "NO_GO" ? 2 : 3);
   const topStations: ReadinessTopStationRow[] = [...issues]
     .sort((a, b) => {
@@ -1320,13 +1351,6 @@ export default function CockpitPage() {
       date: issue.date ?? "",
       issue,
     }));
-  const readinessCounts: ReadinessCounts = {
-    totalActive,
-    blockingCount,
-    warningCount,
-    illegalCount,
-    unstaffedCount,
-  };
   const blockersCount = blockingCount;
 
   const emptyStatePanel = (
@@ -1792,12 +1816,18 @@ export default function CockpitPage() {
               tileId="kpi-readiness"
               title="Readiness"
               icon={<ClipboardCheck />}
-              primaryValue={readinessStatus}
-              secondaryLabel={readinessStatus === "NO-GO" ? "Blocking" : readinessStatus === "WARNING" ? "Warnings" : "Active"}
-              secondaryValue={readinessStatus === "NO-GO" ? blockingCount : readinessStatus === "WARNING" ? warningCount : 0}
-              statusChip={readinessStatus === "NO-GO" ? "NO-GO" : readinessStatus === "WARNING" ? "AT RISK" : "GO"}
+              primaryValue={legalDisplayStatus}
+              secondaryLabel={
+                legalDisplayStatus === "NO-GO" ? "Blocking" : legalDisplayStatus === "WARNING" ? "Warnings" : legalDisplayStatus === "GO" ? "Active" : "—"
+              }
+              secondaryValue={
+                legalDisplayStatus === "NO-GO" ? legalBlockingCount : legalDisplayStatus === "WARNING" ? legalWarningCount : legalDisplayStatus === "GO" ? 0 : undefined
+              }
+              statusChip={
+                legalDisplayStatus === "NO-GO" ? "NO-GO" : legalDisplayStatus === "WARNING" ? "AT RISK" : legalDisplayStatus === "GO" ? "GO" : undefined
+              }
               statusChipVariant={
-                readinessStatus === "NO-GO" ? "blocking" : readinessStatus === "WARNING" ? "warning" : "ok"
+                legalDisplayStatus === "NO-GO" ? "blocking" : legalDisplayStatus === "WARNING" ? "warning" : legalDisplayStatus === "GO" ? "ok" : undefined
               }
               onClick={() => handleTileClick("readiness")}
             />
@@ -1962,9 +1992,9 @@ export default function CockpitPage() {
             open={activePanel === "readiness"}
             title="Readiness"
             onClose={() => setActivePanel("none")}
-            status={readinessStatus}
-            subtitle={readinessSubtitle}
-            counts={readinessCounts}
+            status={legalDisplayStatus === "--" ? "NO-GO" : legalDisplayStatus}
+            subtitle={legalReadinessSubtitle}
+            counts={legalReadinessCounts}
             topStations={topStations}
             onRowClick={handleIssueRowClick}
             sessionOk={sessionOk}
