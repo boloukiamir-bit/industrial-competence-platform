@@ -9,6 +9,9 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const wantDebug = url.searchParams.get("debug") === "1";
+
   const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
@@ -62,18 +65,46 @@ export async function GET(request: NextRequest) {
       }>;
     } | null;
 
-    const res = NextResponse.json({
+    const counts = payload?.counts ?? {
+      total: 0,
+      illegal: 0,
+      warning: 0,
+      go: 0,
+      blocking_critical: 0,
+      blocking_high: 0,
+    };
+    const top_requirements = payload?.top_requirements ?? [];
+
+    const body: {
+      ok: boolean;
+      counts: typeof counts;
+      top_requirements: typeof top_requirements;
+      _debug?: {
+        source: string;
+        scope_inputs: { org_id: string; site_id: string | null; roster_scoping: boolean; roster_employee_ids_count: number };
+        requirement_count: number;
+        aggregation_row_count: number;
+      };
+    } = {
       ok: true,
-      counts: payload?.counts ?? {
-        total: 0,
-        illegal: 0,
-        warning: 0,
-        go: 0,
-        blocking_critical: 0,
-        blocking_high: 0,
-      },
-      top_requirements: payload?.top_requirements ?? [],
-    });
+      counts,
+      top_requirements,
+    };
+    if (wantDebug) {
+      body._debug = {
+        source: "rpc:get_requirements_summary_v1",
+        scope_inputs: {
+          org_id: org.activeOrgId,
+          site_id: org.activeSiteId ?? null,
+          roster_scoping: false,
+          roster_employee_ids_count: 0,
+        },
+        requirement_count: top_requirements.length,
+        aggregation_row_count: counts.total,
+      };
+    }
+
+    const res = NextResponse.json(body);
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {

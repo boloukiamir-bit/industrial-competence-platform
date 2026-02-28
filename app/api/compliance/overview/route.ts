@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
+  const wantDebug = searchParams.get("debug") === "1";
   const siteId = searchParams.get("siteId")?.trim() || null;
   const category = searchParams.get("category")?.trim() || null;
   const statusFilter = searchParams.get("status")?.trim() || null;
@@ -277,14 +278,42 @@ export async function GET(request: NextRequest) {
       healthy: { employees: healthyEmployees.size, total_items: healthyItems },
     };
 
-    const res = NextResponse.json({
+    const body: {
+      ok: boolean;
+      kpis: typeof kpis;
+      rows: typeof rows;
+      catalog: typeof catalogList;
+      activeSiteId: string | null;
+      activeSiteName: string | null;
+      _debug?: {
+        source: string;
+        scope_inputs: { org_id: string; site_id: string | null; roster_scoping: boolean; roster_employee_ids_count: number };
+        requirement_count: number;
+        employees_count: number;
+      };
+    } = {
       ok: true,
       kpis,
       rows,
       catalog: catalogList,
       activeSiteId: org.activeSiteId ?? null,
       activeSiteName,
-    });
+    };
+    if (wantDebug) {
+      body._debug = {
+        source: "tables:employees,compliance_catalog,employee_compliance,compliance_requirement_applicability",
+        scope_inputs: {
+          org_id: orgId,
+          site_id: siteId ?? org.activeSiteId ?? null,
+          roster_scoping: false,
+          roster_employee_ids_count: 0,
+        },
+        requirement_count: catalogList.length,
+        employees_count: empList.length,
+      };
+    }
+
+    const res = NextResponse.json(body);
     applySupabaseCookies(res, pendingCookies);
     return res;
   } catch (err) {
