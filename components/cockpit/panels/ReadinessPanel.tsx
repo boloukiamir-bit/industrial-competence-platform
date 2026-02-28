@@ -35,6 +35,11 @@ export type ReadinessPanelProps = {
   topStations: ReadinessTopStationRow[];
   onRowClick: (issue: CockpitIssueRow) => void;
   sessionOk?: boolean;
+  /** When set with date + shiftCode, show "Freeze Readiness" button (execution snapshot). */
+  onFreeze?: () => void;
+  freezeLoading?: boolean;
+  date?: string;
+  shiftCode?: string;
 };
 
 const ISSUE_TYPE_LABEL: Record<string, string> = {
@@ -61,7 +66,12 @@ export function ReadinessPanel({
   topStations,
   onRowClick,
   sessionOk = true,
+  onFreeze,
+  freezeLoading = false,
+  date,
+  shiftCode,
 }: ReadinessPanelProps) {
+  const showFreeze = Boolean(onFreeze && date && shiftCode);
   return (
     <InlinePanelShell
       open={open}
@@ -150,6 +160,20 @@ export function ReadinessPanel({
             ))}
           </ul>
         </>
+      )}
+      {showFreeze && (
+        <div className="mt-6 pt-4 border-t border-[var(--hairline-soft)]">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onFreeze}
+            disabled={!sessionOk || freezeLoading}
+            data-testid="readiness-freeze-button"
+          >
+            {freezeLoading ? "Freezing…" : "Freeze Readiness"}
+          </Button>
+        </div>
       )}
     </InlinePanelShell>
   );

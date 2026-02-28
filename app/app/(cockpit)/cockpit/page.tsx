@@ -331,6 +331,7 @@ export default function CockpitPage() {
     samples?: { legal_blockers: unknown[]; ops_no_go_stations: unknown[] };
   } | null>(null);
   const [readinessV3Loading, setReadinessV3Loading] = useState(false);
+  const [freezeReadinessLoading, setFreezeReadinessLoading] = useState(false);
 
   const isGlobal = mode === "global";
   const hasShiftCode = shiftCode.trim().length > 0;
@@ -1322,6 +1323,27 @@ export default function CockpitPage() {
     setActivePanel((current) => (current === id ? "none" : id));
   };
 
+  const handleFreezeReadiness = async () => {
+    if (!date || !shiftCode || freezeReadinessLoading) return;
+    setFreezeReadinessLoading(true);
+    try {
+      const res = await fetchJson<{ ok: boolean; snapshot_id?: string; created_at?: string; duplicate?: boolean; message?: string }>(
+        "/api/cockpit/readiness-freeze",
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, shift_code: shiftCode }) }
+      );
+      if (res.ok && res.data?.ok) {
+        const id = res.data.snapshot_id ?? "—";
+        toast({ title: res.data.duplicate ? "Already frozen" : "Readiness frozen", description: `Snapshot: ${id}` });
+      } else {
+        toast({ title: "Freeze failed", description: (res as { error?: string }).error ?? "Unknown error", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Freeze failed", variant: "destructive" });
+    } finally {
+      setFreezeReadinessLoading(false);
+    }
+  };
+
   function getRootCausePrimary(issue: CockpitIssueRow): string {
     const rc = issue.root_cause as Record<string, unknown> | null | undefined;
     const primary = rc?.primary;
@@ -2062,6 +2084,10 @@ export default function CockpitPage() {
             topStations={topStations}
             onRowClick={handleIssueRowClick}
             sessionOk={sessionOk}
+            onFreeze={handleFreezeReadiness}
+            freezeLoading={freezeReadinessLoading}
+            date={date}
+            shiftCode={shiftCode}
           />
           <InlinePanelShell
             open={activePanel === "restricted"}
