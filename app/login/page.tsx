@@ -1,14 +1,17 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmail, getSession } from '@/services/auth';
+import { signInWithOtp, getSession } from '@/services/auth';
 import { isSupabaseReady, supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 import { LoginShell2030 } from '@/components/auth/LoginShell2030';
 
 /** Default landing after login. */
 const DEFAULT_POST_LOGIN_PATH = '/app/cockpit';
+
+/** Throttle (seconds) before Send/Resend can be clicked again. */
+const THROTTLE_SECONDS = 10;
 
 /**
  * Resolve redirect path after login: honor next= if safe, else cockpit.
@@ -26,9 +29,10 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [linkSent, setLinkSent] = useState(false);
+  const [throttleRemaining, setThrottleRemaining] = useState(0);
   const [checkingSession, setCheckingSession] = useState(true);
   const [supabaseConfigured, setSupabaseConfigured] = useState(true);
   const [bootstrapStatus, setBootstrapStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -40,7 +44,7 @@ function LoginPageContent() {
   useEffect(() => {
     const configured = isSupabaseReady();
     setSupabaseConfigured(configured);
-    
+
     if (!configured) {
       console.error('Supabase not configured - env vars missing');
       setCheckingSession(false);
@@ -51,7 +55,6 @@ function LoginPageContent() {
       try {
         const session = await getSession();
         if (session?.user && session?.access_token && session?.refresh_token) {
-          // Sync to cookies so /api/* can read auth, then redirect
           await fetch('/api/auth/callback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -74,25 +77,28 @@ function LoginPageContent() {
     checkExistingSession();
   }, [router, nextParam]);
 
+  useEffect(() => {
+    if (throttleRemaining <= 0) return;
+    const t = setInterval(() => {
+      setThrottleRemaining((prev) => {
+        const next = prev - 1;
+        if (next <= 0) clearInterval(t);
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [throttleRemaining]);
+
   async function checkBootstrapStatus(userId: string): Promise<{ needsBootstrap: boolean; role: string | null }> {
     try {
-      // Check if profiles table has any entries
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select('id')
         .limit(1);
 
-      if (error) {
-        // Table might not exist - needs bootstrap
-        return { needsBootstrap: true, role: null };
-      }
+      if (error) return { needsBootstrap: true, role: null };
+      if (!profiles || profiles.length === 0) return { needsBootstrap: true, role: null };
 
-      if (!profiles || profiles.length === 0) {
-        // No profiles exist - this user can bootstrap
-        return { needsBootstrap: true, role: null };
-      }
-
-      // Check if current user has a profile
       const { data: userProfile } = await supabase
         .from('profiles')
         .select('role')
@@ -105,62 +111,38 @@ function LoginPageContent() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const sendMagicLink = useCallback(async () => {
     setErrorMsg(null);
-    
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setErrorMsg('Please enter your email.');
+      return;
+    }
     if (!supabaseConfigured) {
       setErrorMsg('Authentication service is not configured. Environment variables are missing.');
       return;
     }
-    
+
     setLoading(true);
-
     try {
-      const session = await signInWithEmail(email, password);
-      
-      if (session?.user && session?.session) {
-        // Sync session to cookies so /api/* routes can read auth
-        await fetch('/api/auth/callback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            access_token: session.session.access_token,
-            refresh_token: session.session.refresh_token,
-          }),
-          credentials: 'include',
-        });
-
-        // Check if bootstrap is needed or get role
-        const { needsBootstrap, role } = await checkBootstrapStatus(session.user.id);
-        
-        if (needsBootstrap) {
-          // Stay on login page to show bootstrap option
-          setShowBootstrap(true);
-          setLoading(false);
-          return;
-        }
-
-        const redirectPath = getRedirectAfterLogin(nextParam);
-        router.replace(redirectPath);
-      }
-    } catch (error: unknown) {
-      console.error('Sign in error:', error);
-      let message = 'Failed to sign in.';
-      if (error instanceof Error) {
-        if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
-          message = 'Unable to connect to authentication service. Please check your internet connection.';
-        } else if (error.message.includes('placeholder')) {
-          message = 'Authentication service is not configured. Please contact support.';
-        } else if (error.message.includes('Invalid login credentials')) {
-          message = 'Invalid email or password. Please try again.';
-        } else {
-          message = error.message;
-        }
-      }
-      setErrorMsg(message);
+      const result = await signInWithOtp(trimmed);
       setLoading(false);
+      if (result.error) {
+        setErrorMsg(result.error.message || 'Failed to send link.');
+        return;
+      }
+      setLinkSent(true);
+      setThrottleRemaining(THROTTLE_SECONDS);
+    } catch (err) {
+      setLoading(false);
+      console.error('Magic link error:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to send link.');
     }
+  }, [email, supabaseConfigured]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await sendMagicLink();
   }
 
   async function handleBootstrap() {
@@ -169,7 +151,7 @@ function LoginPageContent() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         setBootstrapStatus('error');
         setBootstrapMessage('Not authenticated');
@@ -196,7 +178,6 @@ function LoginPageContent() {
       setBootstrapMessage(data.message);
       setShowBootstrap(false);
 
-      // Redirect to admin dashboard
       setTimeout(() => {
         router.replace('/app/admin');
       }, 1500);
@@ -216,6 +197,9 @@ function LoginPageContent() {
       </LoginShell2030>
     );
   }
+
+  const throttleActive = throttleRemaining > 0;
+  const primaryCtaLabel = linkSent ? 'Resend link' : 'Send magic link';
 
   return (
     <LoginShell2030>
@@ -237,21 +221,15 @@ function LoginPageContent() {
             autoComplete="email"
             placeholder="you@company.com"
             required
+            disabled={loading}
             data-testid="input-email"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-2, #475569)' }}>Password</label>
-          <input
-            type="password"
-            className="login-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-            data-testid="input-password"
-          />
-        </div>
+        {linkSent && (
+          <p className="text-sm" style={{ color: 'var(--text-2, #475569)' }} data-testid="success-message">
+            If an account exists, we sent a sign-in link.
+          </p>
+        )}
         {errorMsg && (
           <p className="text-sm" style={{ color: '#B91C1C' }} data-testid="error-message">{errorMsg}</p>
         )}
@@ -259,10 +237,19 @@ function LoginPageContent() {
           type="submit"
           className="w-full py-3 px-4 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
           style={{ backgroundColor: 'var(--color-accent, #1E40AF)', borderRadius: '3px' }}
-          disabled={loading}
+          disabled={loading || throttleActive}
           data-testid="button-signin"
         >
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Sending…
+            </span>
+          ) : throttleActive ? (
+            `Wait ${throttleRemaining}s`
+          ) : (
+            primaryCtaLabel
+          )}
         </button>
       </form>
 

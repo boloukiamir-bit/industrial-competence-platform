@@ -27,30 +27,21 @@ describe('LoginPage', () => {
     });
   });
 
-  it('renders email and password inputs', async () => {
+  it('renders email input and send magic link button (no password)', async () => {
     await act(async () => {
       render(<LoginPage />);
     });
 
     await waitFor(() => {
       expect(screen.getByTestId('input-email')).toBeInTheDocument();
-      expect(screen.getByTestId('input-password')).toBeInTheDocument();
-    });
-  });
-
-  it('renders the sign in button', async () => {
-    await act(async () => {
-      render(<LoginPage />);
-    });
-
-    await waitFor(() => {
       expect(screen.getByTestId('button-signin')).toBeInTheDocument();
-      expect(screen.getByTestId('button-signin')).toHaveTextContent('Sign in');
+      expect(screen.getByTestId('button-signin')).toHaveTextContent('Send magic link');
     });
+    expect(screen.queryByTestId('input-password')).not.toBeInTheDocument();
   });
 
-  it('calls signInWithEmail on form submission', async () => {
-    (authService.signInWithEmail as jest.Mock).mockResolvedValue({ user: { email: 'test@example.com' } });
+  it('calls signInWithOtp on form submission', async () => {
+    (authService.signInWithOtp as jest.Mock).mockResolvedValue({});
 
     await act(async () => {
       render(<LoginPage />);
@@ -61,22 +52,22 @@ describe('LoginPage', () => {
     });
 
     const emailInput = screen.getByTestId('input-email');
-    const passwordInput = screen.getByTestId('input-password');
     const submitButton = screen.getByTestId('button-signin');
 
     await act(async () => {
       fireEvent.change(emailInput, { target: { value: 'user@test.com' } });
-      fireEvent.change(passwordInput, { target: { value: 'password123' } });
       fireEvent.click(submitButton);
     });
 
     await waitFor(() => {
-      expect(authService.signInWithEmail).toHaveBeenCalledWith('user@test.com', 'password123');
+      expect(authService.signInWithOtp).toHaveBeenCalledWith('user@test.com');
     });
   });
 
-  it('shows error message when login fails', async () => {
-    (authService.signInWithEmail as jest.Mock).mockRejectedValue(new Error('Invalid credentials'));
+  it('shows error message when send link fails', async () => {
+    (authService.signInWithOtp as jest.Mock).mockResolvedValue({
+      error: { message: 'Invalid credentials' },
+    });
 
     await act(async () => {
       render(<LoginPage />);
@@ -87,12 +78,10 @@ describe('LoginPage', () => {
     });
 
     const emailInput = screen.getByTestId('input-email');
-    const passwordInput = screen.getByTestId('input-password');
     const submitButton = screen.getByTestId('button-signin');
 
     await act(async () => {
       fireEvent.change(emailInput, { target: { value: 'user@test.com' } });
-      fireEvent.change(passwordInput, { target: { value: 'wrongpassword' } });
       fireEvent.click(submitButton);
     });
 
@@ -102,12 +91,8 @@ describe('LoginPage', () => {
     });
   });
 
-  it('shows loading state during form submission', async () => {
-    let resolveLogin: (value: unknown) => void;
-    const loginPromise = new Promise((resolve) => {
-      resolveLogin = resolve;
-    });
-    (authService.signInWithEmail as jest.Mock).mockReturnValue(loginPromise);
+  it('shows deterministic success message after sending link', async () => {
+    (authService.signInWithOtp as jest.Mock).mockResolvedValue({});
 
     await act(async () => {
       render(<LoginPage />);
@@ -118,19 +103,48 @@ describe('LoginPage', () => {
     });
 
     const emailInput = screen.getByTestId('input-email');
-    const passwordInput = screen.getByTestId('input-password');
     const submitButton = screen.getByTestId('button-signin');
 
     await act(async () => {
       fireEvent.change(emailInput, { target: { value: 'user@test.com' } });
-      fireEvent.change(passwordInput, { target: { value: 'password123' } });
       fireEvent.click(submitButton);
     });
 
-    expect(screen.getByTestId('button-signin')).toHaveTextContent('Signing in');
+    await waitFor(() => {
+      expect(screen.getByTestId('success-message')).toBeInTheDocument();
+      expect(screen.getByTestId('success-message')).toHaveTextContent(
+        'If an account exists, we sent a sign-in link.'
+      );
+    });
+  });
+
+  it('shows loading state during send', async () => {
+    let resolveSend: (value: { error?: { message: string } }) => void;
+    const sendPromise = new Promise<{ error?: { message: string } }>((resolve) => {
+      resolveSend = resolve;
+    });
+    (authService.signInWithOtp as jest.Mock).mockReturnValue(sendPromise);
 
     await act(async () => {
-      resolveLogin!({ user: { email: 'user@test.com' } });
+      render(<LoginPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('input-email')).toBeInTheDocument();
+    });
+
+    const emailInput = screen.getByTestId('input-email');
+    const submitButton = screen.getByTestId('button-signin');
+
+    await act(async () => {
+      fireEvent.change(emailInput, { target: { value: 'user@test.com' } });
+      fireEvent.click(submitButton);
+    });
+
+    expect(screen.getByTestId('button-signin')).toHaveTextContent('Sending');
+
+    await act(async () => {
+      resolveSend!({});
     });
   });
 });
