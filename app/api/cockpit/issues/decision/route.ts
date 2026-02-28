@@ -1,12 +1,16 @@
 /**
  * POST /api/cockpit/issues/decision — create or update execution decision for a station shift.
  * Governed via withMutationGovernance (allowNoShiftContext: true).
+ * When execution-bound (shift context + RESOLVED/OVERRIDDEN/ACKNOWLEDGED/DEFERRED), creates or reuses
+ * a readiness snapshot and links it via readiness_snapshot_id.
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { withMutationGovernance } from "@/lib/server/governance/withMutationGovernance";
 import { normalizeShift } from "@/lib/shift";
 import { stationShiftTargetId } from "@/lib/shared/decisionIds";
+import { createOrReuseReadinessSnapshot } from "@/lib/server/readiness/freezeReadinessSnapshot";
+import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +19,8 @@ const supabaseAdmin = createClient(
 
 const ALLOWED_ACTIONS = ["acknowledged", "plan_training", "swap", "escalate"] as const;
 const DECISION_TYPES = ["ACKNOWLEDGED", "OVERRIDDEN", "DEFERRED", "RESOLVED"] as const;
+/** Decision types that trigger execution-bound freeze (snapshot created and linked). */
+const EXECUTION_BOUND_DECISION_TYPES = ["RESOLVED", "OVERRIDDEN", "ACKNOWLEDGED", "DEFERRED"] as const;
 const ISSUE_TYPES = ["NO_GO", "WARNING", "GO", "UNSTAFFED", "ILLEGAL"] as const;
 
 function normalizeIssueType(raw: string): string {
@@ -118,9 +124,44 @@ export const POST = withMutationGovernance(
       actions.selected_action = chosen;
     }
 
+    const isExecutionBound =
+      dateStr &&
+      shift &&
+      (EXECUTION_BOUND_DECISION_TYPES as readonly string[]).includes(decisionType);
+    let snapshotResult: { snapshot_id: string; created_at: string; duplicate: boolean } | null = null;
+    if (isExecutionBound) {
+      let siteIdForSnapshot = ctx.siteId ?? null;
+      if (!siteIdForSnapshot) {
+        const { data: firstSite } = await ctx.admin
+          .from("sites")
+          .select("id")
+          .eq("org_id", ctx.orgId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (firstSite?.id) siteIdForSnapshot = firstSite.id;
+      }
+      if (siteIdForSnapshot && normalizeShiftParam(shift)) {
+        try {
+          snapshotResult = await createOrReuseReadinessSnapshot({
+            admin: ctx.admin,
+            orgId: ctx.orgId,
+            siteId: siteIdForSnapshot,
+            userId: ctx.userId,
+            date: dateStr,
+            shiftCode: shift,
+            baseUrl: ctx.request.nextUrl.origin,
+            cookieHeader: ctx.request.headers.get("cookie") ?? "",
+          });
+        } catch (snapErr) {
+          console.error("[cockpit/issues/decision] readiness snapshot error:", snapErr);
+        }
+      }
+    }
+
     const { data: existing } = await ctx.admin
       .from("execution_decisions")
-      .select("id, status, created_at, created_by")
+      .select("id, status, created_at, created_by, readiness_snapshot_id")
       .eq("org_id", ctx.orgId)
       .eq("target_type", "station_shift")
       .eq("target_id", targetId)
@@ -133,6 +174,10 @@ export const POST = withMutationGovernance(
       decision_type: decisionType,
       ...(linkedJobId && { linked_job_id: linkedJobId }),
     };
+    if (snapshotResult) {
+      const existingSnapshotId = (existing as { readiness_snapshot_id?: string | null } | undefined)?.readiness_snapshot_id;
+      payload.readiness_snapshot_id = existingSnapshotId ?? snapshotResult.snapshot_id;
+    }
 
     let record: Record<string, unknown>;
     if (existing) {
@@ -176,10 +221,19 @@ export const POST = withMutationGovernance(
       record = inserted as Record<string, unknown>;
     }
 
+    const wantDebug = b.debug === true || ctx.request.nextUrl.searchParams.get("debug") === "1";
     return NextResponse.json({
       ok: true,
       decision: record,
       target_id: targetId,
+      ...(record.readiness_snapshot_id != null && { readiness_snapshot_id: record.readiness_snapshot_id }),
+      ...(wantDebug &&
+        snapshotResult != null && {
+          _debug: {
+            snapshot_created: !snapshotResult.duplicate,
+            snapshot_duplicate: snapshotResult.duplicate,
+          },
+        }),
     });
   },
   {

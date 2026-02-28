@@ -102,6 +102,20 @@ Deterministic backend score and grade derived from readiness-v3 (Legal + Ops). S
 
 ---
 
+## Execution-bound freeze
+
+When an **execution decision** is created for a shift-context target with a canonical decision type (RESOLVED, OVERRIDDEN, ACKNOWLEDGED, DEFERRED), a readiness snapshot is created or reused and linked to the decision.
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **DB** | `execution_decisions.readiness_snapshot_id` | FK to `readiness_snapshots(id)` ON DELETE SET NULL. Index on `readiness_snapshot_id`. |
+| **Decision endpoint** | `app/api/cockpit/issues/decision/route.ts` | POST: when shift context (date + shift_code) and decision_type ∈ { RESOLVED, OVERRIDDEN, ACKNOWLEDGED, DEFERRED }, calls `createOrReuseReadinessSnapshot` (same 1‑min duplicate rule), then sets `readiness_snapshot_id` on insert/update. On update, preserves existing `readiness_snapshot_id` if already set (COALESCE). Response includes `readiness_snapshot_id`; with `debug=1`, `_debug.snapshot_created` and `_debug.snapshot_duplicate`. |
+| **Shared freeze logic** | `lib/server/readiness/freezeReadinessSnapshot.ts` | `createOrReuseReadinessSnapshot(params)`: fetches readiness-v3 + iri-v1, checks 1‑min duplicate window, inserts or returns existing snapshot. Used by POST /api/cockpit/readiness-freeze and by the decision route. |
+
+Snapshot content: readiness-v3 (legal/ops flags, overall status) + IRI_V1 (score, grade) at decision time. Non–shift decisions (e.g. action-only or other target types) do not create or link a snapshot.
+
+---
+
 ## Competence trace (Matrix v2 — operational readiness)
 
 Roster-scoped competence engine for **operational** readiness (stations × mandatory skills × roster employees). Deterministic; audit-friendly breakdowns.
