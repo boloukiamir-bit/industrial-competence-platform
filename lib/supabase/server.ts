@@ -163,6 +163,13 @@ export function applySupabaseCookies(
   pendingCookies: CookieToSet[]
 ): void {
   pendingCookies.forEach(({ name, value, options }) => {
-    response.cookies.set(name, value, (options as Record<string, unknown>) || {});
+    const isProduction = process.env.NODE_ENV === "production";
+    const opts = (options as Record<string, unknown>) || {};
+
+    response.cookies.set(name, value, {
+      ...opts,
+      secure: isProduction ? true : (opts.secure as boolean | undefined),
+      sameSite: (opts.sameSite as "lax" | "strict" | "none" | undefined) ?? "lax",
+    });
   });
 }
