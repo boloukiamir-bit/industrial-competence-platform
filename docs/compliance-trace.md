@@ -2,43 +2,25 @@
 
 End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping and data source determinism.
 
-## 1. Cockpit requirements block (GO / WARNING / ILLEGAL counts) — roster-scoped (v2)
+## 1. Cockpit compliance (canonical) — matrix-v2
 
 | Layer | File | Detail |
 |-------|------|--------|
-| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | `useEffect` fetches `/api/cockpit/requirements-summary-v2?date=...&shift_code=...` when `sessionOk` **and** `date` and `shiftCode` are set. No call until date+shift selected (avoids 400). |
-| **API route** | `app/api/cockpit/requirements-summary-v2/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Resolves roster via `getRosterEmployeeIdsForShift` (shifts + shift_assignments), then queries `v_employee_requirement_status` filtered by `employee_id IN (roster_employee_ids)`. |
-| **SQL / lib** | View `v_employee_requirement_status`; helper `lib/server/getRosterEmployeeIdsForShift.ts` | Roster = first shift matching org/site/date/shift_code → shift_assignments.employee_id. Requirement rows filtered by roster; counts and top_requirements aggregated in route (incl. affected_employee_count per requirement). |
-| **Scoping** | **Roster-scoped** | Scope = org_id + site_id + roster_employee_ids for that shift. Counts change when switching date/shift. |
+| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | Single `useEffect` fetches `/api/compliance/matrix-v2?date=...&shift_code=...` when `sessionOk` **and** `date` and `shiftCode` are set. Response drives both the **Requirements** block (counts, top_requirements) and the **Expiring** tile/panel (expiredCount, expiringCount, top10). No call until date+shift selected. |
+| **API route** | `app/api/compliance/matrix-v2/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Roster via `getRosterEmployeeIdsForShift`. Same underlying data as overview-v2: `employees` (roster), `employee_compliance` (roster), `compliance_catalog`, `compliance_requirement_applicability`. Returns `readiness_flag` (LEGAL_NO_GO | LEGAL_WARNING | LEGAL_GO), `kpis`, `by_requirement`, `by_employee`, `expiring_sample`. |
+| **SQL / tables** | employees, compliance_catalog, employee_compliance, compliance_requirement_applicability | Roster-scoped employees and assignments; catalog/applicability org-scoped. |
+| **Scoping** | **Roster-scoped** | Scope = org_id + site_id + roster_employee_ids for that shift. Single canonical engine; no duplicated logic in cockpit. |
 
-**Debug:** `GET /api/cockpit/requirements-summary-v2?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `roster_scoping: true`, `roster_employee_ids_count`, `source`, `scope_inputs`.
+**Debug:** `GET /api/compliance/matrix-v2?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `source`, `scope_inputs` (roster_employee_ids_count), `catalog_count`, `compliance_rows_count`.
 
-### Legacy endpoint (unchanged)
+### Endpoints no longer used by cockpit (kept for bake time)
 
-| Layer | File | Detail |
-|-------|------|--------|
-| **API route** | `app/api/cockpit/requirements-summary/route.ts` | Same as before: `get_requirements_summary_v1(p_org_id, p_site_id)`. **Not used by cockpit UI** after v2 rollout. |
-| **Scoping** | **Org-wide (site-optional)** | No roster. When `?debug=1`, response includes `_debug.mode: "legacy"`. |
-
----
-
-## 2. Compliance expiring / Legal Stoppers (overview) — roster-scoped (v2)
-
-| Layer | File | Detail |
-|-------|------|--------|
-| **UI entry** | `app/app/(cockpit)/cockpit/page.tsx` | `useEffect` fetches `/api/compliance/overview-v2?date=...&shift_code=...` when `sessionOk` **and** `date` and `shiftCode` are set. Optional client-side filter by `line` on rows. No call until date+shift selected. |
-| **API route** | `app/api/compliance/overview-v2/route.ts` | `GET` → requires `date` + `shift_code` (400 SHIFT_CONTEXT_REQUIRED if missing). Roster via `getRosterEmployeeIdsForShift`; filters `employees` and `employee_compliance` by `employee_id IN roster_employee_ids`. Same status buckets (VALID/EXPIRING_SOON/EXPIRED/MISSING) and KPIs (legal_stoppers, expiring_soon, healthy). |
-| **SQL objects** | Tables (no RPC) | `employees`, `compliance_catalog`, `employee_compliance`, `compliance_requirement_applicability`. Employees and assignments filtered by roster; catalog/applicability org-scoped. |
-| **Scoping** | **Roster-scoped** | Scope = org_id + site_id + roster_employee_ids for that shift. Legal Stoppers / Expiring change when switching date/shift. |
-
-**Debug:** `GET /api/compliance/overview-v2?date=YYYY-MM-DD&shift_code=Day&debug=1` returns `_debug` with `roster_scoping: true`, `roster_employee_ids_count`, `catalog_count`, `employees_count`, `employee_compliance_rows_count`.
-
-### Legacy endpoint (unchanged)
-
-| Layer | File | Detail |
-|-------|------|--------|
-| **API route** | `app/api/compliance/overview/route.ts` | Same as before: org-wide employees and assignments. **Not used by cockpit UI** after v2 rollout. Optional `siteId`, `category`, `status`, `search`. |
-| **Scoping** | **Org-wide (site-optional)** | No roster. When `?debug=1`, response includes `_debug.mode: "legacy"`. |
+| Endpoint | Note |
+|----------|------|
+| `/api/cockpit/requirements-summary-v2` | Cockpit now uses matrix-v2 for requirement counts; route unchanged. |
+| `/api/compliance/overview-v2` | Cockpit now uses matrix-v2 for expiring/legal stoppers; route unchanged. |
+| `/api/cockpit/requirements-summary` | Legacy org-wide; `_debug.mode: "legacy"`. |
+| `/api/compliance/overview` | Legacy org-wide; `_debug.mode: "legacy"`. |
 
 ---
 
@@ -67,10 +49,11 @@ End-to-end trace: UI → API → SQL/RPC/view. Used to confirm roster-scoping an
 
 ## Summary
 
-| Endpoint | Source | Roster-scoped |
-|----------|--------|----------------|
-| `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster); getRosterEmployeeIdsForShift | **Yes** (cockpit) |
-| `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 | No (legacy; _debug.mode: "legacy") |
-| `/api/compliance/overview-v2` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability (employees/assignments roster-filtered) | **Yes** (cockpit) |
-| `/api/compliance/overview` | same tables, org-wide | No (legacy; _debug.mode: "legacy") |
-| `/api/cockpit/summary` | view: v_cockpit_station_summary + lib evaluateEmployeeComplianceV2 | Yes |
+| Endpoint | Source | Used by cockpit |
+|----------|--------|-----------------|
+| `/api/compliance/matrix-v2` | tables: employees, compliance_catalog, employee_compliance, compliance_requirement_applicability (roster-filtered) | **Yes** (canonical; Requirements + Expiring) |
+| `/api/cockpit/requirements-summary-v2` | view: v_employee_requirement_status (filtered by roster) | No (kept; bake time) |
+| `/api/cockpit/requirements-summary` | rpc:get_requirements_summary_v1 | No (legacy) |
+| `/api/compliance/overview-v2` | same tables as matrix-v2, roster-filtered | No (kept; bake time) |
+| `/api/compliance/overview` | same tables, org-wide | No (legacy) |
+| `/api/cockpit/summary` | view: v_cockpit_station_summary + lib evaluateEmployeeComplianceV2 | Yes (shift legitimacy) |

@@ -720,66 +720,111 @@ export default function CockpitPage() {
       .catch((err) => console.error("[cockpit lines]", err));
   }, [date, shiftCode, sessionOk, hasShiftCode, isGlobal]);
 
-  // Compliance overview for Expiring soon tile + panel (roster-scoped when date+shift set)
+  // Canonical roster-scoped compliance: single matrix-v2 call drives Requirements block + Expiring tile/panel
   useEffect(() => {
     if (isDemoMode() || !sessionOk) return;
     if (!date || !shiftCode) {
+      setRequirementsSummary(null);
       setComplianceExpiring(null);
+      setRequirementsSummaryLoading(false);
       setComplianceExpiringLoading(false);
       return;
     }
     let cancelled = false;
+    setRequirementsSummaryLoading(true);
     setComplianceExpiringLoading(true);
     const params = new URLSearchParams({ date, shift_code: shiftCode });
     fetchJson<{
-      ok?: boolean;
-      kpis?: Record<string, { employees: number; total_items: number }>;
-      rows?: Array<{
+      ok: boolean;
+      readiness_flag?: string;
+      kpis?: {
+        roster_employee_count: number;
+        blocking_count: number;
+        non_blocking_count: number;
+        healthy_count: number;
+        requirement_count: number;
+        expired_count: number;
+        expiring_count: number;
+      };
+      by_requirement?: Array<{
+        requirement_id: string;
+        requirement_code: string;
+        requirement_name: string;
+        blocking_affected_employee_count: number;
+        expiring_affected_employee_count: number;
+      }>;
+      expiring_sample?: Array<{
         employee_id: string;
         employee_name: string;
         compliance_name: string;
-        status: string;
         valid_to: string | null;
-        line: string | null;
+        status: "expired" | "expiring";
       }>;
-    }>(`/api/compliance/overview-v2?${params.toString()}`)
+    }>(`/api/compliance/matrix-v2?${params.toString()}`)
       .then((res) => {
-        if (!res.ok || !res.data?.ok || cancelled) return;
-        let rows = (res.data.rows ?? []).filter(
-          (r) => r.status === "expired" || r.status === "expiring"
-        ) as Array<{ employee_id: string; employee_name: string; compliance_name: string; status: string; valid_to: string | null; line: string | null }>;
-        if (line && line !== "all") {
-          rows = rows.filter((r) => (r.line ?? "").trim() === line.trim());
+        if (!res.ok || !res.data?.ok || cancelled) {
+          if (!cancelled) {
+            setRequirementsSummary(null);
+            setComplianceExpiring(null);
+          }
+          return;
         }
-        const expiredCount = rows.filter((r) => r.status === "expired").length;
-        const expiringCount = rows.filter((r) => r.status === "expiring").length;
-        rows.sort((a, b) => {
-          const aExpired = a.status === "expired" ? 0 : 1;
-          const bExpired = b.status === "expired" ? 0 : 1;
-          if (aExpired !== bExpired) return aExpired - bExpired;
-          const va = a.valid_to ?? "";
-          const vb = b.valid_to ?? "";
-          return va.localeCompare(vb);
-        });
-        const top10: ExpiringRow[] = rows.slice(0, 10).map((r) => ({
-          employee_id: r.employee_id,
-          employee_name: r.employee_name,
-          compliance_name: r.compliance_name,
-          valid_to: r.valid_to,
-          status: r.status === "expired" ? "expired" : "expiring",
-        }));
+        const kpis = res.data.kpis ?? {
+          roster_employee_count: 0,
+          blocking_count: 0,
+          non_blocking_count: 0,
+          healthy_count: 0,
+          requirement_count: 0,
+          expired_count: 0,
+          expiring_count: 0,
+        };
+        const byReq = res.data.by_requirement ?? [];
+        const total = kpis.blocking_count + kpis.non_blocking_count + kpis.healthy_count;
         if (!cancelled) {
-          setComplianceExpiring({ expiredCount, expiringCount, top10 });
+          setRequirementsSummary({
+            counts: {
+              total,
+              illegal: kpis.blocking_count,
+              warning: kpis.non_blocking_count,
+              go: kpis.healthy_count,
+              blocking_critical: 0,
+              blocking_high: 0,
+            },
+            top_requirements: byReq.slice(0, 10).map((r) => ({
+              requirement_code: r.requirement_code,
+              requirement_name: r.requirement_name,
+              illegal: r.blocking_affected_employee_count,
+              warning: r.expiring_affected_employee_count,
+              total: r.blocking_affected_employee_count + r.expiring_affected_employee_count,
+            })),
+          });
+          setComplianceExpiring({
+            expiredCount: kpis.expired_count,
+            expiringCount: kpis.expiring_count,
+            top10: (res.data.expiring_sample ?? []).map((r) => ({
+              employee_id: r.employee_id,
+              employee_name: r.employee_name,
+              compliance_name: r.compliance_name,
+              valid_to: r.valid_to,
+              status: r.status,
+            })),
+          });
         }
       })
       .catch(() => {
-        if (!cancelled) setComplianceExpiring(null);
+        if (!cancelled) {
+          setRequirementsSummary(null);
+          setComplianceExpiring(null);
+        }
       })
       .finally(() => {
-        if (!cancelled) setComplianceExpiringLoading(false);
+        if (!cancelled) {
+          setRequirementsSummaryLoading(false);
+          setComplianceExpiringLoading(false);
+        }
       });
     return () => { cancelled = true; };
-  }, [sessionOk, date, shiftCode, line]);
+  }, [sessionOk, date, shiftCode]);
 
   // Active HR jobs for Intervention Queue (CREATED, SENT, SIGNED)
   useEffect(() => {
@@ -850,53 +895,6 @@ export default function CockpitPage() {
       });
     return () => { cancelled = true; };
   }, [sessionOk]);
-
-  // Requirements summary (roster-scoped) — requires date + shift; total/illegal/warning/go + blocking_critical, blocking_high
-  useEffect(() => {
-    if (isDemoMode() || !sessionOk) return;
-    if (!date || !shiftCode) {
-      setRequirementsSummary(null);
-      setRequirementsSummaryLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setRequirementsSummaryLoading(true);
-    const params = new URLSearchParams({ date, shift_code: shiftCode });
-    fetchJson<{
-      ok: boolean;
-      counts?: {
-        total: number;
-        illegal: number;
-        warning: number;
-        go: number;
-        blocking_critical: number;
-        blocking_high: number;
-      };
-      top_requirements?: Array<{
-        requirement_code: string;
-        requirement_name: string;
-        illegal: number;
-        warning: number;
-        total: number;
-        affected_employee_count?: number;
-      }>;
-    }>(`/api/cockpit/requirements-summary-v2?${params.toString()}`)
-      .then((res) => {
-        if (!cancelled && res.ok && res.data?.counts)
-          setRequirementsSummary({
-            counts: res.data.counts,
-            top_requirements: res.data.top_requirements ?? [],
-          });
-        else if (!cancelled) setRequirementsSummary(null);
-      })
-      .catch(() => {
-        if (!cancelled) setRequirementsSummary(null);
-      })
-      .finally(() => {
-        if (!cancelled) setRequirementsSummaryLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [sessionOk, date, shiftCode]);
 
   // Compliance actions summary (org-level) for overview block
   useEffect(() => {
