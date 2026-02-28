@@ -167,6 +167,57 @@ function formatPayloadValue(key: string, value: unknown): string {
   return String(value);
 }
 
+/** Minimal drilldown: shows snapshot id and fetches/renders snapshot on "View snapshot". */
+function ReadinessSnapshotBlock({ snapshotId }: { snapshotId: string }) {
+  const [snapshot, setSnapshot] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const loadSnapshot = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    setSnapshot(null);
+    try {
+      const data = await apiGet<{ ok: boolean; snapshot?: Record<string, unknown>; error?: string }>(
+        `/api/readiness/snapshots/${encodeURIComponent(snapshotId)}`
+      );
+      if (data.ok && data.snapshot) {
+        setSnapshot(data.snapshot);
+      } else {
+        setErr(data.error ?? 'Not found');
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Failed to load snapshot');
+    } finally {
+      setLoading(false);
+    }
+  }, [snapshotId]);
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-muted-foreground text-sm">Readiness Snapshot</span>
+        <code className="font-mono text-xs bg-muted px-2 py-1 rounded">{snapshotId}</code>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={loadSnapshot}
+          disabled={loading}
+        >
+          {loading ? 'Loading…' : 'View snapshot'}
+        </Button>
+      </div>
+      {err && <p className="text-sm text-destructive">{err}</p>}
+      {snapshot != null && (
+        <pre className="p-3 rounded-md bg-muted text-muted-foreground text-xs overflow-x-auto">
+          <code>{JSON.stringify(snapshot, null, 2)}</code>
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function PayloadSection({
   meta,
   targetType,
@@ -519,6 +570,9 @@ function AdminAuditContent() {
             targetType={selectedEvent.target_type}
             defaultOpen={selectedEvent.target_type === 'regulatory_signal'}
           />
+          {selectedEvent.meta?.readiness_snapshot_id != null && (
+            <ReadinessSnapshotBlock snapshotId={String(selectedEvent.meta.readiness_snapshot_id)} />
+          )}
         </div>
         );
       })()}

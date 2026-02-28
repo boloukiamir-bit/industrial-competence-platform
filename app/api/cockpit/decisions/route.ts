@@ -30,6 +30,8 @@ export type CockpitDecisionRow = {
   status: "active" | "none";
   root_cause: unknown;
   severity: "NO-GO" | "WARNING" | "RESOLVED";
+  /** Set when decision is execution-bound (linked to a readiness snapshot). */
+  readiness_snapshot_id?: string | null;
 };
 
 function severity(
@@ -153,7 +155,7 @@ export async function GET(request: NextRequest) {
 
     let legacyEdQuery = supabaseAdmin
       .from("execution_decisions")
-      .select("id, target_id, root_cause")
+      .select("id, target_id, root_cause, readiness_snapshot_id")
       .eq("org_id", activeOrgId)
       .eq("status", "active")
       .eq("target_type", "shift_assignment")
@@ -167,7 +169,7 @@ export async function GET(request: NextRequest) {
       lineShiftIds.length > 0
         ? supabaseAdmin
             .from("execution_decisions")
-            .select("id, target_id, root_cause")
+            .select("id, target_id, root_cause, readiness_snapshot_id")
             .eq("org_id", activeOrgId)
             .eq("status", "active")
             .eq("decision_type", "resolve_no_go")
@@ -192,20 +194,45 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    const decisionByTarget = new Map<string, { id: string; root_cause: unknown }>();
-    for (const row of (legacyRes.data || []) as Array<{ id: string; target_id: string; root_cause: unknown }>) {
+    const decisionByTarget = new Map<
+      string,
+      { id: string; root_cause: unknown; readiness_snapshot_id?: string | null }
+    >();
+    for (const row of (legacyRes.data || []) as Array<{
+      id: string;
+      target_id: string;
+      root_cause: unknown;
+      readiness_snapshot_id?: string | null;
+    }>) {
       if (row.target_id) {
-        decisionByTarget.set(row.target_id, { id: row.id, root_cause: row.root_cause });
+        decisionByTarget.set(row.target_id, {
+          id: row.id,
+          root_cause: row.root_cause,
+          readiness_snapshot_id: row.readiness_snapshot_id ?? null,
+        });
       }
     }
-    const lineShiftResolvedIds = new Set(
-      ((lineShiftRes.data || []) as Array<{ target_id: string }>).map((r) => r.target_id)
-    );
+    const lineShiftDecisionByTarget = new Map<
+      string,
+      { readiness_snapshot_id?: string | null }
+    >();
+    for (const r of (lineShiftRes.data || []) as Array<{
+      target_id: string;
+      readiness_snapshot_id?: string | null;
+    }>) {
+      if (r.target_id) {
+        lineShiftDecisionByTarget.set(r.target_id, {
+          readiness_snapshot_id: r.readiness_snapshot_id ?? null,
+        });
+      }
+    }
+    const lineShiftResolvedIds = new Set(lineShiftDecisionByTarget.keys());
 
     const rows: CockpitDecisionRow[] = assignments.map((a) => {
       const legacyDec = decisionByTarget.get(a.id) ?? null;
       const lineShiftId = a.station?.line ? lineShiftTargetId(date, shift, a.station.line) : null;
       const resolvedByLine = lineShiftId != null && lineShiftResolvedIds.has(lineShiftId);
+      const lineShiftDec = lineShiftId != null ? lineShiftDecisionByTarget.get(lineShiftId) : null;
       const dec = legacyDec ?? (resolvedByLine ? { id: null as string | null, root_cause: null } : null);
       const hasDecision = Boolean(legacyDec || resolvedByLine);
       const isUnstaffed = a.employee?.name == null;
@@ -222,6 +249,9 @@ export async function GET(request: NextRequest) {
         rootCause = null;
       }
 
+      const readiness_snapshot_id =
+        legacyDec?.readiness_snapshot_id ?? lineShiftDec?.readiness_snapshot_id ?? null;
+
       return {
         shift_assignment_id: a.id,
         station_name: (a.station?.name ?? "Station") as string,
@@ -230,6 +260,7 @@ export async function GET(request: NextRequest) {
         status: hasDecision ? "active" : "none",
         root_cause: rootCause,
         severity: sev,
+        ...(readiness_snapshot_id != null && { readiness_snapshot_id }),
       };
     });
 

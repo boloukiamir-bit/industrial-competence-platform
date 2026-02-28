@@ -95,14 +95,36 @@ export async function GET(request: NextRequest) {
       actor_email = (profile as { email?: string | null } | null)?.email ?? null;
     }
 
+    const meta: Record<string, unknown> = {
+      ...((row as { meta?: Record<string, unknown> }).meta ?? {}),
+    };
+    const targetId = (row as { target_id?: string | null }).target_id ?? null;
+    const targetType = (row as { target_type: string }).target_type;
+
+    // Enrich with readiness_snapshot_id when this event is a cockpit decision (execution-bound).
+    if (targetId && (targetType === "station_shift" || String((row as { action: string }).action).includes("DECISION"))) {
+      const { data: decisionRow } = await supabaseAdmin
+        .from("execution_decisions")
+        .select("readiness_snapshot_id")
+        .eq("org_id", org.activeOrgId)
+        .eq("target_id", targetId)
+        .not("readiness_snapshot_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      const snapshotId = (decisionRow as { readiness_snapshot_id?: string | null } | null)?.readiness_snapshot_id;
+      if (snapshotId) {
+        meta.readiness_snapshot_id = snapshotId;
+      }
+    }
+
     const event = {
       id: (row as { id: string }).id,
       org_id: (row as { org_id: string }).org_id,
       site_id: (row as { site_id?: string | null }).site_id ?? null,
       action: (row as { action: string }).action,
-      target_type: (row as { target_type: string }).target_type,
-      target_id: (row as { target_id?: string | null }).target_id ?? null,
-      meta: (row as { meta?: unknown }).meta ?? {},
+      target_type: targetType,
+      target_id: targetId,
+      meta,
       created_at: (row as { created_at: string }).created_at,
       created_by: actorId ?? null,
       actor_email,

@@ -114,6 +114,12 @@ When an **execution decision** is created for a shift-context target with a cano
 
 Snapshot content: readiness-v3 (legal/ops flags, overall status) + IRI_V1 (score, grade) at decision time. Non–shift decisions (e.g. action-only or other target types) do not create or link a snapshot.
 
+**Exposure and drilldown:**
+
+- **Decision responses:** POST create and list/read endpoints include `readiness_snapshot_id` when set (e.g. `GET /api/cockpit/decisions`, `POST /api/cockpit/issues/decision`).
+- **Snapshot drilldown:** `GET /api/readiness/snapshots/[id]` — org-member auth; returns the snapshot row for the active org (404 if not found or wrong org). Response: `{ ok, snapshot: { id, shift_date, shift_code, legal_flag, ops_flag, overall_status, iri_score, iri_grade, roster_employee_count, version, created_at, created_by } }`. `?debug=1` adds `_debug: { org_id, site_id }`.
+- **Audit:** When viewing a focused governance event that is a cockpit decision, the audit event API enriches `meta.readiness_snapshot_id` from `execution_decisions`. The admin audit page shows a “Readiness Snapshot” section with the id and a “View snapshot” action that calls the drilldown endpoint and displays the snapshot payload.
+
 ---
 
 ## Competence trace (Matrix v2 — operational readiness)
