@@ -61,6 +61,51 @@ function issueSummary(issue: CockpitIssueRow): string {
   return t ?? r ?? m ?? issue.recommended_action ?? "—";
 }
 
+type IncidentFilterType = "ALL" | "ILLEGAL" | "UNSTAFFED" | "GOVERNANCE" | "OTHER";
+type IncidentSortMode = "blocking_first" | "newest_first";
+
+function incidentTypeForIssue(issue: CockpitIssueRow): IncidentFilterType {
+  const t = (issue.type ?? issue.issue_type ?? "").toString().toUpperCase();
+  const it = (issue.issue_type ?? "").toString().toUpperCase();
+  if (it === "ILLEGAL" || t.includes("ILLEGAL")) return "ILLEGAL";
+  if (it === "UNSTAFFED" || t.includes("UNSTAFFED")) return "UNSTAFFED";
+  if (t.includes("GOVERNANCE") || it === "GOVERNANCE") return "GOVERNANCE";
+  return "OTHER";
+}
+
+function filterAndSortIncidents(
+  list: CockpitIssueRow[],
+  filter: IncidentFilterType,
+  showResolved: boolean,
+  sort: IncidentSortMode
+): CockpitIssueRow[] {
+  let out = list;
+  if (filter !== "ALL") {
+    out = out.filter((i) => incidentTypeForIssue(i) === filter);
+  }
+  if (!showResolved) {
+    out = out.filter((i) => !i.decision_logged);
+  }
+  const getCreated = (i: CockpitIssueRow) => {
+    const c = (i as Record<string, unknown>).created_at as string | undefined;
+    const d = i.date;
+    if (c) return new Date(c).getTime();
+    if (d) return new Date(d).getTime();
+    return 0;
+  };
+  if (sort === "blocking_first") {
+    out = [...out].sort((a, b) => {
+      const blockA = a.severity === "BLOCKING" ? 1 : 0;
+      const blockB = b.severity === "BLOCKING" ? 1 : 0;
+      if (blockB !== blockA) return blockB - blockA;
+      return getCreated(b) - getCreated(a);
+    });
+  } else {
+    out = [...out].sort((a, b) => getCreated(b) - getCreated(a));
+  }
+  return out;
+}
+
 function accentColorForVerdict(
   verdict: "GO" | "WARNING" | "NO-GO" | "—" | "Evaluating…"
 ): string {
@@ -94,6 +139,10 @@ export default function CockpitPage() {
   const [decisionSaving, setDecisionSaving] = useState(false);
   const [decisionSaved, setDecisionSaved] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+
+  const [incidentsSort, setIncidentsSort] = useState<IncidentSortMode>("blocking_first");
+  const [incidentsFilter, setIncidentsFilter] = useState<IncidentFilterType>("ALL");
+  const [showResolved, setShowResolved] = useState(false);
 
   const activeIncidentsRef = useRef<HTMLDivElement>(null);
   const drawerDecisionRef = useRef<HTMLDivElement>(null);
@@ -541,9 +590,54 @@ export default function CockpitPage() {
           }}
           data-testid="cockpit-active-incidents"
         >
-          <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-2)" }}>
-            ACTIVE INCIDENTS
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+              ACTIVE INCIDENTS
+            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={incidentsSort}
+                onChange={(e) => setIncidentsSort(e.target.value as IncidentSortMode)}
+                className="text-xs rounded border px-2 py-1"
+                style={{
+                  borderColor: "var(--hairline)",
+                  background: "var(--surface-3)",
+                  color: "var(--text)",
+                }}
+                data-testid="cockpit-incidents-sort"
+              >
+                <option value="blocking_first">Blocking first</option>
+                <option value="newest_first">Newest first</option>
+              </select>
+              {(["ALL", "ILLEGAL", "UNSTAFFED", "GOVERNANCE", "OTHER"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setIncidentsFilter(f)}
+                  className="text-xs font-medium px-2 py-1 rounded border"
+                  style={{
+                    borderColor: incidentsFilter === f ? "var(--text-2)" : "var(--hairline)",
+                    background: incidentsFilter === f ? "var(--surface-3)" : "transparent",
+                    color: "var(--text-2)",
+                  }}
+                  data-testid={`cockpit-incidents-filter-${f.toLowerCase()}`}
+                >
+                  {f}
+                </button>
+              ))}
+              <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--text-2)" }}>
+                <input
+                  type="checkbox"
+                  checked={showResolved}
+                  onChange={(e) => setShowResolved(e.target.checked)}
+                  className="rounded border"
+                  style={{ borderColor: "var(--hairline)" }}
+                  data-testid="cockpit-incidents-show-resolved"
+                />
+                Show resolved
+              </label>
+            </div>
+          </div>
           {issuesError && (
             <p className="text-xs" style={{ color: "var(--text-3)" }}>
               {issuesError}
@@ -559,9 +653,13 @@ export default function CockpitPage() {
               —
             </p>
           )}
-          {!issuesError && !issuesLoading && issues.length > 0 && (
+          {!issuesError && !issuesLoading && issues.length > 0 && (() => {
+            const filteredIssues = filterAndSortIncidents(issues, incidentsFilter, showResolved, incidentsSort);
+            return filteredIssues.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--text-3)" }}>—</p>
+            ) : (
             <ul className="space-y-2">
-              {issues.map((issue) => (
+              {filteredIssues.map((issue) => (
                 <li
                   key={issue.issue_id}
                   className="rounded border-l-2 pl-3 py-2 border"
@@ -624,7 +722,9 @@ export default function CockpitPage() {
                 </li>
               ))}
             </ul>
-          )}
+          );
+          }
+        )()}
         </div>
         <div
           className="rounded-lg border p-6 min-h-[120px]"
