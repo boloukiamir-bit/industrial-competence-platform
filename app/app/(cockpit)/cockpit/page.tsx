@@ -96,6 +96,16 @@ function incidentTypeForIssue(issue: CockpitIssueRow): IncidentFilterType {
   return "OTHER";
 }
 
+function criticalPathSuggestedAction(issue: CockpitIssueRow): string {
+  const type = incidentTypeForIssue(issue);
+  if (type === "ILLEGAL") return "ESCALATE / FIX COMPLIANCE";
+  if (type === "UNSTAFFED") return "ASSIGN";
+  if (type === "GOVERNANCE") return "ESCALATE";
+  const t = (issue.type ?? issue.issue_type ?? "").toString().toUpperCase();
+  if (t.includes("SKILL") || issue.type === "SKILL") return "ASSIGN / SWAP";
+  return "ACK / OVERRIDE";
+}
+
 function filterAndSortIncidents(
   list: CockpitIssueRow[],
   filter: IncidentFilterType,
@@ -640,6 +650,87 @@ export default function CockpitPage() {
               className="grid grid-cols-1 md:grid-cols-3 gap-6 p-1"
               data-testid="cockpit-action-layer"
             >
+        {/* Critical Path: top 3 unresolved blocking issues */}
+        {(() => {
+          const criticalPathIssues = issues.filter(
+            (i) => i.severity === "BLOCKING" && !i.decision_overrides_blocking
+          ).slice(0, 3);
+          return (
+            <div
+              className="col-span-full rounded-lg border p-4"
+              style={{
+                borderColor: "var(--hairline)",
+                background: "var(--surface-2)",
+              }}
+              data-testid="cockpit-critical-path"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+                  CRITICAL PATH
+                </h3>
+                {criticalPathIssues.length > 0 && (
+                  <span className="text-xs font-medium" style={{ color: "var(--text-3)" }}>
+                    {criticalPathIssues.length} blocking
+                  </span>
+                )}
+              </div>
+              {criticalPathIssues.length === 0 && (
+                <p className="text-xs" style={{ color: "var(--text-3)" }}>—</p>
+              )}
+              {criticalPathIssues.length > 0 && (
+                <ul className="space-y-0">
+                  {criticalPathIssues.map((issue) => {
+                    const lines = incidentCardLines(issue);
+                    const actionLabel = criticalPathSuggestedAction(issue);
+                    return (
+                      <li
+                        key={issue.issue_id}
+                        className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 border-b last:border-b-0 text-xs"
+                        style={{ borderColor: "var(--hairline)" }}
+                        data-testid="cockpit-critical-path-item"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDrawerIssue(issue);
+                            setDrawerView("details");
+                          }}
+                          className="flex-1 min-w-0 text-left focus:outline-none"
+                        >
+                          <p className="font-semibold truncate" style={{ color: "var(--text)" }}>
+                            {lines.line1}
+                          </p>
+                          <p className="mt-0.5 truncate" style={{ color: "var(--text-3)" }} title={lines.line2}>
+                            {lines.line2 || "—"}
+                          </p>
+                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-medium uppercase" style={{ color: "var(--text-3)" }}>
+                            {actionLabel}
+                          </span>
+                          {mode === "SHIFT" && !issue.decision_logged && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDrawerIssue(issue);
+                                setDrawerView("decision");
+                              }}
+                              className="text-xs font-medium underline focus:outline-none"
+                              style={{ color: "var(--text-2)" }}
+                            >
+                              Log decision
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
         <div
           ref={activeIncidentsRef}
           className="rounded-lg border p-4 min-h-[120px]"
