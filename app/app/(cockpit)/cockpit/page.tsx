@@ -199,7 +199,6 @@ export default function CockpitPage() {
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [drawerIssue, setDrawerIssue] = useState<CockpitIssueRow | null>(null);
-  const [showRawJson, setShowRawJson] = useState(false);
   const [drawerView, setDrawerView] = useState<"details" | "decision">("details");
   const [decisionType, setDecisionType] = useState<string>("Acknowledge");
   const [decisionReason, setDecisionReason] = useState("");
@@ -229,7 +228,6 @@ export default function CockpitPage() {
     if (!drawerIssue) {
       setDecisionSaved(false);
       setDecisionError(null);
-      setShowRawJson(false);
     }
   }, [drawerIssue]);
 
@@ -1012,34 +1010,32 @@ export default function CockpitPage() {
         typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-            <button
-              type="button"
-              aria-label="Close"
-              className="absolute inset-0 z-0 bg-black/40"
-              onClick={() => setDrawerIssue(null)}
-            />
             <div
-              data-testid="cockpit-incident-drawer"
-              className="relative z-10 w-[720px] max-w-[92vw] max-h-[80vh] overflow-hidden bg-white border border-[var(--hairline)] shadow-lg rounded-xl"
-              style={{ background: "var(--surface-2, #fff)" }}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--hairline)] shrink-0 h-14">
-                <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-2)]">INCIDENT</div>
-                <button
-                  type="button"
-                  className="text-[12px] px-2 py-1 border border-[var(--hairline)] bg-[var(--surface-3)] text-[var(--text)] rounded"
-                  onClick={() => setDrawerIssue(null)}
-                >
-                  Close
-                </button>
-              </div>
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setDrawerIssue(null)}
+              aria-hidden
+            />
+            <div className="relative z-10 w-full max-w-[720px] max-h-[80vh] flex flex-col">
+              <div
+                data-testid="cockpit-incident-drawer"
+                className="bg-white text-slate-900 border border-slate-200 shadow-2xl rounded-2xl overflow-hidden flex flex-col max-h-[80vh]"
+              >
+                <div className="h-14 px-5 flex items-center justify-between border-b border-slate-200 bg-white shrink-0">
+                  <div className="text-[12px] tracking-[0.12em] uppercase text-slate-600">INCIDENT</div>
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1.5 border border-slate-200 bg-slate-100 text-slate-800 rounded hover:bg-slate-200"
+                    onClick={() => setDrawerIssue(null)}
+                  >
+                    Close
+                  </button>
+                </div>
 
-              <div className="p-4 overflow-y-auto max-h-[calc(80vh-56px)]">
+                <div className="p-5 overflow-y-auto max-h-[calc(80vh-56px)]">
                 {/* Title: incident type */}
                 <div className="mb-4">
                   <span
-                    className="text-sm font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--text)" }}
+                    className="text-sm font-semibold uppercase tracking-wider text-slate-900"
                     data-testid="cockpit-incident-type-label"
                   >
                     {(() => {
@@ -1053,22 +1049,22 @@ export default function CockpitPage() {
                 {/* Key facts grid (2 columns) */}
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-4 text-xs">
                   <div>
-                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Station</span>
-                    <p className="mt-0.5" style={{ color: "var(--text)" }}>
+                    <span className="font-medium text-slate-600">Station</span>
+                    <p className="mt-0.5 text-slate-900">
                       {drawerIssue.station_code
                         ? (drawerIssue.station_name ? `${drawerIssue.station_code} (${drawerIssue.station_name})` : drawerIssue.station_code)
                         : "—"}
                     </p>
                   </div>
                   <div>
-                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Severity</span>
-                    <p className="mt-0.5" style={{ color: "var(--text)" }}>
+                    <span className="font-medium text-slate-600">Severity</span>
+                    <p className="mt-0.5 text-slate-900">
                       {drawerIssue.severity === "BLOCKING" ? "BLOCKING" : "NON_BLOCKING"}
                     </p>
                   </div>
                   <div>
-                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Created at</span>
-                    <p className="mt-0.5" style={{ color: "var(--text)" }}>
+                    <span className="font-medium text-slate-600">Created at</span>
+                    <p className="mt-0.5 text-slate-900">
                       {(drawerIssue as Record<string, unknown>).created_at
                         ? new Date((drawerIssue as Record<string, unknown>).created_at as string).toLocaleString()
                         : drawerIssue.date
@@ -1077,8 +1073,8 @@ export default function CockpitPage() {
                     </p>
                   </div>
                   <div>
-                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Identifiers</span>
-                    <p className="mt-0.5 font-mono text-[11px] break-all" style={{ color: "var(--text-2)" }}>
+                    <span className="font-medium text-slate-600">Identifiers</span>
+                    <p className="mt-0.5 font-mono text-[11px] break-all text-slate-700">
                       {[drawerIssue.issue_id, (drawerIssue as Record<string, unknown>).target_id, drawerIssue.decision_id]
                         .filter(Boolean)
                         .join(" · ") || "—"}
@@ -1086,63 +1082,19 @@ export default function CockpitPage() {
                   </div>
                 </div>
                 {/* What happened */}
-                <div className="mb-4 pb-4 border-b" style={{ borderColor: "var(--hairline)" }}>
-                  <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
+                <div className="mb-4 pb-4 border-b border-slate-200">
+                  <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
                     What happened
                   </span>
-                  <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text)" }} data-testid="cockpit-incident-what-happened">
+                  <p className="text-xs mt-1 leading-relaxed text-slate-900" data-testid="cockpit-incident-what-happened">
                     {incidentWhatHappened(drawerIssue)}
                   </p>
                 </div>
-                {/* Show raw: collapsible JSON */}
-                <div className="mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowRawJson((v) => !v)}
-                    className="text-xs font-medium px-2 py-1 border rounded"
-                    style={{
-                      borderColor: "var(--hairline)",
-                      background: "var(--surface-3)",
-                      color: "var(--text-2)",
-                    }}
-                    data-testid="cockpit-incident-show-raw"
-                  >
-                    {showRawJson ? "Hide raw" : "Show raw"}
-                  </button>
-                  {showRawJson && (
-                    <pre
-                      className="text-xs whitespace-pre-wrap font-mono mt-2 p-3 rounded border overflow-x-auto"
-                      style={{
-                        color: "var(--text-2)",
-                        borderColor: "var(--hairline)",
-                        background: "var(--surface-3)",
-                        maxHeight: "240px",
-                        overflowY: "auto",
-                      }}
-                    >
-                      {JSON.stringify(
-                        {
-                          type: drawerIssue.type || drawerIssue.issue_type,
-                          station_code: drawerIssue.station_code ?? undefined,
-                          station_name: drawerIssue.station_name ?? undefined,
-                          employee_name: (drawerIssue as Record<string, unknown>).employee_name ?? undefined,
-                          reason_codes: (drawerIssue as Record<string, unknown>).reason_codes ?? undefined,
-                          created_at: (drawerIssue as Record<string, unknown>).created_at ?? drawerIssue.date ?? undefined,
-                          issue_id: drawerIssue.issue_id,
-                          decision_id: drawerIssue.decision_id ?? undefined,
-                          severity: drawerIssue.severity,
-                        },
-                        null,
-                        2
-                      )}
-                    </pre>
-                  )}
-                </div>
             {mode === "SHIFT" && (
               <>
-                <div className="border-t my-4" style={{ borderColor: "var(--hairline)" }} />
+                <div className="border-t border-slate-200 my-4" />
                 <div ref={drawerDecisionRef} className="space-y-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
                     DECISION
                   </span>
                   {drawerIssue.decision_logged ? (
@@ -1273,6 +1225,7 @@ export default function CockpitPage() {
                 </div>
               </>
             )}
+                </div>
               </div>
             </div>
           </div>,
