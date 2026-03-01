@@ -88,8 +88,29 @@ export default function CockpitPage() {
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [drawerIssue, setDrawerIssue] = useState<CockpitIssueRow | null>(null);
+  const [drawerView, setDrawerView] = useState<"details" | "decision">("details");
+  const [decisionType, setDecisionType] = useState<string>("Acknowledge");
+  const [decisionReason, setDecisionReason] = useState("");
 
   const activeIncidentsRef = useRef<HTMLDivElement>(null);
+  const drawerDecisionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!drawerIssue) return;
+    if (drawerView === "decision") {
+      drawerDecisionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [drawerIssue, drawerView]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && drawerIssue) {
+        setDrawerIssue(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawerIssue]);
 
   useEffect(() => {
     const params = new URLSearchParams({
@@ -500,14 +521,33 @@ export default function CockpitPage() {
                   <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-2)" }}>
                     {issueSummary(issue)}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setDrawerIssue(issue)}
-                    className="text-xs mt-1.5 font-medium underline focus:outline-none"
-                    style={{ color: "var(--text-2)" }}
-                  >
-                    Open
-                  </button>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDrawerIssue(issue);
+                        setDrawerView("details");
+                      }}
+                      className="text-xs font-medium underline focus:outline-none"
+                      style={{ color: "var(--text-2)" }}
+                    >
+                      Open
+                    </button>
+                    {mode === "SHIFT" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDrawerIssue(issue);
+                          setDrawerView("decision");
+                        }}
+                        className="text-xs font-medium underline focus:outline-none"
+                        style={{ color: "var(--text-2)" }}
+                        data-testid="cockpit-incident-log-decision"
+                      >
+                        Log decision
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -563,8 +603,8 @@ export default function CockpitPage() {
             }}
           >
             <div className="flex justify-between items-start mb-3">
-              <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                Incident details
+              <span className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+                INCIDENT
               </span>
               <button
                 type="button"
@@ -579,7 +619,7 @@ export default function CockpitPage() {
                 Close
               </button>
             </div>
-            <pre className="text-xs whitespace-pre-wrap font-mono" style={{ color: "var(--text-2)" }}>
+            <pre className="text-xs whitespace-pre-wrap font-mono mb-4" style={{ color: "var(--text-2)" }}>
               {JSON.stringify(
                 {
                   type: drawerIssue.type || drawerIssue.issue_type,
@@ -593,6 +633,73 @@ export default function CockpitPage() {
                 2
               )}
             </pre>
+            {mode === "SHIFT" && (
+              <>
+                <div className="border-t my-4" style={{ borderColor: "var(--hairline)" }} />
+                <div ref={drawerDecisionRef} className="space-y-3">
+                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+                    DECISION
+                  </span>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>
+                      Type
+                    </label>
+                    <select
+                      value={decisionType}
+                      onChange={(e) => setDecisionType(e.target.value)}
+                      className="w-full text-xs rounded border px-2 py-1.5"
+                      style={{
+                        borderColor: "var(--hairline)",
+                        background: "var(--surface-3)",
+                        color: "var(--text)",
+                      }}
+                      data-testid="cockpit-decision-type"
+                    >
+                      <option value="Acknowledge">Acknowledge</option>
+                      <option value="Override">Override</option>
+                      <option value="Escalate">Escalate</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>
+                      Reason
+                    </label>
+                    <textarea
+                      value={decisionReason}
+                      onChange={(e) => setDecisionReason(e.target.value)}
+                      rows={3}
+                      placeholder="Reason"
+                      className="w-full text-xs rounded border px-2 py-1.5 resize-y"
+                      style={{
+                        borderColor: "var(--hairline)",
+                        background: "var(--surface-3)",
+                        color: "var(--text)",
+                      }}
+                      data-testid="cockpit-decision-reason"
+                    />
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      disabled
+                      className="text-xs font-medium px-3 py-1.5 rounded border"
+                      style={{
+                        borderColor: "var(--hairline)",
+                        background: "var(--surface-3)",
+                        color: "var(--text-3)",
+                        cursor: "not-allowed",
+                      }}
+                      data-testid="cockpit-decision-save"
+                    >
+                      Save decision
+                    </button>
+                    <p className="text-xs mt-1" style={{ color: "var(--text-3)" }}>
+                      Mutation not enabled in this build.
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
