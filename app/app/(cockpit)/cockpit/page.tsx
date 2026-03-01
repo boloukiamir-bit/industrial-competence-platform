@@ -91,6 +91,9 @@ export default function CockpitPage() {
   const [drawerView, setDrawerView] = useState<"details" | "decision">("details");
   const [decisionType, setDecisionType] = useState<string>("Acknowledge");
   const [decisionReason, setDecisionReason] = useState("");
+  const [decisionSaving, setDecisionSaving] = useState(false);
+  const [decisionSaved, setDecisionSaved] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   const activeIncidentsRef = useRef<HTMLDivElement>(null);
   const drawerDecisionRef = useRef<HTMLDivElement>(null);
@@ -101,6 +104,13 @@ export default function CockpitPage() {
       drawerDecisionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [drawerIssue, drawerView]);
+
+  useEffect(() => {
+    if (!drawerIssue) {
+      setDecisionSaved(false);
+      setDecisionError(null);
+    }
+  }, [drawerIssue]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -209,6 +219,49 @@ export default function CockpitPage() {
 
   function scrollToActiveIncidents() {
     scrollActionToRef(activeIncidentsRef);
+  }
+
+  async function handleSaveDecision() {
+    if (mode !== "SHIFT" || !drawerIssue || decisionReason.trim().length < 10 || decisionSaving) return;
+    setDecisionSaving(true);
+    setDecisionError(null);
+    const body = {
+      decision_type: decisionType === "Acknowledge" ? "ACKNOWLEDGE" : decisionType === "Override" ? "OVERRIDE" : "ESCALATE",
+      reason: decisionReason.trim(),
+      date: selectedDate,
+      shift_code: shiftCode,
+      issue: {
+        ...drawerIssue,
+        type: drawerIssue.type ?? drawerIssue.issue_type,
+        issue_type: drawerIssue.issue_type,
+        station_id: drawerIssue.station_id,
+        station_code: drawerIssue.station_code,
+      },
+    };
+    try {
+      const res = await fetchJson<{ ok?: boolean; decision_id?: string; target_id?: string; error?: string }>(
+        "/api/cockpit/decisions/incident",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!res.ok) {
+        setDecisionError(res.error ?? "Failed to save decision");
+        return;
+      }
+      if (res.data?.ok) {
+        setDecisionSaved(true);
+        setTimeout(() => setDrawerIssue(null), 400);
+      } else {
+        setDecisionError(typeof res.data?.error === "string" ? res.data.error : "Failed to save decision");
+      }
+    } catch {
+      setDecisionError("Failed to save decision");
+    } finally {
+      setDecisionSaving(false);
+    }
   }
 
   return (
@@ -681,21 +734,49 @@ export default function CockpitPage() {
                   <div>
                     <button
                       type="button"
-                      disabled
+                      disabled={
+                        decisionSaving ||
+                        !drawerIssue ||
+                        decisionReason.trim().length < 10
+                      }
+                      onClick={handleSaveDecision}
                       className="text-xs font-medium px-3 py-1.5 rounded border"
                       style={{
                         borderColor: "var(--hairline)",
-                        background: "var(--surface-3)",
-                        color: "var(--text-3)",
-                        cursor: "not-allowed",
+                        background:
+                          decisionSaving || decisionReason.trim().length < 10
+                            ? "var(--surface-3)"
+                            : "var(--surface-3)",
+                        color:
+                          decisionSaving || decisionReason.trim().length < 10
+                            ? "var(--text-3)"
+                            : "var(--text)",
+                        cursor:
+                          decisionSaving || decisionReason.trim().length < 10
+                            ? "not-allowed"
+                            : "pointer",
                       }}
                       data-testid="cockpit-decision-save"
                     >
-                      Save decision
+                      {decisionSaving ? "Saving…" : "Save decision"}
                     </button>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-3)" }}>
-                      Mutation not enabled in this build.
-                    </p>
+                    {decisionSaved && (
+                      <p
+                        className="text-xs mt-1"
+                        style={{ color: "var(--text-2)" }}
+                        data-testid="cockpit-decision-saved"
+                      >
+                        Decision logged.
+                      </p>
+                    )}
+                    {decisionError && (
+                      <p
+                        className="text-xs mt-1"
+                        style={{ color: "var(--status-critical, #B91C1C)" }}
+                      >
+                        {decisionError}
+                      </p>
+                    )}
                   </div>
                 </div>
               </>
