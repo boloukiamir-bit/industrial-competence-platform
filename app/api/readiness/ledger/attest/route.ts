@@ -1,6 +1,6 @@
 /**
  * GET /api/readiness/ledger/attest
- * HMAC-signed attestation of ledger head after full chain verification.
+ * Ed25519-signed attestation of ledger head after full chain verification.
  * Auth: org member; active org from session only. 403 if no active org.
  */
 import crypto from "crypto";
@@ -99,24 +99,42 @@ export async function GET(request: NextRequest) {
     verified_at: new Date().toISOString(),
   };
 
-  const secret = process.env.LEDGER_ATTESTATION_SECRET;
-  if (!secret || secret.trim() === "") {
-    throw new Error(
-      "LEDGER_ATTESTATION_SECRET is not set; cannot sign readiness ledger attestation"
-    );
+  const privateKeyB64 = process.env.LEDGER_ED25519_PRIVATE_KEY;
+  if (!privateKeyB64 || privateKeyB64.trim() === "") {
+    throw new Error("LEDGER_ED25519_PRIVATE_KEY not set");
+  }
+  const publicKeyB64 = process.env.LEDGER_ED25519_PUBLIC_KEY ?? "";
+  const privateKey = Buffer.from(privateKeyB64, "base64");
+  const publicKey = Buffer.from(publicKeyB64, "base64");
+
+  const payloadJson = JSON.stringify(payload);
+  let signature: string;
+  try {
+    signature = crypto
+      .sign(null, Buffer.from(payloadJson, "utf8"), {
+        key: privateKey,
+        format: "der",
+        type: "pkcs8",
+      })
+      .toString("base64");
+  } catch {
+    signature = crypto
+      .sign(null, Buffer.from(payloadJson, "utf8"), privateKey)
+      .toString("base64");
   }
 
-  const signature = crypto
-    .createHmac("sha256", secret)
-    .update(JSON.stringify(payload))
-    .digest("hex");
+  // HMAC path (deprecated): kept for reference, not used in default flow.
+  // const secret = process.env.LEDGER_ATTESTATION_SECRET;
+  // if (!secret || secret.trim() === "") { throw new Error("LEDGER_ATTESTATION_SECRET is not set"); }
+  // const signature = crypto.createHmac("sha256", secret).update(payloadJson).digest("hex");
 
   const res = NextResponse.json({
     ok: true,
     attestation: {
       ...payload,
-      signature_algo: "HMAC_SHA256_V1",
+      signature_algo: "ED25519_V1",
       signature,
+      public_key: process.env.LEDGER_ED25519_PUBLIC_KEY,
     },
   });
   applySupabaseCookies(res, pendingCookies);
