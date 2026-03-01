@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { PageFrame } from "@/components/layout/PageFrame";
 import { fetchJson } from "@/lib/coreFetch";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
@@ -121,6 +122,7 @@ function accentColorForVerdict(
  * StatusCore is wired to /api/cockpit/summary. Mode toggle: GLOBAL | SHIFT.
  */
 export default function CockpitPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<"GLOBAL" | "SHIFT">("GLOBAL");
   const [shiftCode, setShiftCode] = useState("Day");
   const [selectedDate, setSelectedDate] = useState(() => todayString());
@@ -719,6 +721,17 @@ export default function CockpitPage() {
                         {issue.decision_logged ? "View decision" : "Log decision"}
                       </button>
                     )}
+                    {mode === "SHIFT" && issue.decision_logged && issue.decision_id && (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/app/admin/audit?id=${encodeURIComponent(issue.decision_id!)}`)}
+                        className="text-xs font-medium underline focus:outline-none"
+                        style={{ color: "var(--text-3)" }}
+                        data-testid="cockpit-incident-open-audit"
+                      >
+                        Open audit
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -840,6 +853,17 @@ export default function CockpitPage() {
                         <p className="text-xs mt-1" style={{ color: "var(--text-3)" }}>
                           Blocking impact removed for verdict.
                         </p>
+                      )}
+                      {drawerIssue.decision_id && (
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/app/admin/audit?id=${encodeURIComponent(drawerIssue.decision_id!)}`)}
+                          className="text-xs font-medium underline focus:outline-none mt-2"
+                          style={{ color: "var(--text-3)" }}
+                          data-testid="cockpit-decision-open-audit"
+                        >
+                          Open audit
+                        </button>
                       )}
                     </div>
                   ) : (

@@ -67,6 +67,8 @@ export type CockpitIssue = {
   decision_reason?: string | null;
   /** True when BLOCKING and decision_action === OVERRIDE (blocking impact removed for verdict). */
   decision_overrides_blocking?: boolean;
+  /** execution_decisions row id for audit deep-link when decision_logged. */
+  decision_id?: string | null;
   /** Set only for issue_type === "UNSTAFFED" (SHIFT or GLOBAL). */
   unstaffed_reason?: "NO_ROSTER_ROW" | "HAS_ROSTER_ROW";
 };
@@ -571,14 +573,14 @@ export async function fetchCockpitIssues(
   if (shiftFilter && dateString) {
     const { data: incidentRows } = await supabaseAdmin
       .from("execution_decisions")
-      .select("root_cause, created_at")
+      .select("id, root_cause, created_at")
       .eq("org_id", org_id)
       .eq("target_type", "COCKPIT_INCIDENT")
       .eq("status", "active");
 
     const incidentByKey = new Map<
       string,
-      { decision_action: string; decision_reason: string | null; created_at: string | null }
+      { decision_id: string; decision_action: string; decision_reason: string | null; created_at: string | null }
     >();
     for (const row of incidentRows ?? []) {
       const rc = row.root_cause as Record<string, unknown> | null;
@@ -590,7 +592,10 @@ export async function fetchCockpitIssues(
       const decision = rc.decision as Record<string, unknown> | null;
       const action = (decision?.action as string) ?? "ACKNOWLEDGE";
       const reason = (decision?.reason as string) ?? null;
+      const rowId = row.id as string | undefined;
+      if (!rowId) continue;
       incidentByKey.set(idem, {
+        decision_id: rowId,
         decision_action: action,
         decision_reason: typeof reason === "string" ? reason : null,
         created_at: (row.created_at as string) ?? null,
@@ -613,6 +618,7 @@ export async function fetchCockpitIssues(
       const incident = incidentByKey.get(key);
       if (incident) {
         issue.decision_logged = true;
+        issue.decision_id = incident.decision_id;
         issue.decision_action = incident.decision_action;
         issue.decision_reason = incident.decision_reason;
         issue.decision_created_at = incident.created_at;
@@ -620,6 +626,7 @@ export async function fetchCockpitIssues(
           issue.severity === "BLOCKING" && incident.decision_action === "OVERRIDE";
       } else {
         issue.decision_logged = false;
+        issue.decision_id = null;
         issue.decision_action = null;
         issue.decision_overrides_blocking = false;
       }
