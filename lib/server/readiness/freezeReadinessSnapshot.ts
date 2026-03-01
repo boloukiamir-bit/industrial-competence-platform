@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
-import { PAYLOAD_HASH_ALGO } from "@/lib/server/readiness/snapshotPayloadHash";
+import { HASH_ALGO_V2 } from "@/lib/server/readiness/snapshotPayloadHash";
 
 const DUPLICATE_WINDOW_MINUTES = 1;
 
@@ -147,7 +147,7 @@ export async function createOrReuseReadinessSnapshot(
     p_legal_blockers_sample: legalBlockersSample,
     p_ops_no_go_stations_sample: opsNoGoStationsSample,
     p_engines: engines,
-    p_payload_hash_algo: PAYLOAD_HASH_ALGO,
+    p_payload_hash_algo: HASH_ALGO_V2,
   });
 
   if (rpcErr) {

@@ -1,20 +1,26 @@
 /**
  * Deterministic SHA-256 hash of readiness snapshot canonical payload.
- * Used for tamper-evident integrity: same payload always yields same hash.
+ * Algorithm versioning: V1 = pre-chain (no previous_hash/chain_position), V2 = chain-aware.
  * Shared by freeze (on insert) and verify endpoint.
  */
 import { createHash } from "node:crypto";
 
-export const PAYLOAD_HASH_ALGO = "SHA256_V1" as const;
+/** Legacy: canonical payload WITHOUT previous_hash or chain_position. */
+export const HASH_ALGO_V1 = "SHA256_V1" as const;
+/** Chain-aware: canonical payload WITH previous_hash and chain_position. */
+export const HASH_ALGO_V2 = "SHA256_V2" as const;
+
+/** @deprecated Use HASH_ALGO_V2 for new snapshots; HASH_ALGO_V1 for verify of legacy rows. */
+export const PAYLOAD_HASH_ALGO = HASH_ALGO_V1;
 
 export type CanonicalPayloadInput = {
   org_id: string;
   site_id: string;
   shift_date: string;
   shift_code: string;
-  /** Chain: hash of previous snapshot (null if first or prior had no hash). */
+  /** Chain: hash of previous snapshot (null if first or prior had no hash). V2 only. */
   previous_hash: string | null;
-  /** Chain: 1-based position per org. */
+  /** Chain: 1-based position per org. V2 only. */
   chain_position: number | null;
   legal_flag: string;
   ops_flag: string;
@@ -29,22 +35,46 @@ export type CanonicalPayloadInput = {
   ops_no_go_stations_sample: unknown[];
 };
 
-/**
- * Build canonical JSON string for hashing. Field order and sorting rules are fixed.
- * - previous_hash, chain_position: between org/site context and flags (chain-aware).
- * - overall_reason_codes: sorted
- * - engines: keys sorted
- * - legal_blockers_sample, ops_no_go_stations_sample: keep order as passed
- */
-function buildCanonicalPayload(input: CanonicalPayloadInput): string {
-  const sortedReasonCodes = [...input.overall_reason_codes].sort();
-  const sortedEngines =
-    input.engines && typeof input.engines === "object"
-      ? Object.fromEntries(
-          Object.entries(input.engines).sort(([a], [b]) => a.localeCompare(b))
-        )
-      : {};
+function sortedReasonCodes(input: CanonicalPayloadInput): string[] {
+  return [...input.overall_reason_codes].sort();
+}
 
+function sortedEngines(input: CanonicalPayloadInput): Record<string, unknown> {
+  return input.engines && typeof input.engines === "object"
+    ? Object.fromEntries(
+        Object.entries(input.engines).sort(([a], [b]) => a.localeCompare(b))
+      )
+    : {};
+}
+
+/**
+ * V1 canonical: must NOT include previous_hash or chain_position (legacy, pre-chain).
+ */
+export function buildCanonicalPayloadV1(input: CanonicalPayloadInput): string {
+  const canonical = {
+    org_id: input.org_id,
+    site_id: input.site_id,
+    shift_date: input.shift_date,
+    shift_code: input.shift_code,
+    legal_flag: input.legal_flag,
+    ops_flag: input.ops_flag,
+    overall_status: input.overall_status,
+    overall_reason_codes: sortedReasonCodes(input),
+    iri_score: input.iri_score,
+    iri_grade: input.iri_grade,
+    roster_employee_count: input.roster_employee_count,
+    version: input.version,
+    engines: sortedEngines(input),
+    legal_blockers_sample: input.legal_blockers_sample,
+    ops_no_go_stations_sample: input.ops_no_go_stations_sample,
+  };
+  return JSON.stringify(canonical);
+}
+
+/**
+ * V2 canonical: must include previous_hash and chain_position (fixed position: after shift_code, before legal_flag).
+ */
+export function buildCanonicalPayloadV2(input: CanonicalPayloadInput): string {
   const canonical = {
     org_id: input.org_id,
     site_id: input.site_id,
@@ -55,24 +85,34 @@ function buildCanonicalPayload(input: CanonicalPayloadInput): string {
     legal_flag: input.legal_flag,
     ops_flag: input.ops_flag,
     overall_status: input.overall_status,
-    overall_reason_codes: sortedReasonCodes,
+    overall_reason_codes: sortedReasonCodes(input),
     iri_score: input.iri_score,
     iri_grade: input.iri_grade,
     roster_employee_count: input.roster_employee_count,
     version: input.version,
-    engines: sortedEngines,
+    engines: sortedEngines(input),
     legal_blockers_sample: input.legal_blockers_sample,
     ops_no_go_stations_sample: input.ops_no_go_stations_sample,
   };
-
   return JSON.stringify(canonical);
 }
 
 /**
  * Compute SHA-256 hex digest of canonical payload (UTF-8).
+ * @param algo - HASH_ALGO_V1 (legacy) or HASH_ALGO_V2 (chain-aware)
  */
-export function computePayloadHash(input: CanonicalPayloadInput): string {
-  const json = buildCanonicalPayload(input);
+export function computePayloadHash(
+  input: CanonicalPayloadInput,
+  algo: string
+): string {
+  const json =
+    algo === HASH_ALGO_V2
+      ? buildCanonicalPayloadV2(input)
+      : algo === HASH_ALGO_V1
+        ? buildCanonicalPayloadV1(input)
+        : (() => {
+            throw new Error(`Unsupported payload_hash_algo: ${algo}`);
+          })();
   return createHash("sha256").update(json, "utf8").digest("hex");
 }
 
@@ -88,6 +128,7 @@ function normalizeShiftDate(v: unknown): string {
 
 /**
  * Build CanonicalPayloadInput from a readiness_snapshots row (for verify).
+ * Extracts all fields; for V1 verify the builder ignores chain fields.
  */
 export function canonicalPayloadFromRow(row: Record<string, unknown>): CanonicalPayloadInput {
   const arr = (v: unknown) => (Array.isArray(v) ? v : []);

@@ -10,7 +10,7 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import {
   computePayloadHash,
   canonicalPayloadFromRow,
-  PAYLOAD_HASH_ALGO,
+  HASH_ALGO_V1,
 } from "@/lib/server/readiness/snapshotPayloadHash";
 
 function getAdmin() {
@@ -80,8 +80,8 @@ export async function GET(
   }
 
   const r = row as Record<string, unknown>;
-  const storedHash = r.payload_hash == null ? null : String(r.payload_hash);
-  const algo = r.payload_hash_algo != null ? String(r.payload_hash_algo) : PAYLOAD_HASH_ALGO;
+  const storedHash = r.payload_hash == null ? null : String(r.payload_hash).trim();
+  const algoRaw = r.payload_hash_algo != null ? String(r.payload_hash_algo).trim() : null;
 
   if (storedHash == null || storedHash === "") {
     const res = NextResponse.json({
@@ -91,14 +91,15 @@ export async function GET(
       computed_hash: null,
       match: false,
       reason: "MISSING_HASH",
-      algo,
+      algo: algoRaw ?? null,
     });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
 
+  const algo = algoRaw && algoRaw.length > 0 ? algoRaw : HASH_ALGO_V1;
   const input = canonicalPayloadFromRow(r);
-  const computedHash = computePayloadHash(input);
+  const computedHash = computePayloadHash(input, algo);
 
   const res = NextResponse.json({
     ok: true,
