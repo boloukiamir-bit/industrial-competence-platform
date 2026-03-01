@@ -61,6 +61,15 @@ function issueSummary(issue: CockpitIssueRow): string {
   return t ?? r ?? m ?? issue.recommended_action ?? "—";
 }
 
+function accentColorForVerdict(
+  verdict: "GO" | "WARNING" | "NO-GO" | "—" | "Evaluating…"
+): string {
+  if (verdict === "GO") return "#065F46";
+  if (verdict === "WARNING") return "#92400E";
+  if (verdict === "NO-GO") return "#7F1D1D";
+  return "var(--hairline)";
+}
+
 /**
  * 2030 Command Layer skeleton.
  * Structure: TopBar → StatusCore (8/4) → RiskTriad (3) → ActionLayer (3).
@@ -244,7 +253,17 @@ export default function CockpitPage() {
             background: "var(--surface-2)",
           }}
         >
-          <h2 className="text-sm font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-2)" }}>
+          <div
+            data-testid="cockpit-status-accent"
+            className="w-full rounded-[2px]"
+            style={{
+              height: 3,
+              background: accentColorForVerdict(
+                loading ? "Evaluating…" : error ? "—" : (verdict ?? "—") as "GO" | "WARNING" | "NO-GO" | "—" | "Evaluating…"
+              ),
+            }}
+          />
+          <h2 className="text-sm font-semibold uppercase tracking-wider mb-1 mt-4" style={{ color: "var(--text-2)" }}>
             Industrial Status
           </h2>
           <p className="text-2xl font-semibold tabular-nums mb-6" style={{ color: "var(--text)" }} data-testid="cockpit-verdict">
