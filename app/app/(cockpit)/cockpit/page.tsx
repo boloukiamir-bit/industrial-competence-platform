@@ -96,6 +96,16 @@ function incidentTypeForIssue(issue: CockpitIssueRow): IncidentFilterType {
   return "OTHER";
 }
 
+function criticalPathPriority(issue: CockpitIssueRow): number {
+  const type = incidentTypeForIssue(issue);
+  if (type === "ILLEGAL") return 1;
+  if (type === "UNSTAFFED") return 2;
+  if (type === "GOVERNANCE") return 3;
+  const t = (issue.type ?? issue.issue_type ?? "").toString().toUpperCase();
+  if (t.includes("SKILL") || issue.type === "SKILL") return 4;
+  return 5;
+}
+
 function criticalPathSuggestedAction(issue: CockpitIssueRow): string {
   const type = incidentTypeForIssue(issue);
   if (type === "ILLEGAL") return "ESCALATE / FIX COMPLIANCE";
@@ -650,11 +660,24 @@ export default function CockpitPage() {
               className="grid grid-cols-1 md:grid-cols-3 gap-6 p-1"
               data-testid="cockpit-action-layer"
             >
-        {/* Critical Path: top 3 unresolved blocking issues */}
+        {/* Critical Path: top 3 unresolved blocking issues (priority order, then newest first) */}
         {(() => {
-          const criticalPathIssues = issues.filter(
-            (i) => i.severity === "BLOCKING" && !i.decision_overrides_blocking
-          ).slice(0, 3);
+          const getCreated = (i: CockpitIssueRow) => {
+            const c = (i as Record<string, unknown>).created_at as string | undefined;
+            const d = i.date;
+            if (c) return new Date(c).getTime();
+            if (d) return new Date(d).getTime();
+            return 0;
+          };
+          const criticalPathIssues = issues
+            .filter((i) => i.severity === "BLOCKING" && !i.decision_overrides_blocking)
+            .sort((a, b) => {
+              const pa = criticalPathPriority(a);
+              const pb = criticalPathPriority(b);
+              if (pa !== pb) return pa - pb;
+              return getCreated(b) - getCreated(a);
+            })
+            .slice(0, 3);
           return (
             <div
               className="col-span-full rounded-lg border p-4"
