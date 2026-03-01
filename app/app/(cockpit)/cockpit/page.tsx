@@ -240,6 +240,20 @@ export default function CockpitPage() {
         <main className="flex-1 flex flex-col overflow-hidden min-h-0">
           {/* AboveFold: StatusCore + RiskTriad, no scroll */}
           <div className="shrink-0">
+            {mode === "SHIFT" && (
+              <div
+                data-testid="cockpit-shift-strip"
+                className="shrink-0 h-8 flex items-center justify-between px-3 border border-[var(--hairline)] bg-[var(--surface-2)] mb-3"
+                style={{ borderRadius: 4 }}
+              >
+                <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-2)]">
+                  SHIFT • {selectedDate} • {shiftCode} • LINE: ALL
+                </div>
+                <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-3)]">
+                  Decisions enabled
+                </div>
+              </div>
+            )}
             {/* StatusCore: 8/4 grid split */}
             <section
               className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4 min-h-[360px] max-h-[480px] overflow-hidden"
