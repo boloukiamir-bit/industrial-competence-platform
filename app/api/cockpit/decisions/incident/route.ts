@@ -1,9 +1,10 @@
 /**
  * POST /api/cockpit/decisions/incident — log an incident decision (SHIFT mode).
- * Auth: getActiveOrgFromSession. Idempotent by target_id (sha256 of idempotency key).
+ * Auth: getActiveOrgFromSession.
+ * target_type: COCKPIT_INCIDENT. Idempotency by root_cause.idempotency_key (no fake UUID).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { createHash } from "crypto";
+import { randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
@@ -14,7 +15,9 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const DECISION_TYPES = ["ACKNOWLEDGE", "OVERRIDE", "ESCALATE"] as const;
+/** Allowed decision action (stored in root_cause.decision.action). */
+const DECISION_ACTIONS = ["ACKNOWLEDGE", "OVERRIDE", "ESCALATE"] as const;
+/** DB decision_type column: system-level type for incident decisions. */
 const DB_DECISION_TYPE_MAP: Record<string, string> = {
   ACKNOWLEDGE: "ACKNOWLEDGED",
   OVERRIDE: "OVERRIDDEN",
@@ -45,15 +48,6 @@ function buildIdempotencyKey(
   return `INCIDENT_DECISION:${date}:${shiftCode}:${type}:${station}:${employee}:${reasonCode}`;
 }
 
-function sha256ToTargetId(idempotencyKey: string): string {
-  const hash = createHash("sha256").update(idempotencyKey).digest();
-  const bytes = Array.from(hash.subarray(0, 16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
-
 export async function POST(request: NextRequest) {
   const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
@@ -78,11 +72,11 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
-  const decisionTypeRaw = typeof body.decision_type === "string" ? body.decision_type.trim().toUpperCase() : "";
-  const decisionType = DECISION_TYPES.includes(decisionTypeRaw as (typeof DECISION_TYPES)[number])
-    ? decisionTypeRaw
+  const decisionActionRaw = typeof body.decision_type === "string" ? body.decision_type.trim().toUpperCase() : "";
+  const decisionAction = DECISION_ACTIONS.includes(decisionActionRaw as (typeof DECISION_ACTIONS)[number])
+    ? decisionActionRaw
     : null;
-  if (!decisionType) {
+  if (!decisionAction) {
     const res = NextResponse.json(
       { ok: false, error: "decision_type must be one of ACKNOWLEDGE, OVERRIDE, ESCALATE" },
       { status: 400 }
@@ -135,27 +129,15 @@ export async function POST(request: NextRequest) {
   }
 
   const idempotencyKey = buildIdempotencyKey(dateRaw, shiftCode, issue);
-  const target_id = sha256ToTargetId(idempotencyKey);
-  const dbDecisionType = DB_DECISION_TYPE_MAP[decisionType] ?? "ACKNOWLEDGED";
+  const dbDecisionType = DB_DECISION_TYPE_MAP[decisionAction] ?? "ACKNOWLEDGED";
 
   const root_cause = {
-    type: "cockpit_incident",
+    type: "cockpit_incident" as const,
+    kind: "cockpit_incident" as const,
+    idempotency_key: idempotencyKey,
     issue,
-    decision: { type: decisionType },
-    shift_date: dateRaw,
-    shift_code: shiftCode,
-    line: "all",
-  };
-  const row = {
-    org_id: org.activeOrgId,
-    site_id: org.activeSiteId ?? null,
-    decision_type: dbDecisionType,
-    target_type: "station_shift" as const,
-    target_id,
-    reason,
-    root_cause,
-    status: "active",
-    created_by: org.userId,
+    decision: { action: decisionAction, reason },
+    shift: { date: dateRaw, shift_code: shiftCode, line: "all" as const },
   };
 
   try {
@@ -163,19 +145,34 @@ export async function POST(request: NextRequest) {
       .from("execution_decisions")
       .select("id, target_id")
       .eq("org_id", org.activeOrgId)
-      .eq("target_type", "station_shift")
-      .eq("target_id", target_id)
+      .eq("target_type", "COCKPIT_INCIDENT")
+      .contains("root_cause", { idempotency_key: idempotencyKey })
       .maybeSingle();
 
     if (existing) {
       const res = NextResponse.json({
         ok: true,
         decision_id: existing.id,
+        idempotency_key: idempotencyKey,
+        target_type: "COCKPIT_INCIDENT",
         target_id: existing.target_id,
       });
       applySupabaseCookies(res, pendingCookies);
       return res;
     }
+
+    const target_id = randomUUID();
+    const row = {
+      org_id: org.activeOrgId,
+      site_id: org.activeSiteId ?? null,
+      decision_type: dbDecisionType,
+      target_type: "COCKPIT_INCIDENT" as const,
+      target_id,
+      reason,
+      root_cause,
+      status: "active",
+      created_by: org.userId,
+    };
 
     const { data: inserted, error } = await supabaseAdmin
       .from("execution_decisions")
@@ -185,10 +182,19 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       if ((error as { code?: string }).code === "23505") {
+        const { data: afterConflict } = await supabaseAdmin
+          .from("execution_decisions")
+          .select("id, target_id")
+          .eq("org_id", org.activeOrgId)
+          .eq("target_type", "COCKPIT_INCIDENT")
+          .contains("root_cause", { idempotency_key: idempotencyKey })
+          .maybeSingle();
         const res = NextResponse.json({
           ok: true,
-          decision_id: null,
-          target_id,
+          decision_id: afterConflict?.id ?? null,
+          idempotency_key: idempotencyKey,
+          target_type: "COCKPIT_INCIDENT",
+          target_id: afterConflict?.target_id ?? target_id,
         });
         applySupabaseCookies(res, pendingCookies);
         return res;
@@ -205,6 +211,8 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json({
       ok: true,
       decision_id: inserted?.id,
+      idempotency_key: idempotencyKey,
+      target_type: "COCKPIT_INCIDENT",
       target_id: inserted?.target_id ?? target_id,
     });
     applySupabaseCookies(res, pendingCookies);

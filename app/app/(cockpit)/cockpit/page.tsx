@@ -221,12 +221,19 @@ export default function CockpitPage() {
     scrollActionToRef(activeIncidentsRef);
   }
 
+  /** Map UI decision label to API action enum (ACKNOWLEDGE | OVERRIDE | ESCALATE). */
+  function decisionActionEnum(): "ACKNOWLEDGE" | "OVERRIDE" | "ESCALATE" {
+    if (decisionType === "Acknowledge") return "ACKNOWLEDGE";
+    if (decisionType === "Override") return "OVERRIDE";
+    return "ESCALATE";
+  }
+
   async function handleSaveDecision() {
     if (mode !== "SHIFT" || !drawerIssue || decisionReason.trim().length < 10 || decisionSaving) return;
     setDecisionSaving(true);
     setDecisionError(null);
     const body = {
-      decision_type: decisionType === "Acknowledge" ? "ACKNOWLEDGE" : decisionType === "Override" ? "OVERRIDE" : "ESCALATE",
+      decision_type: decisionActionEnum(),
       reason: decisionReason.trim(),
       date: selectedDate,
       shift_code: shiftCode,
@@ -239,7 +246,7 @@ export default function CockpitPage() {
       },
     };
     try {
-      const res = await fetchJson<{ ok?: boolean; decision_id?: string; target_id?: string; error?: string }>(
+      const res = await fetchJson<{ ok?: boolean; decision_id?: string; idempotency_key?: string; target_type?: string; target_id?: string; error?: string }>(
         "/api/cockpit/decisions/incident",
         {
           method: "POST",
