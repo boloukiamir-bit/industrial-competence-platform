@@ -1,5 +1,5 @@
 /**
- * POST /api/debug/readiness/force-snapshot
+ * GET/POST /api/debug/readiness/force-snapshot
  * Dev-only: force-create a readiness snapshot with minimal deterministic payload.
  * Uses same 1-min reuse and insert_readiness_snapshot_chained RPC as freeze flow.
  * 404 in production.
@@ -45,11 +45,11 @@ function todayYYYYMMDD(): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
+async function handleForceSnapshot(
+  request: NextRequest,
+  dateParam: string,
+  shiftParam: string
+): Promise<NextResponse> {
   const { supabase, pendingCookies } = await createSupabaseServerClient(request);
   const org = await getActiveOrgFromSession(request, supabase);
   if (!org.ok) {
@@ -71,9 +71,6 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
-  const url = new URL(request.url);
-  const dateParam = (url.searchParams.get("date") ?? "").trim() || todayYYYYMMDD();
-  const shiftParam = (url.searchParams.get("shift_code") ?? "").trim() || "Day";
   const normalized = normalizeShiftParam(shiftParam);
   if (!normalized) {
     const res = NextResponse.json(
@@ -151,4 +148,31 @@ export async function POST(request: NextRequest) {
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
+}
+
+export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const params = request.nextUrl.searchParams;
+  const dateParam = (params.get("date") ?? "").trim() || todayYYYYMMDD();
+  const shiftParam = (params.get("shift_code") ?? "").trim() || "Day";
+  return handleForceSnapshot(request, dateParam, shiftParam);
+}
+
+export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const url = new URL(request.url);
+  let dateParam = (url.searchParams.get("date") ?? "").trim() || todayYYYYMMDD();
+  let shiftParam = (url.searchParams.get("shift_code") ?? "").trim() || "Day";
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (typeof body?.date === "string") dateParam = body.date.trim() || dateParam;
+    if (typeof body?.shift_code === "string") shiftParam = body.shift_code.trim() || shiftParam;
+  } catch {
+    // ignore
+  }
+  return handleForceSnapshot(request, dateParam, shiftParam);
 }
