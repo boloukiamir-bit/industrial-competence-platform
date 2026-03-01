@@ -4,6 +4,7 @@ import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase
 import { fetchCockpitIssues } from "@/lib/server/fetchCockpitIssues";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
+import { buildIdempotencyKey, type IssuePayload } from "@/lib/server/cockpitIncidentIdempotency";
 import { getFirstShiftIdForCockpit } from "@/lib/server/getCockpitReadiness";
 import { evaluateEmployeeLegitimacy } from "@/lib/domain/legitimacy/evaluateEmployeeLegitimacy";
 import type { ComplianceStatusForLegitimacy } from "@/lib/domain/legitimacy/evaluateEmployeeLegitimacy";
@@ -79,6 +80,11 @@ export async function GET(request: NextRequest) {
     const showResolved = url.searchParams.get("show_resolved") === "1";
     const debug = url.searchParams.get("debug") === "1";
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const admin =
+      supabaseUrl && serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey) : null;
+
     const { issues, debug: debugInfo } = await fetchCockpitIssues({
       org_id: org.activeOrgId,
       site_id: org.activeSiteId,
@@ -90,14 +96,51 @@ export async function GET(request: NextRequest) {
       debug,
     });
 
+    const overrideKeys = new Set<string>();
+    if (admin) {
+      const { data: overrideRows } = await admin
+        .from("execution_decisions")
+        .select("root_cause")
+        .eq("org_id", org.activeOrgId)
+        .eq("target_type", "COCKPIT_INCIDENT")
+        .eq("status", "active");
+      for (const row of overrideRows ?? []) {
+        const rc = row.root_cause as Record<string, unknown> | null;
+        if (!rc) continue;
+        const shift = rc.shift as Record<string, unknown> | null;
+        if (shift?.date !== date || shift?.shift_code !== normalized) continue;
+        const decision = rc.decision as Record<string, unknown> | null;
+        if (decision?.action !== "OVERRIDE") continue;
+        const key = rc.idempotency_key as string | undefined;
+        if (typeof key === "string" && key) overrideKeys.add(key);
+      }
+    }
+
     let active_blocking = 0;
     let active_nonblocking = 0;
     const typeCounts = new Map<string, number>();
     const actionCounts = new Map<string, number>();
 
     for (const issue of issues) {
+      const payload: IssuePayload = {
+        type: issue.type,
+        issue_type: issue.issue_type,
+        station_id: issue.station_id,
+        station_code: issue.station_code ?? undefined,
+        employee_id: (issue as Record<string, unknown>).employee_id as string | undefined,
+        employee_name: (issue as Record<string, unknown>).employee_name as string | undefined,
+        reason_code: Array.isArray((issue as Record<string, unknown>).reason_codes)
+          ? ((issue as Record<string, unknown>).reason_codes as string[])[0]
+          : ((issue as Record<string, unknown>).reason_code as string | undefined),
+      };
+      const idemKey = buildIdempotencyKey(date, normalized, payload);
+      const isOverridden = overrideKeys.has(idemKey);
       if (issue.severity === "BLOCKING") {
-        active_blocking += 1;
+        if (isOverridden) {
+          active_nonblocking += 1;
+        } else {
+          active_blocking += 1;
+        }
       } else {
         active_nonblocking += 1;
       }
@@ -136,10 +179,7 @@ export async function GET(request: NextRequest) {
     let certificate_illegal_count = 0;
     let certificate_warning_count = 0;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && serviceRoleKey) {
-      const admin = createClient(supabaseUrl, serviceRoleKey);
+    if (admin) {
       const shiftId = await getFirstShiftIdForCockpit(admin, {
         orgId: org.activeOrgId,
         siteId: org.activeSiteId,
