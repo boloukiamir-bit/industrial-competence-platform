@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { PageFrame } from "@/components/layout/PageFrame";
 import { fetchJson } from "@/lib/coreFetch";
@@ -93,7 +94,28 @@ function incidentTypeForIssue(issue: CockpitIssueRow): IncidentFilterType {
   if (it === "ILLEGAL" || t.includes("ILLEGAL")) return "ILLEGAL";
   if (it === "UNSTAFFED" || t.includes("UNSTAFFED")) return "UNSTAFFED";
   if (t.includes("GOVERNANCE") || it === "GOVERNANCE") return "GOVERNANCE";
+  if (t.includes("SKILL") || it === "SKILL") return "OTHER";
   return "OTHER";
+}
+
+/** Deterministic human-readable "what happened" from payload (no AI). */
+function incidentWhatHappened(issue: CockpitIssueRow): string {
+  const typeLabel = (issue.type ?? issue.issue_type ?? "INCIDENT").toString().trim();
+  const stationCode = (issue.station_code ?? "").toString().trim();
+  const stationName = (issue.station_name ?? "").toString().trim();
+  const station = stationCode ? (stationName ? `${stationCode} (${stationName})` : stationCode) : "—";
+  const severity = issue.severity === "BLOCKING" ? "blocking" : "non-blocking";
+  const employee = (issue as Record<string, unknown>).employee_name as string | undefined;
+  const reasonCodes = (issue as Record<string, unknown>).reason_codes as string[] | undefined;
+  const reason = (issue as Record<string, unknown>).reason as string | undefined;
+  const message = (issue as Record<string, unknown>).message as string | undefined;
+  const title = (issue as Record<string, unknown>).title as string | undefined;
+  const parts: string[] = [];
+  parts.push(`${typeLabel} at ${station} (${severity}).`);
+  if (employee) parts.push(`Employee: ${employee}.`);
+  const why = reasonCodes?.[0] ?? reason ?? message ?? title ?? "";
+  if (why) parts.push(why);
+  return parts.join(" ");
 }
 
 function criticalPathPriority(issue: CockpitIssueRow): number {
@@ -177,6 +199,7 @@ export default function CockpitPage() {
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [drawerIssue, setDrawerIssue] = useState<CockpitIssueRow | null>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
   const [drawerView, setDrawerView] = useState<"details" | "decision">("details");
   const [decisionType, setDecisionType] = useState<string>("Acknowledge");
   const [decisionReason, setDecisionReason] = useState("");
@@ -206,6 +229,7 @@ export default function CockpitPage() {
     if (!drawerIssue) {
       setDecisionSaved(false);
       setDecisionError(null);
+      setShowRawJson(false);
     }
   }, [drawerIssue]);
 
@@ -983,45 +1007,137 @@ export default function CockpitPage() {
         </main>
       </div>
 
-      {/* Incident details: centered modal dialog */}
-      {drawerIssue && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setDrawerIssue(null)}
-          />
-          <div
-            data-testid="cockpit-incident-drawer"
-            className="relative w-[720px] max-w-[92vw] max-h-[80vh] overflow-hidden bg-[var(--surface-2)] border border-[var(--hairline)] shadow-2xl rounded-lg"
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--hairline)]">
-              <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-2)]">INCIDENT</div>
-              <button
-                type="button"
-                className="text-[12px] px-2 py-1 border border-[var(--hairline)] bg-[var(--surface-3)] text-[var(--text)] rounded"
-                onClick={() => setDrawerIssue(null)}
-              >
-                Close
-              </button>
-            </div>
+      {/* Incident details: centered modal dialog — portaled to body so it is not clipped by app layout overflow */}
+      {drawerIssue &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <button
+              type="button"
+              aria-label="Close"
+              className="absolute inset-0 z-0 bg-black/40"
+              onClick={() => setDrawerIssue(null)}
+            />
+            <div
+              data-testid="cockpit-incident-drawer"
+              className="relative z-10 w-[720px] max-w-[92vw] max-h-[80vh] overflow-hidden bg-white border border-[var(--hairline)] shadow-lg rounded-xl"
+              style={{ background: "var(--surface-2, #fff)" }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--hairline)] shrink-0 h-14">
+                <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-2)]">INCIDENT</div>
+                <button
+                  type="button"
+                  className="text-[12px] px-2 py-1 border border-[var(--hairline)] bg-[var(--surface-3)] text-[var(--text)] rounded"
+                  onClick={() => setDrawerIssue(null)}
+                >
+                  Close
+                </button>
+              </div>
 
-            <div className="p-4 overflow-y-auto max-h-[calc(80vh-56px)]">
-            <pre className="text-xs whitespace-pre-wrap font-mono mb-4" style={{ color: "var(--text-2)" }}>
-              {JSON.stringify(
-                {
-                  type: drawerIssue.type || drawerIssue.issue_type,
-                  station_code: drawerIssue.station_code ?? undefined,
-                  station_name: drawerIssue.station_name ?? undefined,
-                  employee_name: (drawerIssue as Record<string, unknown>).employee_name ?? undefined,
-                  reason_codes: (drawerIssue as Record<string, unknown>).reason_codes ?? undefined,
-                  created_at: (drawerIssue as Record<string, unknown>).created_at ?? drawerIssue.date ?? undefined,
-                },
-                null,
-                2
-              )}
-            </pre>
+              <div className="p-4 overflow-y-auto max-h-[calc(80vh-56px)]">
+                {/* Title: incident type */}
+                <div className="mb-4">
+                  <span
+                    className="text-sm font-semibold uppercase tracking-wider"
+                    style={{ color: "var(--text)" }}
+                    data-testid="cockpit-incident-type-label"
+                  >
+                    {(() => {
+                      const t = (drawerIssue.type ?? drawerIssue.issue_type ?? "").toString().toUpperCase();
+                      if (t.includes("SKILL")) return "SKILL";
+                      const filterType = incidentTypeForIssue(drawerIssue);
+                      return filterType === "OTHER" ? (drawerIssue.type ?? drawerIssue.issue_type ?? "INCIDENT").toString() : filterType;
+                    })()}
+                  </span>
+                </div>
+                {/* Key facts grid (2 columns) */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-4 text-xs">
+                  <div>
+                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Station</span>
+                    <p className="mt-0.5" style={{ color: "var(--text)" }}>
+                      {drawerIssue.station_code
+                        ? (drawerIssue.station_name ? `${drawerIssue.station_code} (${drawerIssue.station_name})` : drawerIssue.station_code)
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Severity</span>
+                    <p className="mt-0.5" style={{ color: "var(--text)" }}>
+                      {drawerIssue.severity === "BLOCKING" ? "BLOCKING" : "NON_BLOCKING"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Created at</span>
+                    <p className="mt-0.5" style={{ color: "var(--text)" }}>
+                      {(drawerIssue as Record<string, unknown>).created_at
+                        ? new Date((drawerIssue as Record<string, unknown>).created_at as string).toLocaleString()
+                        : drawerIssue.date
+                          ? new Date(drawerIssue.date).toLocaleString()
+                          : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium" style={{ color: "var(--text-3)" }}>Identifiers</span>
+                    <p className="mt-0.5 font-mono text-[11px] break-all" style={{ color: "var(--text-2)" }}>
+                      {[drawerIssue.issue_id, (drawerIssue as Record<string, unknown>).target_id, drawerIssue.decision_id]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </p>
+                  </div>
+                </div>
+                {/* What happened */}
+                <div className="mb-4 pb-4 border-b" style={{ borderColor: "var(--hairline)" }}>
+                  <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
+                    What happened
+                  </span>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text)" }} data-testid="cockpit-incident-what-happened">
+                    {incidentWhatHappened(drawerIssue)}
+                  </p>
+                </div>
+                {/* Show raw: collapsible JSON */}
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowRawJson((v) => !v)}
+                    className="text-xs font-medium px-2 py-1 border rounded"
+                    style={{
+                      borderColor: "var(--hairline)",
+                      background: "var(--surface-3)",
+                      color: "var(--text-2)",
+                    }}
+                    data-testid="cockpit-incident-show-raw"
+                  >
+                    {showRawJson ? "Hide raw" : "Show raw"}
+                  </button>
+                  {showRawJson && (
+                    <pre
+                      className="text-xs whitespace-pre-wrap font-mono mt-2 p-3 rounded border overflow-x-auto"
+                      style={{
+                        color: "var(--text-2)",
+                        borderColor: "var(--hairline)",
+                        background: "var(--surface-3)",
+                        maxHeight: "240px",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {JSON.stringify(
+                        {
+                          type: drawerIssue.type || drawerIssue.issue_type,
+                          station_code: drawerIssue.station_code ?? undefined,
+                          station_name: drawerIssue.station_name ?? undefined,
+                          employee_name: (drawerIssue as Record<string, unknown>).employee_name ?? undefined,
+                          reason_codes: (drawerIssue as Record<string, unknown>).reason_codes ?? undefined,
+                          created_at: (drawerIssue as Record<string, unknown>).created_at ?? drawerIssue.date ?? undefined,
+                          issue_id: drawerIssue.issue_id,
+                          decision_id: drawerIssue.decision_id ?? undefined,
+                          severity: drawerIssue.severity,
+                        },
+                        null,
+                        2
+                      )}
+                    </pre>
+                  )}
+                </div>
             {mode === "SHIFT" && (
               <>
                 <div className="border-t my-4" style={{ borderColor: "var(--hairline)" }} />
@@ -1157,10 +1273,11 @@ export default function CockpitPage() {
                 </div>
               </>
             )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </PageFrame>
   );
 }
