@@ -233,6 +233,7 @@ export default function CockpitPage() {
   const [summary, setSummary] = useState<CockpitSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const [issues, setIssues] = useState<CockpitIssueRow[]>([]);
   const [issuesError, setIssuesError] = useState<string | null>(null);
@@ -297,6 +298,7 @@ export default function CockpitPage() {
         if (cancelled) return;
         if (res.ok) {
           setSummary(res.data);
+          setLastUpdatedAt(new Date());
         } else {
           setError(res.error ?? "Failed to load summary");
           setSummary(null);
@@ -464,57 +466,93 @@ export default function CockpitPage() {
   return (
     <PageFrame>
       <div className="min-h-[calc(100vh-0px)] h-[calc(100vh-0px)] flex flex-col">
-        {/* TopBar: fixed at top, no scroll */}
-        <header
-          className="h-8 w-full flex items-center justify-between px-0 shrink-0 rounded-sm border-b"
-          style={{
-            height: "32px",
-            borderColor: "var(--hairline, rgba(15,23,42,0.10))",
-            background: "var(--surface-2, #F9FAFB)",
-          }}
-          data-testid="cockpit-topbar"
-        >
-        <span className="text-xs font-medium" style={{ color: "var(--text-2)" }}>
-          Command Layer
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setMode("GLOBAL")}
-            className="px-2.5 py-1 text-xs font-medium rounded transition-colors"
-            style={
-              mode === "GLOBAL"
-                ? { background: "var(--surface-3)", color: "var(--text)", border: "1px solid var(--hairline)" }
-                : { color: "var(--text-2)", border: "1px solid transparent" }
-            }
-            data-testid="cockpit-mode-global"
+        {/* Main: scrollable; Command Strip sticks at top */}
+        <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+          {/* Command Strip: sticky, compact */}
+          <div
+            className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-4 py-2 px-4 bg-white border-b border-slate-200"
+            data-testid="cockpit-command-strip"
           >
-            GLOBAL
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("SHIFT")}
-            className="px-2.5 py-1 text-xs font-medium rounded transition-colors"
-            style={
-              mode === "SHIFT"
-                ? { background: "var(--surface-3)", color: "var(--text)", border: "1px solid var(--hairline)" }
-                : { color: "var(--text-2)", border: "1px solid transparent" }
-            }
-            data-testid="cockpit-mode-shift"
-          >
-            SHIFT
-          </button>
-        </div>
-      </header>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                Command
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMode("GLOBAL")}
+                  className="px-2.5 py-1 text-xs font-medium rounded transition-colors border"
+                  style={
+                    mode === "GLOBAL"
+                      ? { background: "var(--surface-3)", color: "var(--text)", borderColor: "var(--hairline)" }
+                      : { color: "var(--text-2)", borderColor: "transparent" }
+                  }
+                  data-testid="cockpit-mode-global"
+                >
+                  GLOBAL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("SHIFT")}
+                  className="px-2.5 py-1 text-xs font-medium rounded transition-colors border"
+                  style={
+                    mode === "SHIFT"
+                      ? { background: "var(--surface-3)", color: "var(--text)", borderColor: "var(--hairline)" }
+                      : { color: "var(--text-2)", borderColor: "transparent" }
+                  }
+                  data-testid="cockpit-mode-shift"
+                >
+                  SHIFT
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {mode === "SHIFT" ? (
+                <>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <span className="font-medium">Date</span>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-900 bg-white"
+                      data-testid="cockpit-date-input"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <span className="font-medium">Shift</span>
+                    <select
+                      value={shiftCode}
+                      onChange={(e) => setShiftCode(e.target.value)}
+                      className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-900 bg-white"
+                      data-testid="cockpit-shift-select"
+                    >
+                      {SHIFT_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <span className="text-xs text-slate-500">Global view</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-500" data-testid="cockpit-last-updated">
+              <span>Last updated</span>
+              <span className="font-mono tabular-nums">
+                {lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "—"}
+              </span>
+            </div>
+          </div>
 
-        {/* Main: non-scroll (AboveFold) + scroll (ActionLayer) */}
-        <main className="flex-1 flex flex-col overflow-hidden min-h-0">
-          {/* AboveFold: StatusCore + RiskTriad, no scroll */}
+          {/* AboveFold: StatusCore + RiskTriad */}
           <div className="shrink-0">
             {mode === "SHIFT" && (
               <div
                 data-testid="cockpit-shift-strip"
-                className="shrink-0 h-8 flex items-center justify-between px-3 border border-[var(--hairline)] bg-[var(--surface-2)] mb-3"
+                className="shrink-0 h-8 flex items-center justify-between px-3 border border-[var(--hairline)] bg-[var(--surface-2)] mb-3 mx-4 mt-4"
                 style={{ borderRadius: 4 }}
               >
                 <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-2)]">
@@ -620,25 +658,6 @@ export default function CockpitPage() {
           <p className="text-sm" style={{ color: "var(--text-2)" }}>
             Shift: {mode === "SHIFT" ? shiftCode : "—"}
           </p>
-          {mode === "SHIFT" && (
-            <select
-              value={shiftCode}
-              onChange={(e) => setShiftCode(e.target.value)}
-              className="mt-3 text-sm rounded border px-2 py-1.5 w-full max-w-[140px]"
-              style={{
-                borderColor: "var(--hairline)",
-                background: "var(--surface-3)",
-                color: "var(--text)",
-              }}
-              data-testid="cockpit-shift-select"
-            >
-              {SHIFT_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          )}
           <p className="text-sm mt-2" style={{ color: "var(--text-2)" }}>
             Last evaluation: —
           </p>
@@ -733,7 +752,7 @@ export default function CockpitPage() {
 
           {/* Divider: EXECUTION */}
           <div
-            className="shrink-0 flex items-center gap-2 py-1.5 border-b"
+            className="shrink-0 flex items-center gap-2 py-1.5 border-b px-4"
             style={{ borderColor: "var(--hairline)" }}
           >
             <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
@@ -741,8 +760,8 @@ export default function CockpitPage() {
             </span>
           </div>
 
-          {/* ActionLayer: only scrollable region */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          {/* ActionLayer */}
+          <div className="min-h-0">
             <section
               className="grid grid-cols-1 md:grid-cols-3 gap-6 p-1"
               data-testid="cockpit-action-layer"
