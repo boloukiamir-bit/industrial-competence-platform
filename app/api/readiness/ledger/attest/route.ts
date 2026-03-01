@@ -1,8 +1,9 @@
 /**
- * GET /api/readiness/ledger/verify
- * Full ledger chain verification: hash + chain linkage for all snapshots of active org.
- * Auth: org member; active org from session only (no org_id in query).
+ * GET /api/readiness/ledger/attest
+ * HMAC-signed attestation of ledger head after full chain verification.
+ * Auth: org member; active org from session only. 403 if no active org.
  */
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.error("[readiness/ledger/verify] fetch error:", error);
+    console.error("[readiness/ledger/attest] fetch error:", error);
     const res = NextResponse.json(
       { ok: false, error: "DB_ERROR", message: error.message },
       { status: 500 }
@@ -59,36 +60,64 @@ export async function GET(request: NextRequest) {
   }
 
   const list = ((rows ?? []) as unknown) as SnapshotRow[];
-
-  if (list.length === 0) {
-    const res = NextResponse.json({
-      ok: true,
-      chain_valid: true,
-      total_snapshots: 0,
-      verified_snapshots: 0,
-    });
-    applySupabaseCookies(res, pendingCookies);
-    return res;
-  }
-
   const result = verifyLedgerChain(list);
 
-  if (!result.chain_valid) {
+  if (result.chain_valid !== true) {
     const res = NextResponse.json({
-      ok: true,
-      chain_valid: false,
-      reason: result.reason,
-      first_invalid_position: result.first_invalid_position,
+      ok: false,
+      error: "LEDGER_NOT_VALID",
     });
     applySupabaseCookies(res, pendingCookies);
     return res;
   }
+
+  const total_snapshots = list.length;
+
+  const { data: latestRow } = await admin
+    .from("readiness_snapshots")
+    .select("chain_position, payload_hash")
+    .eq("org_id", org.activeOrgId)
+    .order("chain_position", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const head_position =
+    latestRow?.chain_position != null
+      ? typeof latestRow.chain_position === "number"
+        ? latestRow.chain_position
+        : parseInt(String(latestRow.chain_position), 10)
+      : null;
+  const head_hash =
+    latestRow?.payload_hash != null ? String(latestRow.payload_hash).trim() : null;
+
+  const payload = {
+    org_id: org.activeOrgId,
+    head_position,
+    head_hash,
+    total_snapshots,
+    verified_at: new Date().toISOString(),
+  };
+
+  const secret = process.env.LEDGER_ATTESTATION_SECRET;
+  if (!secret || secret.trim() === "") {
+    throw new Error(
+      "LEDGER_ATTESTATION_SECRET is not set; cannot sign readiness ledger attestation"
+    );
+  }
+
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(JSON.stringify(payload))
+    .digest("hex");
 
   const res = NextResponse.json({
     ok: true,
-    chain_valid: true,
-    total_snapshots: list.length,
-    verified_snapshots: list.length,
+    attestation: {
+      ...payload,
+      signature_algo: "HMAC_SHA256_V1",
+      signature,
+    },
   });
   applySupabaseCookies(res, pendingCookies);
   return res;

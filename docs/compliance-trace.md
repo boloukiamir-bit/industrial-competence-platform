@@ -123,6 +123,20 @@ Snapshot content: readiness-v3 (legal/ops flags, overall status, reason_codes, s
 
 ---
 
+## Ledger Attestation
+
+HMAC-signed attestation of the readiness ledger head after full chain verification. Used to prove that the org's snapshot chain was valid at a point in time and to allow external verification using the same secret.
+
+| Layer | File | Detail |
+|-------|------|--------|
+| **API route** | `app/api/readiness/ledger/attest/route.ts` | `GET` — same auth as ledger verify (active org from session). Runs full chain verification (shared logic in `lib/server/readiness/verifyLedgerChain.ts`). If `chain_valid !== true` returns `{ ok: false, error: "LEDGER_NOT_VALID" }`. If valid, fetches latest snapshot (by `chain_position` DESC, `created_at` DESC), builds deterministic payload `{ org_id, head_position, head_hash, total_snapshots, verified_at }`, signs with HMAC-SHA256 using `LEDGER_ATTESTATION_SECRET`, returns `{ ok: true, attestation: { ...payload, signature_algo: "HMAC_SHA256_V1", signature } }`. |
+| **Shared verification** | `lib/server/readiness/verifyLedgerChain.ts` | Pure function `verifyLedgerChain(rows)`: hash check per row + V2 chain linkage. Used by both `GET /api/readiness/ledger/verify` and `GET /api/readiness/ledger/attest`. |
+| **Secret** | `LEDGER_ATTESTATION_SECRET` (env) | **Required at runtime.** If missing or empty, the attest route throws an explicit error. Must be set in deployment for attestation to work. Not committed to the repo. |
+
+**HMAC signing and verification:** The attestation payload is deterministic (org_id, head_position, head_hash, total_snapshots, verified_at). The server signs `JSON.stringify(payload)` with HMAC-SHA256 using the secret. A verifier that holds the same secret can recompute `HMAC-SHA256(secret, JSON.stringify(payload))` and compare to `signature`; if they match, the payload was produced by a server with the secret and has not been altered. **Secret-based verification:** Only parties that share `LEDGER_ATTESTATION_SECRET` can produce or verify attestations. Rotate the secret if compromise is suspected; old attestations remain valid for their `verified_at` time but new attestations will use the new key.
+
+---
+
 ## Competence trace (Matrix v2 — operational readiness)
 
 Roster-scoped competence engine for **operational** readiness (stations × mandatory skills × roster employees). Deterministic; audit-friendly breakdowns.
