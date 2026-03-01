@@ -665,8 +665,9 @@ export default function CockpitPage() {
                   className="rounded border-l-2 pl-3 py-2 border"
                   style={{
                     borderColor: "var(--hairline)",
-                    borderLeftColor:
-                      issue.severity === "BLOCKING"
+                    borderLeftColor: issue.decision_overrides_blocking
+                      ? "var(--hairline)"
+                      : issue.severity === "BLOCKING"
                         ? "var(--status-critical, #B91C1C)"
                         : "var(--status-warning, #B45309)",
                     background: "var(--surface-3)",
@@ -688,7 +689,7 @@ export default function CockpitPage() {
                         style={{ color: "var(--text-3)" }}
                         data-testid="cockpit-incident-decision-badge"
                       >
-                        DECISION LOGGED — {issue.decision_action ?? "—"}
+                        {issue.decision_overrides_blocking ? "OVERRIDDEN" : `DECISION LOGGED — ${issue.decision_action ?? "—"}`}
                       </span>
                     )}
                   </div>
@@ -835,6 +836,11 @@ export default function CockpitPage() {
                             : "—"}
                         </p>
                       </div>
+                      {drawerIssue.decision_action === "OVERRIDE" && (
+                        <p className="text-xs mt-1" style={{ color: "var(--text-3)" }}>
+                          Blocking impact removed for verdict.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <>

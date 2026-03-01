@@ -65,6 +65,8 @@ export type CockpitIssue = {
   decision_action?: string | null;
   /** Reason text from COCKPIT_INCIDENT decision (for read-only display). */
   decision_reason?: string | null;
+  /** True when BLOCKING and decision_action === OVERRIDE (blocking impact removed for verdict). */
+  decision_overrides_blocking?: boolean;
   /** Set only for issue_type === "UNSTAFFED" (SHIFT or GLOBAL). */
   unstaffed_reason?: "NO_ROSTER_ROW" | "HAS_ROSTER_ROW";
 };
@@ -614,9 +616,12 @@ export async function fetchCockpitIssues(
         issue.decision_action = incident.decision_action;
         issue.decision_reason = incident.decision_reason;
         issue.decision_created_at = incident.created_at;
+        issue.decision_overrides_blocking =
+          issue.severity === "BLOCKING" && incident.decision_action === "OVERRIDE";
       } else {
         issue.decision_logged = false;
         issue.decision_action = null;
+        issue.decision_overrides_blocking = false;
       }
     }
   }
