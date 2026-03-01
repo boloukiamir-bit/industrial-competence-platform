@@ -9,6 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
+import { buildIdempotencyKey, type IssuePayload } from "@/lib/server/cockpitIncidentIdempotency";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,29 +25,6 @@ const DB_DECISION_TYPE_MAP: Record<string, string> = {
   ESCALATE: "escalate",
 };
 const SHIFT_CODES = ["Day", "Evening", "Night"] as const;
-
-type IssuePayload = {
-  type?: string;
-  issue_type?: string;
-  station_id?: string;
-  station_code?: string;
-  employee_id?: string;
-  employee_name?: string;
-  reason_code?: string;
-  [k: string]: unknown;
-};
-
-function buildIdempotencyKey(
-  date: string,
-  shiftCode: string,
-  issue: IssuePayload
-): string {
-  const type = (issue.type ?? issue.issue_type ?? "UNKNOWN").toString().trim();
-  const station = (issue.station_id ?? issue.station_code ?? "NA").toString().trim();
-  const employee = (issue.employee_id ?? issue.employee_name ?? "NA").toString().trim();
-  const reasonCode = (issue.reason_code ?? "NA").toString().trim();
-  return `INCIDENT_DECISION:${date}:${shiftCode}:${type}:${station}:${employee}:${reasonCode}`;
-}
 
 export async function POST(request: NextRequest) {
   const { supabase, pendingCookies } = await createSupabaseServerClient(request);

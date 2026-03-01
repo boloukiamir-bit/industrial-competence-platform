@@ -575,12 +575,25 @@ export default function CockpitPage() {
                   }}
                   data-testid="cockpit-incident-card"
                 >
-                  <p className="text-xs font-medium" style={{ color: "var(--text)" }}>
-                    {issue.type || issue.issue_type}
-                  </p>
-                  <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-2)" }}>
-                    {issueSummary(issue)}
-                  </p>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium" style={{ color: "var(--text)" }}>
+                        {issue.type || issue.issue_type}
+                      </p>
+                      <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-2)" }}>
+                        {issueSummary(issue)}
+                      </p>
+                    </div>
+                    {mode === "SHIFT" && issue.decision_logged && (
+                      <span
+                        className="text-xs font-medium uppercase tracking-wider shrink-0"
+                        style={{ color: "var(--text-3)" }}
+                        data-testid="cockpit-incident-decision-badge"
+                      >
+                        DECISION LOGGED — {issue.decision_action ?? "—"}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
                     <button
                       type="button"
@@ -602,9 +615,9 @@ export default function CockpitPage() {
                         }}
                         className="text-xs font-medium underline focus:outline-none"
                         style={{ color: "var(--text-2)" }}
-                        data-testid="cockpit-incident-log-decision"
+                        data-testid={issue.decision_logged ? "cockpit-incident-view-decision" : "cockpit-incident-log-decision"}
                       >
-                        Log decision
+                        {issue.decision_logged ? "View decision" : "Log decision"}
                       </button>
                     )}
                   </div>
@@ -700,91 +713,115 @@ export default function CockpitPage() {
                   <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
                     DECISION
                   </span>
-                  <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>
-                      Type
-                    </label>
-                    <select
-                      value={decisionType}
-                      onChange={(e) => setDecisionType(e.target.value)}
-                      className="w-full text-xs rounded border px-2 py-1.5"
-                      style={{
-                        borderColor: "var(--hairline)",
-                        background: "var(--surface-3)",
-                        color: "var(--text)",
-                      }}
-                      data-testid="cockpit-decision-type"
-                    >
-                      <option value="Acknowledge">Acknowledge</option>
-                      <option value="Override">Override</option>
-                      <option value="Escalate">Escalate</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>
-                      Reason
-                    </label>
-                    <textarea
-                      value={decisionReason}
-                      onChange={(e) => setDecisionReason(e.target.value)}
-                      rows={3}
-                      placeholder="Reason"
-                      className="w-full text-xs rounded border px-2 py-1.5 resize-y"
-                      style={{
-                        borderColor: "var(--hairline)",
-                        background: "var(--surface-3)",
-                        color: "var(--text)",
-                      }}
-                      data-testid="cockpit-decision-reason"
-                    />
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      disabled={
-                        decisionSaving ||
-                        !drawerIssue ||
-                        decisionReason.trim().length < 10
-                      }
-                      onClick={handleSaveDecision}
-                      className="text-xs font-medium px-3 py-1.5 rounded border"
-                      style={{
-                        borderColor: "var(--hairline)",
-                        background:
-                          decisionSaving || decisionReason.trim().length < 10
-                            ? "var(--surface-3)"
-                            : "var(--surface-3)",
-                        color:
-                          decisionSaving || decisionReason.trim().length < 10
-                            ? "var(--text-3)"
-                            : "var(--text)",
-                        cursor:
-                          decisionSaving || decisionReason.trim().length < 10
-                            ? "not-allowed"
-                            : "pointer",
-                      }}
-                      data-testid="cockpit-decision-save"
-                    >
-                      {decisionSaving ? "Saving…" : "Save decision"}
-                    </button>
-                    {decisionSaved && (
-                      <p
-                        className="text-xs mt-1"
-                        style={{ color: "var(--text-2)" }}
-                        data-testid="cockpit-decision-saved"
-                      >
-                        Decision logged.
-                      </p>
-                    )}
-                    {decisionError && (
-                      <p
-                        className="text-xs mt-1"
-                        style={{ color: "var(--status-critical, #B91C1C)" }}
-                      >
-                        {decisionError}
-                      </p>
-                    )}
-                  </div>
+                  {drawerIssue.decision_logged ? (
+                    <div className="space-y-2" data-testid="cockpit-decision-readonly">
+                      <div>
+                        <span className="text-xs font-medium" style={{ color: "var(--text-3)" }}>Action</span>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text)" }}>
+                          {drawerIssue.decision_action ?? "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs font-medium" style={{ color: "var(--text-3)" }}>Reason</span>
+                        <p className="text-xs mt-0.5 whitespace-pre-wrap" style={{ color: "var(--text)" }}>
+                          {drawerIssue.decision_reason ?? "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs font-medium" style={{ color: "var(--text-3)" }}>Logged at</span>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text)" }}>
+                          {drawerIssue.decision_created_at
+                            ? new Date(drawerIssue.decision_created_at).toLocaleString()
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>
+                          Type
+                        </label>
+                        <select
+                          value={decisionType}
+                          onChange={(e) => setDecisionType(e.target.value)}
+                          className="w-full text-xs rounded border px-2 py-1.5"
+                          style={{
+                            borderColor: "var(--hairline)",
+                            background: "var(--surface-3)",
+                            color: "var(--text)",
+                          }}
+                          data-testid="cockpit-decision-type"
+                        >
+                          <option value="Acknowledge">Acknowledge</option>
+                          <option value="Override">Override</option>
+                          <option value="Escalate">Escalate</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>
+                          Reason
+                        </label>
+                        <textarea
+                          value={decisionReason}
+                          onChange={(e) => setDecisionReason(e.target.value)}
+                          rows={3}
+                          placeholder="Reason"
+                          className="w-full text-xs rounded border px-2 py-1.5 resize-y"
+                          style={{
+                            borderColor: "var(--hairline)",
+                            background: "var(--surface-3)",
+                            color: "var(--text)",
+                          }}
+                          data-testid="cockpit-decision-reason"
+                        />
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          disabled={
+                            decisionSaving ||
+                            !drawerIssue ||
+                            decisionReason.trim().length < 10
+                          }
+                          onClick={handleSaveDecision}
+                          className="text-xs font-medium px-3 py-1.5 rounded border"
+                          style={{
+                            borderColor: "var(--hairline)",
+                            background: "var(--surface-3)",
+                            color:
+                              decisionSaving || decisionReason.trim().length < 10
+                                ? "var(--text-3)"
+                                : "var(--text)",
+                            cursor:
+                              decisionSaving || decisionReason.trim().length < 10
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                          data-testid="cockpit-decision-save"
+                        >
+                          {decisionSaving ? "Saving…" : "Save decision"}
+                        </button>
+                        {decisionSaved && (
+                          <p
+                            className="text-xs mt-1"
+                            style={{ color: "var(--text-2)" }}
+                            data-testid="cockpit-decision-saved"
+                          >
+                            Decision logged.
+                          </p>
+                        )}
+                        {decisionError && (
+                          <p
+                            className="text-xs mt-1"
+                            style={{ color: "var(--status-critical, #B91C1C)" }}
+                          >
+                            {decisionError}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </>
             )}

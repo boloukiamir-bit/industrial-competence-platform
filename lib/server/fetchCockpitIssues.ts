@@ -9,6 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
 import { stationShiftTargetId } from "@/lib/shared/decisionIds";
 import { normalizeShiftCode } from "@/lib/server/normalizeShiftCode";
+import { buildIdempotencyKey, type IssuePayload } from "@/lib/server/cockpitIncidentIdempotency";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,6 +59,12 @@ export type CockpitIssue = {
   decision_actions?: string[];
   decision_created_at?: string | null;
   decision_type?: string | null;
+  /** True when a COCKPIT_INCIDENT decision exists for this issue (same idempotency_key, shift). */
+  decision_logged?: boolean;
+  /** Action from COCKPIT_INCIDENT decision (ACKNOWLEDGE | OVERRIDE | ESCALATE). */
+  decision_action?: string | null;
+  /** Reason text from COCKPIT_INCIDENT decision (for read-only display). */
+  decision_reason?: string | null;
   /** Set only for issue_type === "UNSTAFFED" (SHIFT or GLOBAL). */
   unstaffed_reason?: "NO_ROSTER_ROW" | "HAS_ROSTER_ROW";
 };
@@ -556,6 +563,62 @@ export async function fetchCockpitIssues(
       decision_type: dec?.decision_type ?? undefined,
       ...(unstaffedReason !== undefined && { unstaffed_reason: unstaffedReason }),
     });
+  }
+
+  // SHIFT: enrich with COCKPIT_INCIDENT decision-logged state (same idempotency_key, shift_date, shift_code).
+  if (shiftFilter && dateString) {
+    const { data: incidentRows } = await supabaseAdmin
+      .from("execution_decisions")
+      .select("root_cause, created_at")
+      .eq("org_id", org_id)
+      .eq("target_type", "COCKPIT_INCIDENT")
+      .eq("status", "active");
+
+    const incidentByKey = new Map<
+      string,
+      { decision_action: string; decision_reason: string | null; created_at: string | null }
+    >();
+    for (const row of incidentRows ?? []) {
+      const rc = row.root_cause as Record<string, unknown> | null;
+      if (!rc) continue;
+      const shift = rc.shift as Record<string, unknown> | null;
+      if (shift?.date !== dateString || shift?.shift_code !== shiftFilter) continue;
+      const idem = rc.idempotency_key as string | undefined;
+      if (!idem || typeof idem !== "string") continue;
+      const decision = rc.decision as Record<string, unknown> | null;
+      const action = (decision?.action as string) ?? "ACKNOWLEDGE";
+      const reason = (decision?.reason as string) ?? null;
+      incidentByKey.set(idem, {
+        decision_action: action,
+        decision_reason: typeof reason === "string" ? reason : null,
+        created_at: (row.created_at as string) ?? null,
+      });
+    }
+
+    for (const issue of issues) {
+      const payload: IssuePayload = {
+        type: issue.type,
+        issue_type: issue.issue_type,
+        station_id: issue.station_id,
+        station_code: issue.station_code ?? undefined,
+        employee_id: (issue as Record<string, unknown>).employee_id as string | undefined,
+        employee_name: (issue as Record<string, unknown>).employee_name as string | undefined,
+        reason_code: Array.isArray((issue as Record<string, unknown>).reason_codes)
+          ? ((issue as Record<string, unknown>).reason_codes as string[])[0]
+          : ((issue as Record<string, unknown>).reason_code as string | undefined),
+      };
+      const key = buildIdempotencyKey(dateString, shiftFilter, payload);
+      const incident = incidentByKey.get(key);
+      if (incident) {
+        issue.decision_logged = true;
+        issue.decision_action = incident.decision_action;
+        issue.decision_reason = incident.decision_reason;
+        issue.decision_created_at = incident.created_at;
+      } else {
+        issue.decision_logged = false;
+        issue.decision_action = null;
+      }
+    }
   }
 
   if (debug && debugInfo) {
