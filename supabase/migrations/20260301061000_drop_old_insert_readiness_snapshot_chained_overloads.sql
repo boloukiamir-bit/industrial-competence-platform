@@ -1,7 +1,20 @@
--- Single source of truth for snapshot hash: app (Node) computes hash; DB stores it.
--- New RPC returns next chain position and previous hash; insert RPC accepts hash and chain fields from app.
+-- Drop all overloads of insert_readiness_snapshot_chained and recreate the single canonical (hash-storing) version.
+-- Idempotent: duplicates function definitions so this migration works even if 20260301060000 was partially applied.
 
--- 1) RPC: return next chain position and previous hash for an org (under advisory lock).
+do $$
+declare r record;
+begin
+  for r in
+    select n.nspname as schema, p.proname as name, pg_get_function_identity_arguments(p.oid) as args
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'insert_readiness_snapshot_chained'
+  loop
+    execute format('drop function if exists %I.%I(%s);', r.schema, r.name, r.args);
+  end loop;
+end $$;
+
+-- Ensure get_next_readiness_snapshot_chain_head exists (canonical definition).
 create or replace function public.get_next_readiness_snapshot_chain_head(p_org_id uuid)
 returns table (next_position bigint, prev_hash text)
 language plpgsql
@@ -29,10 +42,7 @@ $$;
 comment on function public.get_next_readiness_snapshot_chain_head is
 'Returns (next_position, prev_hash) for app to compute canonical V2 hash before calling insert_readiness_snapshot_chained.';
 
--- 2) Drop old insert RPC (17 args, hash computed in DB) so the new signature is unique.
-drop function if exists public.insert_readiness_snapshot_chained(uuid, uuid, date, text, text, text, text, integer, text, integer, text, uuid, text[], jsonb, jsonb, jsonb, text);
-
--- 3) Create insert RPC: accept payload_hash and chain fields from app; do not compute hash in DB.
+-- Recreate the single canonical insert_readiness_snapshot_chained (app supplies hash).
 create or replace function public.insert_readiness_snapshot_chained(
   p_org_id uuid,
   p_site_id uuid,
