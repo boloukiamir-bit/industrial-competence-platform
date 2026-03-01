@@ -5,6 +5,12 @@ import { PageFrame } from "@/components/layout/PageFrame";
 import { fetchJson } from "@/lib/coreFetch";
 import type { CockpitSummaryResponse } from "@/app/api/cockpit/summary/route";
 
+const SHIFT_OPTIONS = ["Day", "Evening", "Night"] as const;
+
+function todayString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 type Verdict = "GO" | "WARNING" | "NO-GO";
 
 function verdictFromSummary(s: CockpitSummaryResponse): Verdict {
@@ -22,20 +28,26 @@ function countByType(byType: Array<{ type: string; count: number }> | undefined,
 /**
  * 2030 Command Layer skeleton.
  * Structure: TopBar → StatusCore (8/4) → RiskTriad (3) → ActionLayer (3).
- * StatusCore is wired to /api/cockpit/summary.
+ * StatusCore is wired to /api/cockpit/summary. Mode toggle: GLOBAL | SHIFT.
  */
 export default function CockpitPage() {
+  const [mode, setMode] = useState<"GLOBAL" | "SHIFT">("GLOBAL");
+  const [shiftCode, setShiftCode] = useState("Day");
+  const [selectedDate, setSelectedDate] = useState(() => todayString());
+
   const [summary, setSummary] = useState<CockpitSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
     const params = new URLSearchParams({
-      date: today,
-      shift_code: "Day",
+      date: selectedDate,
+      shift_code: shiftCode,
       line: "all",
     });
+    if (mode === "SHIFT") {
+      params.set("mode", "shift");
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -60,7 +72,7 @@ export default function CockpitPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mode, selectedDate, shiftCode]);
 
   const verdict: Verdict | null = summary ? verdictFromSummary(summary) : null;
   const blockingConditions = summary?.active_blocking ?? 0;
@@ -70,9 +82,9 @@ export default function CockpitPage() {
 
   return (
     <PageFrame>
-      {/* TopBar: thin 32px bar */}
+      {/* TopBar: thin 32px bar + mode toggle */}
       <header
-        className="h-8 w-full flex items-center px-0 mb-6 rounded-sm border-b"
+        className="h-8 w-full flex items-center justify-between px-0 mb-6 rounded-sm border-b"
         style={{
           height: "32px",
           borderColor: "var(--hairline, rgba(15,23,42,0.10))",
@@ -83,6 +95,34 @@ export default function CockpitPage() {
         <span className="text-xs font-medium" style={{ color: "var(--text-2)" }}>
           Command Layer
         </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setMode("GLOBAL")}
+            className="px-2.5 py-1 text-xs font-medium rounded transition-colors"
+            style={
+              mode === "GLOBAL"
+                ? { background: "var(--surface-3)", color: "var(--text)", border: "1px solid var(--hairline)" }
+                : { color: "var(--text-2)", border: "1px solid transparent" }
+            }
+            data-testid="cockpit-mode-global"
+          >
+            GLOBAL
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("SHIFT")}
+            className="px-2.5 py-1 text-xs font-medium rounded transition-colors"
+            style={
+              mode === "SHIFT"
+                ? { background: "var(--surface-3)", color: "var(--text)", border: "1px solid var(--hairline)" }
+                : { color: "var(--text-2)", border: "1px solid transparent" }
+            }
+            data-testid="cockpit-mode-shift"
+          >
+            SHIFT
+          </button>
+        </div>
       </header>
 
       {/* StatusCore: 8/4 grid split */}
@@ -128,7 +168,7 @@ export default function CockpitPage() {
             </li>
           </ul>
         </div>
-        {/* Right: 4 cols — Mode + Last evaluation */}
+        {/* Right: 4 cols — Mode + Date + Shift */}
         <div
           className="lg:col-span-4 rounded-lg border p-6"
           style={{
@@ -137,9 +177,34 @@ export default function CockpitPage() {
           }}
         >
           <p className="text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
-            MODE: GLOBAL
+            MODE: {mode}
           </p>
           <p className="text-sm" style={{ color: "var(--text-2)" }}>
+            Date: {selectedDate}
+          </p>
+          <p className="text-sm" style={{ color: "var(--text-2)" }}>
+            Shift: {mode === "SHIFT" ? shiftCode : "—"}
+          </p>
+          {mode === "SHIFT" && (
+            <select
+              value={shiftCode}
+              onChange={(e) => setShiftCode(e.target.value)}
+              className="mt-3 text-sm rounded border px-2 py-1.5 w-full max-w-[140px]"
+              style={{
+                borderColor: "var(--hairline)",
+                background: "var(--surface-3)",
+                color: "var(--text)",
+              }}
+              data-testid="cockpit-shift-select"
+            >
+              {SHIFT_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-sm mt-2" style={{ color: "var(--text-2)" }}>
             Last evaluation: —
           </p>
         </div>
