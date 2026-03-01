@@ -1,11 +1,17 @@
 /**
- * GET /api/readiness/snapshots/[id]
- * Drilldown for a single readiness snapshot. Auth: org member (snapshot must belong to active org).
+ * GET /api/readiness/snapshots/[id]/verify
+ * Tamper-evident check: recompute payload hash and compare to stored value.
+ * Auth: org member (snapshot must belong to active org).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActiveOrgFromSession } from "@/lib/server/activeOrg";
 import { createSupabaseServerClient, applySupabaseCookies } from "@/lib/supabase/server";
+import {
+  computePayloadHash,
+  canonicalPayloadFromRow,
+  PAYLOAD_HASH_ALGO,
+} from "@/lib/server/readiness/snapshotPayloadHash";
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,6 +19,8 @@ function getAdmin() {
   if (!url || !key) return null;
   return createClient(url, key);
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(
   request: NextRequest,
@@ -30,7 +38,7 @@ export async function GET(
   }
 
   const { id } = await params;
-  if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+  if (!id || !UUID_RE.test(id)) {
     const res = NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 });
     applySupabaseCookies(res, pendingCookies);
     return res;
@@ -49,14 +57,14 @@ export async function GET(
   const { data: row, error } = await admin
     .from("readiness_snapshots")
     .select(
-      "id, org_id, site_id, shift_date, shift_code, legal_flag, ops_flag, overall_status, iri_score, iri_grade, roster_employee_count, version, created_at, created_by, overall_reason_codes, legal_blockers_sample, ops_no_go_stations_sample, engines, payload_hash, payload_hash_algo"
+      "id, org_id, site_id, shift_date, shift_code, legal_flag, ops_flag, overall_status, iri_score, iri_grade, roster_employee_count, version, overall_reason_codes, legal_blockers_sample, ops_no_go_stations_sample, engines, payload_hash, payload_hash_algo"
     )
     .eq("id", id)
     .eq("org_id", org.activeOrgId)
     .maybeSingle();
 
   if (error) {
-    console.error("[readiness/snapshots/[id]] fetch error:", error);
+    console.error("[readiness/snapshots/[id]/verify] fetch error:", error);
     const res = NextResponse.json(
       { ok: false, error: "DB_ERROR", message: error.message },
       { status: 500 }
@@ -72,40 +80,34 @@ export async function GET(
   }
 
   const r = row as Record<string, unknown>;
-  const snapshot = {
-    id: r.id,
-    shift_date: r.shift_date,
-    shift_code: r.shift_code,
-    legal_flag: r.legal_flag,
-    ops_flag: r.ops_flag,
-    overall_status: r.overall_status,
-    iri_score: r.iri_score,
-    iri_grade: r.iri_grade,
-    roster_employee_count: r.roster_employee_count,
-    version: r.version,
-    created_at: r.created_at,
-    created_by: r.created_by,
-    overall_reason_codes: Array.isArray(r.overall_reason_codes) ? r.overall_reason_codes : [],
-    legal_blockers_sample: r.legal_blockers_sample ?? [],
-    ops_no_go_stations_sample: r.ops_no_go_stations_sample ?? [],
-    engines: r.engines && typeof r.engines === "object" ? r.engines : {},
-    ...(r.payload_hash != null && { payload_hash: r.payload_hash }),
-    ...(r.payload_hash_algo != null && { payload_hash_algo: r.payload_hash_algo }),
-  };
+  const storedHash = r.payload_hash == null ? null : String(r.payload_hash);
+  const algo = r.payload_hash_algo != null ? String(r.payload_hash_algo) : PAYLOAD_HASH_ALGO;
 
-  const debug = request.nextUrl.searchParams.get("debug") === "1";
-  const payload: Record<string, unknown> = {
-    ok: true,
-    snapshot,
-  };
-  if (debug) {
-    payload._debug = {
-      org_id: r.org_id,
-      site_id: r.site_id,
-    };
+  if (storedHash == null || storedHash === "") {
+    const res = NextResponse.json({
+      ok: true,
+      snapshot_id: id,
+      stored_hash: null,
+      computed_hash: null,
+      match: false,
+      reason: "MISSING_HASH",
+      algo,
+    });
+    applySupabaseCookies(res, pendingCookies);
+    return res;
   }
 
-  const res = NextResponse.json(payload);
+  const input = canonicalPayloadFromRow(r);
+  const computedHash = computePayloadHash(input);
+
+  const res = NextResponse.json({
+    ok: true,
+    snapshot_id: id,
+    stored_hash: storedHash,
+    computed_hash: computedHash,
+    match: computedHash === storedHash,
+    algo,
+  });
   applySupabaseCookies(res, pendingCookies);
   return res;
 }

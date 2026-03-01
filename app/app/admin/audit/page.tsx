@@ -231,6 +231,11 @@ function ReadinessSnapshotBlock({ snapshotId }: { snapshotId: string }) {
               Ops NO_GO stations sample: {(snapshot.ops_no_go_stations_sample as unknown[]).length} item(s)
             </p>
           )}
+          {snapshot.payload_hash != null && String(snapshot.payload_hash).length > 0 && (
+            <p className="text-sm text-muted-foreground font-mono">
+              Integrity hash: {String(snapshot.payload_hash)}
+            </p>
+          )}
           <pre className="p-3 rounded-md bg-muted text-muted-foreground text-xs overflow-x-auto">
             <code>{JSON.stringify(snapshot, null, 2)}</code>
           </pre>

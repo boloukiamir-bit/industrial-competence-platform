@@ -5,6 +5,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
+import { computePayloadHash, PAYLOAD_HASH_ALGO } from "@/lib/server/readiness/snapshotPayloadHash";
 
 const DUPLICATE_WINDOW_MINUTES = 1;
 
@@ -129,6 +130,24 @@ export async function createOrReuseReadinessSnapshot(
     };
   }
 
+  const payloadHash = computePayloadHash({
+    org_id: orgId,
+    site_id: siteId,
+    shift_date: date,
+    shift_code: normalized,
+    legal_flag: legalFlag,
+    ops_flag: opsFlag,
+    overall_status: overallStatus,
+    overall_reason_codes: overallReasonCodes,
+    iri_score: iriScore,
+    iri_grade: iriGrade,
+    roster_employee_count: rosterCount,
+    version: "IRI_V1",
+    engines,
+    legal_blockers_sample: legalBlockersSample,
+    ops_no_go_stations_sample: opsNoGoStationsSample,
+  });
+
   const { data: row, error: insertErr } = await admin
     .from("readiness_snapshots")
     .insert({
@@ -148,6 +167,8 @@ export async function createOrReuseReadinessSnapshot(
       legal_blockers_sample: legalBlockersSample,
       ops_no_go_stations_sample: opsNoGoStationsSample,
       engines,
+      payload_hash: payloadHash,
+      payload_hash_algo: PAYLOAD_HASH_ALGO,
     })
     .select("id, created_at")
     .single();
