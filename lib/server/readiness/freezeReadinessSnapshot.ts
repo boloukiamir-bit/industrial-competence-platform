@@ -165,3 +165,99 @@ export async function createOrReuseReadinessSnapshot(
     duplicate: false,
   };
 }
+
+/** Payload for creating a snapshot without fetching readiness-v3/iri-v1 (e.g. dev force-snapshot). */
+export type ReadinessSnapshotPayload = {
+  legal_flag: string;
+  ops_flag: string;
+  overall_status: string;
+  iri_score: number;
+  iri_grade: string;
+  roster_employee_count: number;
+  version: string;
+  overall_reason_codes: string[];
+  legal_blockers_sample: unknown[];
+  ops_no_go_stations_sample: unknown[];
+  engines: Record<string, unknown>;
+};
+
+export type CreateReadinessSnapshotWithPayloadParams = {
+  admin: SupabaseClient;
+  orgId: string;
+  siteId: string;
+  userId: string;
+  date: string;
+  shiftCode: string;
+  payload: ReadinessSnapshotPayload;
+};
+
+/**
+ * Create or reuse a readiness snapshot using an explicit payload (no readiness-v3/iri-v1 fetch).
+ * Same 1-minute duplicate window and insert_readiness_snapshot_chained RPC as createOrReuseReadinessSnapshot.
+ * For dev/debug use (e.g. force-snapshot endpoint).
+ */
+export async function createReadinessSnapshotWithPayload(
+  params: CreateReadinessSnapshotWithPayloadParams
+): Promise<FreezeReadinessSnapshotResult> {
+  const { admin, orgId, siteId, userId, date, shiftCode, payload } = params;
+  const normalized = normalizeShiftParam(shiftCode);
+  if (!normalized) {
+    throw new Error(`Invalid shift_code: ${shiftCode}`);
+  }
+
+  const windowStart = new Date(Date.now() - DUPLICATE_WINDOW_MINUTES * 60 * 1000).toISOString();
+  const { data: recent } = await admin
+    .from("readiness_snapshots")
+    .select("id, created_at")
+    .eq("org_id", orgId)
+    .eq("site_id", siteId)
+    .eq("shift_date", date)
+    .eq("shift_code", normalized)
+    .gte("created_at", windowStart)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recent?.id) {
+    return {
+      snapshot_id: recent.id,
+      created_at: (recent as { created_at: string }).created_at,
+      duplicate: true,
+    };
+  }
+
+  const { data: rows, error: rpcErr } = await admin.rpc("insert_readiness_snapshot_chained", {
+    p_org_id: orgId,
+    p_site_id: siteId,
+    p_shift_date: date,
+    p_shift_code: normalized,
+    p_legal_flag: payload.legal_flag,
+    p_ops_flag: payload.ops_flag,
+    p_overall_status: payload.overall_status,
+    p_iri_score: payload.iri_score,
+    p_iri_grade: payload.iri_grade,
+    p_roster_employee_count: payload.roster_employee_count,
+    p_version: payload.version,
+    p_created_by: userId,
+    p_overall_reason_codes: payload.overall_reason_codes,
+    p_legal_blockers_sample: payload.legal_blockers_sample,
+    p_ops_no_go_stations_sample: payload.ops_no_go_stations_sample,
+    p_engines: payload.engines,
+    p_payload_hash_algo: HASH_ALGO_V2,
+  });
+
+  if (rpcErr) {
+    throw new Error(`readiness_snapshots insert failed: ${rpcErr.message}`);
+  }
+
+  const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  if (!row || row.id == null) {
+    throw new Error("insert_readiness_snapshot_chained did not return id");
+  }
+
+  return {
+    snapshot_id: row.id,
+    created_at: row.created_at ?? new Date().toISOString(),
+    duplicate: false,
+  };
+}
