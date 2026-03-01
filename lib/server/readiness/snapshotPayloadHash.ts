@@ -1,7 +1,8 @@
 /**
  * Deterministic SHA-256 hash of readiness snapshot canonical payload.
+ * Single source of truth for hashing: app (Node) only. DB stores the hash; it does not compute it.
  * Algorithm versioning: V1 = pre-chain (no previous_hash/chain_position), V2 = chain-aware.
- * Shared by freeze (on insert) and verify endpoint.
+ * Shared by freeze (on insert) and verify endpoint. Inserts use V2 canonical only.
  */
 import { createHash } from "node:crypto";
 

@@ -2,10 +2,15 @@
  * Create or reuse a readiness snapshot (execution freeze) for a given org/site/date/shift.
  * Shared by POST /api/cockpit/readiness-freeze and execution decision creation.
  * Duplicate guard: same org/site/date/shift within 1 minute reuses existing snapshot.
+ * Hash is computed in app (Node) as single source of truth; DB RPC stores provided hash.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
-import { HASH_ALGO_V2 } from "@/lib/server/readiness/snapshotPayloadHash";
+import {
+  HASH_ALGO_V2,
+  computePayloadHash,
+  type CanonicalPayloadInput,
+} from "@/lib/server/readiness/snapshotPayloadHash";
 
 const DUPLICATE_WINDOW_MINUTES = 1;
 
@@ -130,6 +135,40 @@ export async function createOrReuseReadinessSnapshot(
     };
   }
 
+  const { data: headRows, error: headErr } = await admin.rpc("get_next_readiness_snapshot_chain_head", {
+    p_org_id: orgId,
+  });
+  if (headErr) {
+    throw new Error(`get_next_readiness_snapshot_chain_head failed: ${headErr.message}`);
+  }
+  const head = Array.isArray(headRows) && headRows.length > 0 ? headRows[0] : null;
+  if (!head || head.next_position == null) {
+    throw new Error("get_next_readiness_snapshot_chain_head returned no row");
+  }
+  const nextPosition = Number(head.next_position);
+  const prevHash = head.prev_hash != null ? String(head.prev_hash).trim() : null;
+
+  const canonicalInput: CanonicalPayloadInput = {
+    org_id: orgId,
+    site_id: siteId,
+    shift_date: date,
+    shift_code: normalized,
+    previous_hash: prevHash || null,
+    chain_position: nextPosition,
+    legal_flag: legalFlag,
+    ops_flag: opsFlag,
+    overall_status: overallStatus,
+    overall_reason_codes: overallReasonCodes,
+    iri_score: iriScore,
+    iri_grade: iriGrade,
+    roster_employee_count: rosterCount,
+    version: "IRI_V1",
+    engines,
+    legal_blockers_sample: legalBlockersSample,
+    ops_no_go_stations_sample: opsNoGoStationsSample,
+  };
+  const payloadHash = computePayloadHash(canonicalInput, HASH_ALGO_V2);
+
   const { data: rows, error: rpcErr } = await admin.rpc("insert_readiness_snapshot_chained", {
     p_org_id: orgId,
     p_site_id: siteId,
@@ -147,6 +186,9 @@ export async function createOrReuseReadinessSnapshot(
     p_legal_blockers_sample: legalBlockersSample,
     p_ops_no_go_stations_sample: opsNoGoStationsSample,
     p_engines: engines,
+    p_chain_position: nextPosition,
+    p_previous_hash: prevHash,
+    p_payload_hash: payloadHash,
     p_payload_hash_algo: HASH_ALGO_V2,
   });
 
@@ -226,6 +268,40 @@ export async function createReadinessSnapshotWithPayload(
     };
   }
 
+  const { data: headRows, error: headErr } = await admin.rpc("get_next_readiness_snapshot_chain_head", {
+    p_org_id: orgId,
+  });
+  if (headErr) {
+    throw new Error(`get_next_readiness_snapshot_chain_head failed: ${headErr.message}`);
+  }
+  const head = Array.isArray(headRows) && headRows.length > 0 ? headRows[0] : null;
+  if (!head || head.next_position == null) {
+    throw new Error("get_next_readiness_snapshot_chain_head returned no row");
+  }
+  const nextPosition = Number(head.next_position);
+  const prevHash = head.prev_hash != null ? String(head.prev_hash).trim() : null;
+
+  const canonicalInput: CanonicalPayloadInput = {
+    org_id: orgId,
+    site_id: siteId,
+    shift_date: date,
+    shift_code: normalized,
+    previous_hash: prevHash || null,
+    chain_position: nextPosition,
+    legal_flag: payload.legal_flag,
+    ops_flag: payload.ops_flag,
+    overall_status: payload.overall_status,
+    overall_reason_codes: payload.overall_reason_codes,
+    iri_score: payload.iri_score,
+    iri_grade: payload.iri_grade,
+    roster_employee_count: payload.roster_employee_count,
+    version: payload.version,
+    engines: payload.engines,
+    legal_blockers_sample: payload.legal_blockers_sample,
+    ops_no_go_stations_sample: payload.ops_no_go_stations_sample,
+  };
+  const payloadHash = computePayloadHash(canonicalInput, HASH_ALGO_V2);
+
   const { data: rows, error: rpcErr } = await admin.rpc("insert_readiness_snapshot_chained", {
     p_org_id: orgId,
     p_site_id: siteId,
@@ -243,6 +319,9 @@ export async function createReadinessSnapshotWithPayload(
     p_legal_blockers_sample: payload.legal_blockers_sample,
     p_ops_no_go_stations_sample: payload.ops_no_go_stations_sample,
     p_engines: payload.engines,
+    p_chain_position: nextPosition,
+    p_previous_hash: prevHash,
+    p_payload_hash: payloadHash,
     p_payload_hash_algo: HASH_ALGO_V2,
   });
 
