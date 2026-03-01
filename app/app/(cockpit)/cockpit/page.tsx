@@ -146,6 +146,10 @@ export default function CockpitPage() {
   const [incidentsFilter, setIncidentsFilter] = useState<IncidentFilterType>("ALL");
   const [showResolved, setShowResolved] = useState(false);
 
+  const [recentDecisions, setRecentDecisions] = useState<Array<{ id: string; created_at: string; action: string; reason: string; issue_type: string; station_code: string | null }>>([]);
+  const [recentDecisionsLoading, setRecentDecisionsLoading] = useState(false);
+  const [recentDecisionsVersion, setRecentDecisionsVersion] = useState(0);
+
   const activeIncidentsRef = useRef<HTMLDivElement>(null);
   const drawerDecisionRef = useRef<HTMLDivElement>(null);
 
@@ -254,6 +258,36 @@ export default function CockpitPage() {
     };
   }, [mode, selectedDate, shiftCode]);
 
+  useEffect(() => {
+    if (mode !== "SHIFT") {
+      setRecentDecisions([]);
+      return;
+    }
+    let cancelled = false;
+    setRecentDecisionsLoading(true);
+    const params = new URLSearchParams({ date: selectedDate, shift_code: shiftCode });
+    fetchJson<{ ok?: boolean; decisions?: Array<{ id: string; created_at: string; action: string; reason: string; issue_type: string; station_code: string | null }> }>(
+      `/api/cockpit/decisions/recent?${params.toString()}`
+    )
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data?.ok && Array.isArray(res.data.decisions)) {
+          setRecentDecisions(res.data.decisions);
+        } else {
+          setRecentDecisions([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRecentDecisions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentDecisionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, selectedDate, shiftCode, recentDecisionsVersion]);
+
   const verdict: Verdict | null = summary ? verdictFromSummary(summary) : null;
   const blockingConditions = summary?.active_blocking ?? 0;
   const illegalStates = countByType(summary?.by_type, "ILLEGAL");
@@ -311,6 +345,7 @@ export default function CockpitPage() {
       }
       if (res.data?.ok) {
         setDecisionSaved(true);
+        setRecentDecisionsVersion((v) => v + 1);
         setTimeout(() => setDrawerIssue(null), 400);
       } else {
         setDecisionError(typeof res.data?.error === "string" ? res.data.error : "Failed to save decision");
@@ -741,18 +776,53 @@ export default function CockpitPage() {
         )()}
         </div>
         <div
-          className="rounded-lg border p-6 min-h-[120px]"
+          className="rounded-lg border p-4 min-h-[120px]"
           style={{
             borderColor: "var(--hairline)",
             background: "var(--surface-2)",
           }}
+          data-testid="cockpit-execution-decisions-ledger"
         >
-          <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+          <h3 className="text-sm font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-2)" }}>
             EXECUTION DECISIONS
           </h3>
-          <p className="text-xs mt-2" style={{ color: "var(--text-3)" }}>
-            —
-          </p>
+          {mode !== "SHIFT" && (
+            <p className="text-xs" style={{ color: "var(--text-3)" }}>—</p>
+          )}
+          {mode === "SHIFT" && recentDecisionsLoading && (
+            <p className="text-xs" style={{ color: "var(--text-3)" }}>Loading…</p>
+          )}
+          {mode === "SHIFT" && !recentDecisionsLoading && recentDecisions.length === 0 && (
+            <p className="text-xs" style={{ color: "var(--text-3)" }}>—</p>
+          )}
+          {mode === "SHIFT" && !recentDecisionsLoading && recentDecisions.length > 0 && (
+            <ul className="space-y-2">
+              {recentDecisions.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs border-b"
+                  style={{ borderColor: "var(--hairline)", paddingBottom: 6 }}
+                >
+                  <span className="font-mono shrink-0" style={{ color: "var(--text-3)" }}>
+                    {d.created_at ? new Date(d.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}
+                  </span>
+                  <span className="font-medium uppercase" style={{ color: "var(--text-2)" }}>{d.action}</span>
+                  <span className="truncate min-w-0 flex-1" style={{ color: "var(--text-2)" }} title={d.reason}>
+                    {d.reason ? (d.reason.length > 48 ? `${d.reason.slice(0, 48)}…` : d.reason) : "—"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/app/admin/audit?id=${encodeURIComponent(d.id)}`)}
+                    className="text-xs font-medium underline shrink-0 focus:outline-none"
+                    style={{ color: "var(--text-3)" }}
+                    data-testid="cockpit-decision-ledger-open-audit"
+                  >
+                    Open
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div
           className="rounded-lg border p-6 min-h-[120px]"
