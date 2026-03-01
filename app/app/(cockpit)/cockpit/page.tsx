@@ -983,44 +983,31 @@ export default function CockpitPage() {
         </main>
       </div>
 
-      {/* Incident details drawer: overlay + right panel */}
+      {/* Incident details: centered modal dialog */}
       {drawerIssue && (
-        <div
-          className="fixed inset-0 z-50"
-          data-testid="cockpit-incident-drawer"
-          role="dialog"
-          aria-modal="true"
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <button
             type="button"
-            className="absolute inset-0 bg-black/30"
             aria-label="Close"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setDrawerIssue(null)}
           />
           <div
-            className="absolute right-0 top-0 z-10 h-full w-[520px] max-w-[92vw] overflow-y-auto border-l shadow-xl p-4"
-            style={{
-              background: "var(--surface-2)",
-              borderColor: "var(--hairline)",
-            }}
+            data-testid="cockpit-incident-drawer"
+            className="relative w-[720px] max-w-[92vw] max-h-[80vh] overflow-hidden bg-[var(--surface-2)] border border-[var(--hairline)] shadow-2xl rounded-lg"
           >
-            <div className="flex justify-between items-start mb-3">
-              <span className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
-                INCIDENT
-              </span>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--hairline)]">
+              <div className="text-[12px] tracking-[0.12em] uppercase text-[var(--text-2)]">INCIDENT</div>
               <button
                 type="button"
+                className="text-[12px] px-2 py-1 border border-[var(--hairline)] bg-[var(--surface-3)] text-[var(--text)] rounded"
                 onClick={() => setDrawerIssue(null)}
-                className="text-xs font-medium px-2 py-1 rounded border"
-                style={{
-                  borderColor: "var(--hairline)",
-                  background: "var(--surface-3)",
-                  color: "var(--text)",
-                }}
               >
                 Close
               </button>
             </div>
+
+            <div className="p-4 overflow-y-auto max-h-[calc(80vh-56px)]">
             <pre className="text-xs whitespace-pre-wrap font-mono mb-4" style={{ color: "var(--text-2)" }}>
               {JSON.stringify(
                 {
@@ -1170,6 +1157,7 @@ export default function CockpitPage() {
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       )}
