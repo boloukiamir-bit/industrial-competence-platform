@@ -62,6 +62,28 @@ function issueSummary(issue: CockpitIssueRow): string {
   return t ?? r ?? m ?? issue.recommended_action ?? "—";
 }
 
+function incidentCardLines(issue: CockpitIssueRow): { line1: string; line2: string } {
+  const what = (issue.type || issue.issue_type || "INCIDENT").toString().trim();
+  const stationCode = (issue.station_code ?? "").toString().trim();
+  const stationName = (issue.station_name ?? "").toString().trim();
+  const where = stationCode
+    ? (stationName ? `${stationCode} (${stationName})` : stationCode)
+    : "—";
+  const who = (issue as Record<string, unknown>).employee_name as string | undefined;
+  const reasonCodes = (issue as Record<string, unknown>).reason_codes as string[] | undefined;
+  const why =
+    (reasonCodes?.[0] as string | undefined) ??
+    ((issue as Record<string, unknown>).reason as string | undefined) ??
+    ((issue as Record<string, unknown>).message as string | undefined) ??
+    ((issue as Record<string, unknown>).title as string | undefined) ??
+    "";
+  const line2Parts: string[] = [];
+  if (who) line2Parts.push("Employee: " + who);
+  if (why) line2Parts.push(why);
+  const line2 = line2Parts.join(" • ") || "";
+  return { line1: `${what} • ${where}`, line2: line2.trim() };
+}
+
 type IncidentFilterType = "ALL" | "ILLEGAL" | "UNSTAFFED" | "GOVERNANCE" | "OTHER";
 type IncidentSortMode = "blocking_first" | "newest_first";
 
@@ -696,7 +718,9 @@ export default function CockpitPage() {
               <p className="text-xs" style={{ color: "var(--text-3)" }}>—</p>
             ) : (
             <ul className="space-y-2">
-              {filteredIssues.map((issue) => (
+              {filteredIssues.map((issue) => {
+                const cardLines = incidentCardLines(issue);
+                return (
                 <li
                   key={issue.issue_id}
                   className="rounded border-l-2 pl-3 py-2 border"
@@ -713,11 +737,11 @@ export default function CockpitPage() {
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium" style={{ color: "var(--text)" }}>
-                        {issue.type || issue.issue_type}
+                      <p className="text-xs font-semibold" style={{ color: "var(--text)" }}>
+                        {cardLines.line1}
                       </p>
-                      <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-2)" }}>
-                        {issueSummary(issue)}
+                      <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-3)" }} title={cardLines.line2}>
+                        {cardLines.line2 || "—"}
                       </p>
                     </div>
                     {mode === "SHIFT" && issue.decision_logged && (
@@ -739,8 +763,9 @@ export default function CockpitPage() {
                       }}
                       className="text-xs font-medium underline focus:outline-none"
                       style={{ color: "var(--text-2)" }}
+                      data-testid="cockpit-incident-details"
                     >
-                      Open
+                      Details
                     </button>
                     {mode === "SHIFT" && (
                       <button
@@ -769,7 +794,8 @@ export default function CockpitPage() {
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           );
           }
@@ -843,20 +869,25 @@ export default function CockpitPage() {
         </main>
       </div>
 
-      {/* Minimal incident details drawer */}
+      {/* Incident details drawer: overlay + right panel */}
       {drawerIssue && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(15,23,42,0.4)" }}
+          className="fixed inset-0 z-50"
           data-testid="cockpit-incident-drawer"
           role="dialog"
           aria-modal="true"
         >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/30"
+            aria-label="Close"
+            onClick={() => setDrawerIssue(null)}
+          />
           <div
-            className="rounded-lg border p-4 max-w-md w-full max-h-[80vh] overflow-auto"
+            className="absolute right-0 top-0 z-10 h-full w-[520px] max-w-[92vw] overflow-y-auto border-l shadow-xl p-4"
             style={{
-              borderColor: "var(--hairline)",
               background: "var(--surface-2)",
+              borderColor: "var(--hairline)",
             }}
           >
             <div className="flex justify-between items-start mb-3">
