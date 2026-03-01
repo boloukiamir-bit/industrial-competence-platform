@@ -173,22 +173,27 @@ export default function CockpitPage() {
   const staffingRisk = riskStaffing(summary);
   const driftRisk = riskDrift(summary);
 
+  function scrollActionToRef(ref: React.RefObject<HTMLElement | null>) {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function scrollToActiveIncidents() {
-    activeIncidentsRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollActionToRef(activeIncidentsRef);
   }
 
   return (
     <PageFrame>
-      {/* TopBar: thin 32px bar + mode toggle */}
-      <header
-        className="h-8 w-full flex items-center justify-between px-0 mb-6 rounded-sm border-b"
-        style={{
-          height: "32px",
-          borderColor: "var(--hairline, rgba(15,23,42,0.10))",
-          background: "var(--surface-2, #F9FAFB)",
-        }}
-        data-testid="cockpit-topbar"
-      >
+      <div className="min-h-[calc(100vh-0px)] h-[calc(100vh-0px)] flex flex-col">
+        {/* TopBar: fixed at top, no scroll */}
+        <header
+          className="h-8 w-full flex items-center justify-between px-0 shrink-0 rounded-sm border-b"
+          style={{
+            height: "32px",
+            borderColor: "var(--hairline, rgba(15,23,42,0.10))",
+            background: "var(--surface-2, #F9FAFB)",
+          }}
+          data-testid="cockpit-topbar"
+        >
         <span className="text-xs font-medium" style={{ color: "var(--text-2)" }}>
           Command Layer
         </span>
@@ -222,11 +227,15 @@ export default function CockpitPage() {
         </div>
       </header>
 
-      {/* StatusCore: 8/4 grid split */}
-      <section
-        className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8"
-        data-testid="cockpit-status-core"
-      >
+        {/* Main: non-scroll (AboveFold) + scroll (ActionLayer) */}
+        <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+          {/* AboveFold: StatusCore + RiskTriad, no scroll */}
+          <div className="shrink-0">
+            {/* StatusCore: 8/4 grid split */}
+            <section
+              className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4 min-h-[360px] max-h-[480px] overflow-hidden"
+              data-testid="cockpit-status-core"
+            >
         {/* Left: 8 cols — Industrial Status + counts */}
         <div
           className="lg:col-span-8 rounded-lg border p-6"
@@ -307,11 +316,11 @@ export default function CockpitPage() {
         </div>
       </section>
 
-      {/* RiskTriad: 3 live blocks */}
-      <section
-        className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
-        data-testid="cockpit-risk-triad"
-      >
+            {/* RiskTriad: 3 live blocks, tight height */}
+            <section
+              className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 max-h-[160px] overflow-hidden"
+              data-testid="cockpit-risk-triad"
+            >
         <div
           className="rounded-lg border p-4"
           style={{
@@ -391,12 +400,24 @@ export default function CockpitPage() {
           </button>
         </div>
       </section>
+          </div>
 
-      {/* ActionLayer: ACTIVE INCIDENTS live; others placeholder */}
-      <section
-        className="grid grid-cols-1 md:grid-cols-3 gap-6"
-        data-testid="cockpit-action-layer"
-      >
+          {/* Divider: EXECUTION */}
+          <div
+            className="shrink-0 flex items-center gap-2 py-1.5 border-b"
+            style={{ borderColor: "var(--hairline)" }}
+          >
+            <span className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
+              EXECUTION
+            </span>
+          </div>
+
+          {/* ActionLayer: only scrollable region */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <section
+              className="grid grid-cols-1 md:grid-cols-3 gap-6 p-1"
+              data-testid="cockpit-action-layer"
+            >
         <div
           ref={activeIncidentsRef}
           className="rounded-lg border p-4 min-h-[120px]"
@@ -487,7 +508,10 @@ export default function CockpitPage() {
             —
           </p>
         </div>
-      </section>
+            </section>
+          </div>
+        </main>
+      </div>
 
       {/* Minimal incident details drawer */}
       {drawerIssue && (
