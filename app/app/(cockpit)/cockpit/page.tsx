@@ -1062,7 +1062,7 @@ export default function CockpitPage() {
                       {drawerIssue.severity === "BLOCKING" ? "BLOCKING" : "NON_BLOCKING"}
                     </p>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <span className="font-medium text-slate-600">Created at</span>
                     <p className="mt-0.5 text-slate-900">
                       {(drawerIssue as Record<string, unknown>).created_at
@@ -1070,14 +1070,6 @@ export default function CockpitPage() {
                         : drawerIssue.date
                           ? new Date(drawerIssue.date).toLocaleString()
                           : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-600">Identifiers</span>
-                    <p className="mt-0.5 font-mono text-[11px] break-all text-slate-700">
-                      {[drawerIssue.issue_id, (drawerIssue as Record<string, unknown>).target_id, drawerIssue.decision_id]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
                     </p>
                   </div>
                 </div>
