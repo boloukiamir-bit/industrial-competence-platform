@@ -203,6 +203,22 @@ function accentColorForVerdict(
   return "var(--hairline)";
 }
 
+type SystemConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+/** Derive system confidence from summary only; no new API. */
+function systemConfidenceFromSummary(summary: CockpitSummaryResponse | null, hasError: boolean): SystemConfidence {
+  if (hasError || summary == null) return "LOW";
+  const total = summary.active_total;
+  const blocking = summary.active_blocking ?? 0;
+  const nonblocking = summary.active_nonblocking ?? 0;
+  const totalNum = typeof total === "number" && !Number.isNaN(total);
+  const blockNum = typeof blocking === "number" && !Number.isNaN(blocking);
+  const nonblockNum = typeof nonblocking === "number" && !Number.isNaN(nonblocking);
+  if (!totalNum || !blockNum || !nonblockNum) return "LOW";
+  if (total === blocking + nonblocking) return "HIGH";
+  return "MEDIUM";
+}
+
 /**
  * 2030 Command Layer skeleton.
  * Structure: TopBar → StatusCore (8/4) → RiskTriad (3) → ActionLayer (3).
@@ -377,6 +393,7 @@ export default function CockpitPage() {
 
   const verdict: Verdict | null = summary ? verdictFromSummary(summary) : null;
   const blockingConditions = summary?.active_blocking ?? 0;
+  const systemConfidence = systemConfidenceFromSummary(summary, !!error);
   const illegalStates = countByType(summary?.by_type, "ILLEGAL");
   const unstaffedStations = countByType(summary?.by_type, "UNSTAFFED");
   const governanceConflicts = countByType(summary?.by_type, "GOVERNANCE");
@@ -513,7 +530,7 @@ export default function CockpitPage() {
               className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4 min-h-[360px] max-h-[480px] overflow-hidden"
               data-testid="cockpit-status-core"
             >
-        {/* Left: 8 cols — Industrial Status + counts */}
+        {/* Left: 8 cols — Industrial Status (instrument panel) */}
         <div
           className="lg:col-span-8 rounded-lg border p-6"
           style={{
@@ -531,35 +548,60 @@ export default function CockpitPage() {
               ),
             }}
           />
-          <h2 className="text-sm font-semibold uppercase tracking-wider mb-1 mt-4" style={{ color: "var(--text-2)" }}>
-            Industrial Status
-          </h2>
-          <p className="text-2xl font-semibold tabular-nums mb-6" style={{ color: "var(--text)" }} data-testid="cockpit-verdict">
+          <div className="flex items-start justify-between gap-4 mt-4 mb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
+              Industrial Status
+            </h2>
+            <div className="flex items-center gap-2 shrink-0" data-testid="cockpit-system-confidence">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                System confidence
+              </span>
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                  systemConfidence === "HIGH"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : systemConfidence === "MEDIUM"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    systemConfidence === "HIGH"
+                      ? "bg-emerald-600"
+                      : systemConfidence === "MEDIUM"
+                        ? "bg-amber-600"
+                        : "bg-slate-500"
+                  }`}
+                  aria-hidden
+                />
+                {systemConfidence}
+              </span>
+            </div>
+          </div>
+          <p
+            className="text-3xl font-bold tracking-tight tabular-nums text-slate-900 mt-1 mb-5"
+            data-testid="cockpit-verdict"
+          >
             {loading ? "Evaluating…" : error ? "—" : verdict ?? "—"}
           </p>
           {error && (
-            <p className="text-sm mb-4" style={{ color: "var(--text-2)" }} data-testid="cockpit-summary-error">
+            <p className="text-sm mb-4 text-slate-600" data-testid="cockpit-summary-error">
               {error}
             </p>
           )}
-          <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            <li className="flex items-center gap-2">
-              <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>{blockingConditions}</span>
-              <span style={{ color: "var(--text-2)" }}>Blocking Conditions</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>{illegalStates}</span>
-              <span style={{ color: "var(--text-2)" }}>Illegal States</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>{unstaffedStations}</span>
-              <span style={{ color: "var(--text-2)" }}>Unstaffed Stations</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>{governanceConflicts}</span>
-              <span style={{ color: "var(--text-2)" }}>Governance Conflicts</span>
-            </li>
-          </ul>
+          <div className="flex flex-wrap gap-6">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Blocking</p>
+              <p className="text-xl font-bold tabular-nums text-slate-900 mt-0.5">{blockingConditions}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Non-blocking</p>
+              <p className="text-lg font-semibold tabular-nums text-slate-600 mt-0.5">
+                {summary?.active_nonblocking ?? 0}
+              </p>
+            </div>
+          </div>
         </div>
         {/* Right: 4 cols — Mode + Date + Shift */}
         <div
