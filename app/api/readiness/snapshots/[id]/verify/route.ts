@@ -57,7 +57,7 @@ export async function GET(
   const { data: row, error } = await admin
     .from("readiness_snapshots")
     .select(
-      "id, org_id, site_id, shift_date, shift_code, legal_flag, ops_flag, overall_status, iri_score, iri_grade, roster_employee_count, version, overall_reason_codes, legal_blockers_sample, ops_no_go_stations_sample, engines, payload_hash, payload_hash_algo"
+      "id, org_id, site_id, shift_date, shift_code, previous_hash, chain_position, legal_flag, ops_flag, overall_status, iri_score, iri_grade, roster_employee_count, version, overall_reason_codes, legal_blockers_sample, ops_no_go_stations_sample, engines, payload_hash, payload_hash_algo"
     )
     .eq("id", id)
     .eq("org_id", org.activeOrgId)

@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeShiftParam } from "@/lib/server/normalizeShift";
-import { computePayloadHash, PAYLOAD_HASH_ALGO } from "@/lib/server/readiness/snapshotPayloadHash";
+import { PAYLOAD_HASH_ALGO } from "@/lib/server/readiness/snapshotPayloadHash";
 
 const DUPLICATE_WINDOW_MINUTES = 1;
 
@@ -130,56 +130,38 @@ export async function createOrReuseReadinessSnapshot(
     };
   }
 
-  const payloadHash = computePayloadHash({
-    org_id: orgId,
-    site_id: siteId,
-    shift_date: date,
-    shift_code: normalized,
-    legal_flag: legalFlag,
-    ops_flag: opsFlag,
-    overall_status: overallStatus,
-    overall_reason_codes: overallReasonCodes,
-    iri_score: iriScore,
-    iri_grade: iriGrade,
-    roster_employee_count: rosterCount,
-    version: "IRI_V1",
-    engines,
-    legal_blockers_sample: legalBlockersSample,
-    ops_no_go_stations_sample: opsNoGoStationsSample,
+  const { data: rows, error: rpcErr } = await admin.rpc("insert_readiness_snapshot_chained", {
+    p_org_id: orgId,
+    p_site_id: siteId,
+    p_shift_date: date,
+    p_shift_code: normalized,
+    p_legal_flag: legalFlag,
+    p_ops_flag: opsFlag,
+    p_overall_status: overallStatus,
+    p_iri_score: iriScore,
+    p_iri_grade: iriGrade,
+    p_roster_employee_count: rosterCount,
+    p_version: "IRI_V1",
+    p_created_by: userId,
+    p_overall_reason_codes: overallReasonCodes,
+    p_legal_blockers_sample: legalBlockersSample,
+    p_ops_no_go_stations_sample: opsNoGoStationsSample,
+    p_engines: engines,
+    p_payload_hash_algo: PAYLOAD_HASH_ALGO,
   });
 
-  const { data: row, error: insertErr } = await admin
-    .from("readiness_snapshots")
-    .insert({
-      org_id: orgId,
-      site_id: siteId,
-      shift_date: date,
-      shift_code: normalized,
-      legal_flag: legalFlag,
-      ops_flag: opsFlag,
-      overall_status: overallStatus,
-      iri_score: iriScore,
-      iri_grade: iriGrade,
-      roster_employee_count: rosterCount,
-      version: "IRI_V1",
-      created_by: userId,
-      overall_reason_codes: overallReasonCodes,
-      legal_blockers_sample: legalBlockersSample,
-      ops_no_go_stations_sample: opsNoGoStationsSample,
-      engines,
-      payload_hash: payloadHash,
-      payload_hash_algo: PAYLOAD_HASH_ALGO,
-    })
-    .select("id, created_at")
-    .single();
+  if (rpcErr) {
+    throw new Error(`readiness_snapshots insert failed: ${rpcErr.message}`);
+  }
 
-  if (insertErr) {
-    throw new Error(`readiness_snapshots insert failed: ${insertErr.message}`);
+  const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  if (!row || row.id == null) {
+    throw new Error("insert_readiness_snapshot_chained did not return id");
   }
 
   return {
     snapshot_id: row.id,
-    created_at: row.created_at,
+    created_at: row.created_at ?? new Date().toISOString(),
     duplicate: false,
   };
 }

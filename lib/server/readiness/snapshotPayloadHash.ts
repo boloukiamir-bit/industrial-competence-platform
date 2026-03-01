@@ -12,6 +12,10 @@ export type CanonicalPayloadInput = {
   site_id: string;
   shift_date: string;
   shift_code: string;
+  /** Chain: hash of previous snapshot (null if first or prior had no hash). */
+  previous_hash: string | null;
+  /** Chain: 1-based position per org. */
+  chain_position: number | null;
   legal_flag: string;
   ops_flag: string;
   overall_status: string;
@@ -27,6 +31,7 @@ export type CanonicalPayloadInput = {
 
 /**
  * Build canonical JSON string for hashing. Field order and sorting rules are fixed.
+ * - previous_hash, chain_position: between org/site context and flags (chain-aware).
  * - overall_reason_codes: sorted
  * - engines: keys sorted
  * - legal_blockers_sample, ops_no_go_stations_sample: keep order as passed
@@ -45,6 +50,8 @@ function buildCanonicalPayload(input: CanonicalPayloadInput): string {
     site_id: input.site_id,
     shift_date: input.shift_date,
     shift_code: input.shift_code,
+    previous_hash: input.previous_hash,
+    chain_position: input.chain_position,
     legal_flag: input.legal_flag,
     ops_flag: input.ops_flag,
     overall_status: input.overall_status,
@@ -89,11 +96,25 @@ export function canonicalPayloadFromRow(row: Record<string, unknown>): Canonical
   const str = (v: unknown, d: string) => (typeof v === "string" ? v : d);
   const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 
+  const prevHash = row.previous_hash;
+  const chainPos = row.chain_position;
+  const chainPosition =
+    chainPos != null
+      ? (typeof chainPos === "number"
+          ? (Number.isFinite(chainPos) ? chainPos : null)
+          : (() => {
+              const n = parseInt(String(chainPos), 10);
+              return Number.isFinite(n) ? n : null;
+            })())
+      : null;
+
   return {
     org_id: str(row.org_id, ""),
     site_id: str(row.site_id, ""),
     shift_date: normalizeShiftDate(row.shift_date),
     shift_code: str(row.shift_code, ""),
+    previous_hash: prevHash == null ? null : str(prevHash, ""),
+    chain_position: chainPosition,
     legal_flag: str(row.legal_flag, "LEGAL_GO"),
     ops_flag: str(row.ops_flag, "OPS_GO"),
     overall_status: str(row.overall_status, "GO"),
