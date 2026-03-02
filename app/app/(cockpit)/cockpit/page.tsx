@@ -835,9 +835,9 @@ export default function CockpitPage() {
                             setDrawerView("decision");
                           }}
                           className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-900 text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1"
-                          data-testid="cockpit-critical-path-resolve"
+                          data-testid="cockpit-critical-path-log-decision"
                         >
-                          Resolve
+                          Log decision
                         </button>
                         <button
                           type="button"
@@ -846,9 +846,9 @@ export default function CockpitPage() {
                             setDrawerView("details");
                           }}
                           className="text-xs font-medium text-slate-600 hover:text-slate-900 underline focus:outline-none"
-                          data-testid="cockpit-critical-path-details"
+                          data-testid="cockpit-critical-path-open"
                         >
-                          Details
+                          Open
                         </button>
                       </div>
                     </div>
@@ -867,9 +867,16 @@ export default function CockpitPage() {
           data-testid="cockpit-active-incidents"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
-              ACTIVE INCIDENTS
-            </h3>
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-2)" }}>
+                ACTIVE INCIDENTS
+              </h3>
+              {mode !== "SHIFT" && (
+                <p className="text-[11px] text-slate-500 mt-0.5" data-testid="cockpit-shift-hint">
+                  Switch to SHIFT to log decisions.
+                </p>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={incidentsSort}
@@ -980,24 +987,25 @@ export default function CockpitPage() {
                       }}
                       className="text-xs font-medium underline focus:outline-none"
                       style={{ color: "var(--text-2)" }}
-                      data-testid="cockpit-incident-details"
+                      data-testid="cockpit-incident-open"
                     >
-                      Details
+                      Open
                     </button>
-                    {mode === "SHIFT" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDrawerIssue(issue);
-                          setDrawerView("decision");
-                        }}
-                        className="text-xs font-medium underline focus:outline-none"
-                        style={{ color: "var(--text-2)" }}
-                        data-testid={issue.decision_logged ? "cockpit-incident-view-decision" : "cockpit-incident-log-decision"}
-                      >
-                        {issue.decision_logged ? "View decision" : "Log decision"}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (mode !== "SHIFT") return;
+                        setDrawerIssue(issue);
+                        setDrawerView("decision");
+                      }}
+                      disabled={mode !== "SHIFT"}
+                      title={mode !== "SHIFT" ? "Switch to SHIFT to log decisions." : undefined}
+                      className="text-xs font-medium underline focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                      style={{ color: "var(--text-2)" }}
+                      data-testid={issue.decision_logged ? "cockpit-incident-view-decision" : "cockpit-incident-log-decision"}
+                    >
+                      {issue.decision_logged ? "View decision" : "Log decision"}
+                    </button>
                     {mode === "SHIFT" && issue.decision_logged && issue.decision_id && (
                       <button
                         type="button"
@@ -1273,7 +1281,7 @@ export default function CockpitPage() {
                           }}
                           data-testid="cockpit-decision-save"
                         >
-                          {decisionSaving ? "Saving…" : "Save decision"}
+                          {decisionSaving ? "Saving…" : "Log decision"}
                         </button>
                         {decisionSaved && (
                           <p
