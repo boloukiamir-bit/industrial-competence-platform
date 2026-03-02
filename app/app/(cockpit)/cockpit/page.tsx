@@ -623,11 +623,17 @@ export default function CockpitPage() {
             </div>
           </div>
           <p
-            className="text-3xl font-bold tracking-tight tabular-nums text-slate-900 mt-1 mb-5"
+            className="text-3xl font-bold tracking-tight tabular-nums text-slate-900 mt-1 mb-1"
             data-testid="cockpit-verdict"
           >
             {loading ? "—" : error ? "—" : !summary ? "—" : verdict ?? "—"}
           </p>
+          {summary && verdict && (
+            <p className="text-[11px] text-slate-500 mb-5 flex flex-wrap gap-x-2 gap-y-0.5" data-testid="cockpit-verdict-legend">
+              <span className="font-medium">Legend:</span>
+              <span>GO: no blocking items · WARNING: non-blocking issues exist · NO-GO: blocking items exist</span>
+            </p>
+          )}
           {loading && (
             <div className="flex items-center gap-2 mb-4" data-testid="cockpit-status-loading">
               <span className="inline-block w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" aria-hidden />
