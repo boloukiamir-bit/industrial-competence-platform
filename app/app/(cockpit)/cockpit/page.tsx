@@ -253,6 +253,7 @@ export default function CockpitPage() {
   const [recentDecisions, setRecentDecisions] = useState<Array<{ id: string; created_at: string; action: string; reason: string; issue_type: string; station_code: string | null }>>([]);
   const [recentDecisionsLoading, setRecentDecisionsLoading] = useState(false);
   const [recentDecisionsVersion, setRecentDecisionsVersion] = useState(0);
+  const [refetchKey, setRefetchKey] = useState(0);
 
   const activeIncidentsRef = useRef<HTMLDivElement>(null);
   const drawerDecisionRef = useRef<HTMLDivElement>(null);
@@ -315,7 +316,11 @@ export default function CockpitPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedDate, shiftCode]);
+  }, [mode, selectedDate, shiftCode, refetchKey]);
+
+  function triggerRefetch() {
+    setRefetchKey((k) => k + 1);
+  }
 
   useEffect(() => {
     const params = new URLSearchParams({
@@ -361,7 +366,7 @@ export default function CockpitPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedDate, shiftCode]);
+  }, [mode, selectedDate, shiftCode, refetchKey]);
 
   useEffect(() => {
     if (mode !== "SHIFT") {
@@ -621,13 +626,35 @@ export default function CockpitPage() {
             className="text-3xl font-bold tracking-tight tabular-nums text-slate-900 mt-1 mb-5"
             data-testid="cockpit-verdict"
           >
-            {loading ? "Evaluating…" : error ? "—" : verdict ?? "—"}
+            {loading ? "—" : error ? "—" : !summary ? "—" : verdict ?? "—"}
           </p>
-          {error && (
-            <p className="text-sm mb-4 text-slate-600" data-testid="cockpit-summary-error">
-              {error}
-            </p>
+          {loading && (
+            <div className="flex items-center gap-2 mb-4" data-testid="cockpit-status-loading">
+              <span className="inline-block w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" aria-hidden />
+              <span className="text-sm text-slate-600">Computing readiness…</span>
+            </div>
           )}
+          {error && (
+            <div className="mb-4" data-testid="cockpit-summary-error">
+              <p className="text-sm font-medium text-slate-900">System status unavailable</p>
+              <p className="text-xs text-slate-500 mt-0.5">Unable to load readiness for selected parameters.</p>
+              <button
+                type="button"
+                onClick={triggerRefetch}
+                className="mt-2 text-xs font-medium px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                data-testid="cockpit-summary-retry"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {!loading && !error && !summary && (
+            <div className="mb-4" data-testid="cockpit-summary-empty">
+              <p className="text-sm font-medium text-slate-900">No data for selected shift</p>
+              <p className="text-xs text-slate-500 mt-0.5">Check date/shift.</p>
+            </div>
+          )}
+          {!loading && summary && (
           <div className="flex flex-wrap gap-6">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Blocking</p>
@@ -636,10 +663,11 @@ export default function CockpitPage() {
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Non-blocking</p>
               <p className="text-lg font-semibold tabular-nums text-slate-600 mt-0.5">
-                {summary?.active_nonblocking ?? 0}
+                {summary.active_nonblocking ?? 0}
               </p>
             </div>
           </div>
+          )}
         </div>
         {/* Right: 4 cols — Mode + Date + Shift */}
         <div
@@ -797,7 +825,7 @@ export default function CockpitPage() {
                 )}
               </div>
               {criticalPathIssues.length === 0 && (
-                <p className="text-xs text-slate-500">—</p>
+                <div className="rounded-xl border border-slate-200 bg-white py-4 px-4" data-testid="cockpit-critical-path-clear"><p className="text-sm font-semibold text-slate-800">Critical path clear</p><p className="text-xs text-slate-500 mt-0.5">No blocking items require action.</p></div>
               )}
               {criticalPathIssues.length > 0 &&
                 criticalPathIssues.map((issue) => (
@@ -922,18 +950,24 @@ export default function CockpitPage() {
             </div>
           </div>
           {issuesError && (
-            <p className="text-xs" style={{ color: "var(--text-3)" }}>
-              {issuesError}
-            </p>
+            <div data-testid="cockpit-incidents-error">
+              <p className="text-sm font-medium text-slate-900">Incident feed unavailable</p>
+              <button
+                type="button"
+                onClick={triggerRefetch}
+                className="mt-1 text-xs font-medium px-2 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                data-testid="cockpit-incidents-retry"
+              >
+                Retry
+              </button>
+            </div>
           )}
           {!issuesError && issuesLoading && (
-            <p className="text-xs" style={{ color: "var(--text-3)" }}>
-              Loading…
-            </p>
+            <p className="text-xs text-slate-500">Loading incidents…</p>
           )}
           {!issuesError && !issuesLoading && issues.length === 0 && (
-            <p className="text-xs" style={{ color: "var(--text-3)" }}>
-              —
+            <p className="text-xs text-slate-500" data-testid="cockpit-incidents-empty">
+              {mode === "GLOBAL" ? "No active incidents" : "No incidents for selected shift"}
             </p>
           )}
           {!issuesError && !issuesLoading && issues.length > 0 && (() => {
@@ -1315,3 +1349,4 @@ export default function CockpitPage() {
     </PageFrame>
   );
 }
+
