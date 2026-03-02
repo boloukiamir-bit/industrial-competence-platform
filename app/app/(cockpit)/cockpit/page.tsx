@@ -22,6 +22,19 @@ function verdictFromSummary(s: CockpitSummaryResponse): Verdict {
   return "GO";
 }
 
+/** Execution legitimacy from verdict only; no API. Shown only when verdict is present. */
+function legitimacyFromVerdict(verdict: Verdict): "VERIFIED" | "CONDITIONALLY VALID" | "LEGALLY BLOCKED" {
+  if (verdict === "GO") return "VERIFIED";
+  if (verdict === "WARNING") return "CONDITIONALLY VALID";
+  return "LEGALLY BLOCKED";
+}
+
+function legitimacyValueClass(legitimacy: "VERIFIED" | "CONDITIONALLY VALID" | "LEGALLY BLOCKED"): string {
+  if (legitimacy === "VERIFIED") return "text-emerald-700";
+  if (legitimacy === "CONDITIONALLY VALID") return "text-amber-700";
+  return "text-maroon-700";
+}
+
 function countByType(byType: Array<{ type: string; count: number }> | undefined, type: string): number {
   if (!byType?.length) return 0;
   const row = byType.find((r) => r.type === type);
@@ -628,6 +641,14 @@ export default function CockpitPage() {
           >
             {loading ? "—" : error ? "—" : !summary ? "—" : verdict ?? "—"}
           </p>
+          {summary && verdict && (
+            <div className="mb-1" data-testid="cockpit-legitimacy">
+              <p className="text-xs text-slate-500">Execution legitimacy</p>
+              <p className={`text-sm font-semibold uppercase tracking-wider ${legitimacyValueClass(legitimacyFromVerdict(verdict))}`}>
+                {legitimacyFromVerdict(verdict)}
+              </p>
+            </div>
+          )}
           {summary && verdict && (
             <p className="text-[11px] text-slate-500 mb-5 flex flex-wrap gap-x-2 gap-y-0.5" data-testid="cockpit-verdict-legend">
               <span className="font-medium">Legend:</span>
