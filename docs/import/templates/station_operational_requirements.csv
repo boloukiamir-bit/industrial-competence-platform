@@ -1,0 +1,3 @@
+station_code,required_headcount,required_skill_level,required_senior_count
+101,1.5,2,0
+102,2,2,0

@@ -1,0 +1,3 @@
+station_code,station_name,line,area,is_active
+101,Station Alpha,Ommantling,Ommantling,true
+102,Station Beta,Ommantling,Ommantling,true

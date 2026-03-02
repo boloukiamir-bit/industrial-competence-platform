@@ -18,7 +18,8 @@
     "gov:perimeter": "npx tsx scripts/gov_perimeter_audit.ts",
     "gov:perimeter:live": "BASE_URL=http://127.0.0.1:5001 npx tsx scripts/gov_perimeter_audit.ts --live",
     "smoke:cockpit": "bash scripts/smoke-cockpit.sh",
-    "verify": "bash scripts/verify.sh"
+    "verify": "bash scripts/verify.sh",
+    "gen:pilot-templates": "npx tsx scripts/generate_pilot_templates_from_gap_excel.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.0",
@@ -113,7 +114,8 @@
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.21.0",
-    "typescript": "5.6.3"
+    "typescript": "5.6.3",
+    "xlsx": "^0.18.5"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
