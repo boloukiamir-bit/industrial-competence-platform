@@ -87,6 +87,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     errors.push(...stationResult.errors.map((e) => ({ row: e.row, message: `stations: ${e.message}` })));
     errors.push(...requirementsResult.errors.map((e) => ({ row: e.row, message: `requirements: ${e.message}` })));
 
+    if (requirementsCsv.trim() && requirementsResult.rows.length === 0) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: "requirementsCsv produced 0 valid rows; check headers and station_code column",
+          errors,
+        },
+        { status: 400 }
+      );
+      applySupabaseCookies(res, pendingCookies);
+      return res;
+    }
+
     const orgId = auth.activeOrgId;
 
     const schemaErr = await assertStationsSchema();
@@ -188,13 +201,55 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             .from("station_operational_requirements")
             .update(payload)
             .eq("id", existing.id);
-          if (upErr) errors.push({ message: `requirements row ${row.station_code}: ${upErr.message}` });
-          else requirementsUpdated++;
+          if (upErr) {
+            console.error("[admin/import/stations] requirements update failed", {
+              station_code: row.station_code,
+              orgId,
+              error: upErr.message,
+              code: upErr.code,
+            });
+            const res = NextResponse.json(
+              {
+                ok: false,
+                error: `station_operational_requirements update failed (table missing or permission): ${upErr.message}`,
+                code: upErr.code ?? "PGRST301",
+              },
+              { status: 500 }
+            );
+            applySupabaseCookies(res, pendingCookies);
+            return res;
+          }
+          requirementsUpdated++;
         } else {
           const { error: insErr } = await supabaseAdmin.from("station_operational_requirements").insert(payload);
-          if (insErr) errors.push({ message: `requirements row ${row.station_code}: ${insErr.message}` });
-          else requirementsInserted++;
+          if (insErr) {
+            console.error("[admin/import/stations] requirements insert failed", {
+              station_code: row.station_code,
+              orgId,
+              error: insErr.message,
+              code: insErr.code,
+            });
+            const res = NextResponse.json(
+              {
+                ok: false,
+                error: `station_operational_requirements insert failed (table missing or permission): ${insErr.message}`,
+                code: insErr.code ?? "PGRST301",
+              },
+              { status: 500 }
+            );
+            applySupabaseCookies(res, pendingCookies);
+            return res;
+          }
+          requirementsInserted++;
         }
+      }
+      if (requirementRows.length > 0) {
+        console.log("[admin/import/stations] requirements upsert result", {
+          orgId,
+          inserted: requirementsInserted,
+          updated: requirementsUpdated,
+          total: requirementRows.length,
+        });
       }
     } else {
       for (const row of stationRows) {

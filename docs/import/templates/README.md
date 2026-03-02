@@ -42,3 +42,7 @@ You must **manually fill**:
 - Missing `required_headcount` in `station_operational_requirements.csv` for those stations.
 
 After editing, re-validate CSVs before any import.
+
+## Import into the database
+
+To persist stations and requirements via the API, ensure the migration that creates `public.station_operational_requirements` is applied in your active DB (e.g. `supabase/migrations/20260302100000_station_operational_requirements.sql`). Then call `POST /api/admin/import/stations` with JSON body `{ stationsCsv, requirementsCsv }` (admin/hr auth). The endpoint is idempotent: a second import with the same data yields `inserted: 0` and only updates existing rows.
