@@ -115,6 +115,7 @@ function main(): void {
   const duplicateCodes: string[] = [];
   const stations: StationRow[] = [];
   const requirements: RequirementRow[] = [];
+  let placeholdersCount = 0;
 
   for (const sheetName of TYP_A_SHEETS) {
     if (!sheetNames.includes(sheetName)) continue;
@@ -168,6 +169,7 @@ function main(): void {
         continue;
       }
       seenCodes.add(station_code);
+      placeholdersCount += 1;
       stations.push({
         station_code,
         station_name: "(MISSING_NAME)",
@@ -204,6 +206,11 @@ function main(): void {
     ]),
   ]);
   console.log(`Wrote ${requirements.length} rows to ${reqPath}`);
+
+  console.log("---");
+  console.log(`Total stations written: ${stations.length}`);
+  console.log(`Duplicates skipped: ${duplicateCodes.length}`);
+  console.log(`Placeholders (MISSING_NAME + blank headcount): ${placeholdersCount}`);
 }
 
 main();
